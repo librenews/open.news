@@ -1,0 +1,7 @@
+# Production: Caddy handles TLS termination + reverse proxy.
+# In development, use a Cloudflare tunnel pointing to localhost:3001 instead.
+# (No Caddy needed locally — Cloudflare handles HTTPS.)
+
+open.news {
+    reverse_proxy localhost:3001
+}

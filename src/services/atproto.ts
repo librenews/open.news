@@ -1,0 +1,98 @@
+import { AtpAgent } from '@atproto/api';
+import { config } from '../lib/config.js';
+import { logger } from '../lib/logger.js';
+
+let _agent: AtpAgent | null = null;
+
+export async function getBotAgent(): Promise<AtpAgent> {
+  if (_agent) return _agent;
+
+  const agent = new AtpAgent({ service: config.ATPROTO_PDS_URL });
+
+  if (config.BSKY_BOT_DID && config.BSKY_BOT_PASSWORD) {
+    await agent.login({
+      identifier: config.BSKY_BOT_DID,
+      password: config.BSKY_BOT_PASSWORD,
+    });
+    logger.info({ did: config.BSKY_BOT_DID }, 'Bot agent logged in');
+  } else {
+    logger.warn('BSKY_BOT_DID or BSKY_BOT_PASSWORD not set — bot posting disabled');
+  }
+
+  _agent = agent;
+  return agent;
+}
+
+export async function resolveHandle(handle: string): Promise<string | null> {
+  try {
+    const agent = new AtpAgent({ service: config.ATPROTO_PDS_URL });
+    const res = await agent.resolveHandle({ handle });
+    return res.data.did;
+  } catch {
+    return null;
+  }
+}
+
+export async function getFollowedDids(userDid: string): Promise<
+  Array<{ did: string; handle: string; displayName?: string; avatar?: string }>
+> {
+  const follows: Array<{ did: string; handle: string; displayName?: string; avatar?: string }> = [];
+  let cursor: string | undefined;
+
+  do {
+    const params = new URLSearchParams({ actor: userDid, limit: '100' });
+    if (cursor) params.set('cursor', cursor);
+    // Use the public AppView API — no auth required for public follow graphs
+    const url = `https://public.api.bsky.app/xrpc/app.bsky.graph.getFollows?${params}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`getFollows failed: ${res.status} ${res.statusText}`);
+    const data = await res.json() as {
+      follows: Array<{ did: string; handle: string; displayName?: string; avatar?: string }>;
+      cursor?: string;
+    };
+    for (const f of data.follows) {
+      follows.push({ did: f.did, handle: f.handle, displayName: f.displayName, avatar: f.avatar });
+    }
+    cursor = data.cursor;
+  } while (cursor);
+
+  return follows;
+}
+
+/**
+ * Post a reply to a mention.
+ */
+export async function postReply(params: {
+  text: string;
+  replyToUri: string;
+  replyToCid: string;
+}): Promise<void> {
+  const agent = await getBotAgent();
+  await agent.post({
+    text: params.text,
+    reply: {
+      root: { uri: params.replyToUri, cid: params.replyToCid },
+      parent: { uri: params.replyToUri, cid: params.replyToCid },
+    },
+  });
+}
+
+/**
+ * Post a new standalone post (for article discovery).
+ */
+export async function postNew(text: string): Promise<void> {
+  const agent = await getBotAgent();
+  await agent.post({ text });
+}
+
+/**
+ * Send a DM reply in a conversation.
+ */
+export async function sendDm(convoId: string, text: string): Promise<void> {
+  const agent = await getBotAgent();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await (agent.api as any).chat.bsky.convo.sendMessage({
+    convoId,
+    message: { text },
+  });
+}
