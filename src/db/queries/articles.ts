@@ -128,7 +128,9 @@ export async function upsertArticleSource(
   await db.query(
     `INSERT INTO article_sources (article_id, source_id, post_uri, post_cid)
      VALUES ($1, $2, $3, $4)
-     ON CONFLICT (article_id, source_id) DO NOTHING`,
+     ON CONFLICT (article_id, source_id) DO UPDATE SET
+       post_uri = COALESCE(article_sources.post_uri, EXCLUDED.post_uri),
+       post_cid = COALESCE(article_sources.post_cid, EXCLUDED.post_cid)`,
     [articleId, sourceId, postUri ?? null, postCid ?? null]
   );
 }

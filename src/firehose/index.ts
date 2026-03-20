@@ -103,7 +103,7 @@ interface JetstreamEvent {
   commit?: {
     operation: string;
     collection: string;
-    uri?: string;
+    rkey?: string;
     cid?: string;
     record?: Record<string, unknown>;
   };
@@ -115,6 +115,9 @@ async function handleEvent(event: JetstreamEvent): Promise<void> {
 
   const { commit, did } = event;
   if (!commit) return;
+
+  // Build AT URI from event components (Jetstream doesn't provide pre-built uri)
+  const postUri = commit.rkey ? `at://${did}/${commit.collection}/${commit.rkey}` : '';
 
   // ── Follow-as-signup ──────────────────────────────────────────────────────
   if (commit.collection === 'app.bsky.graph.follow') {
@@ -135,9 +138,9 @@ async function handleEvent(event: JetstreamEvent): Promise<void> {
 
     if (isMention) {
       stats.mentions++;
-      logger.debug({ did, uri: commit.uri }, 'Bot mention detected');
+      logger.debug({ did, uri: postUri }, 'Bot mention detected');
       await enqueueJob('botReply', {
-        postUri: commit.uri ?? '',
+        postUri,
         postCid: commit.cid ?? '',
         senderDid: did,
         text: (post.text as string) ?? '',
@@ -163,7 +166,7 @@ async function handleEvent(event: JetstreamEvent): Promise<void> {
             `SELECT id FROM sources WHERE did = $1 AND type = 'bluesky'`, [did]
           );
           if (rows[0]) {
-            await upsertArticleSource(existing.id, BigInt(rows[0].id), commit.uri, commit.cid);
+            await upsertArticleSource(existing.id, BigInt(rows[0].id), postUri, commit.cid);
             await fanOutArticleToUsers(existing.id, did);
           }
           continue;
@@ -174,7 +177,7 @@ async function handleEvent(event: JetstreamEvent): Promise<void> {
         await enqueueJob('fetchArticle', {
           url,
           sourceDid: did,
-          postUri: commit.uri ?? '',
+          postUri,
           postCid: commit.cid ?? '',
         });
       }
