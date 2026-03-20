@@ -18,9 +18,10 @@ export const Layout = ({
         rel="stylesheet"
         href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css"
       />
+      <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3/dist/cdn.min.js"></script>
       <style>{`
-        body { max-width: 860px; margin: 0 auto; }
-        nav { display: flex; justify-content: space-between; align-items: center; }
+        body { max-width: 860px; margin: 0 auto; padding: 0 1rem; }
+        nav { display: flex; justify-content: space-between; align-items: center; padding: 1rem 0; }
         .article-card { border-bottom: 1px solid var(--pico-muted-border-color); padding: 1rem 0; }
         .article-card:last-child { border-bottom: none; }
         .article-meta { font-size: 0.85rem; color: var(--pico-muted-color); margin: 0.25rem 0 0; }
@@ -35,6 +36,34 @@ export const Layout = ({
         .shared-avatar img { border-radius: 50%; display: block; }
         .shared-avatar a { display: block; line-height: 0; }
         .shared-overflow { font-size: 0.78rem; color: var(--pico-muted-color); }
+        #chat-messages { min-height: 60vh; max-height: 70vh; overflow-y: auto;
+                         display: flex; flex-direction: column; gap: 0.75rem; padding: 1rem 0; }
+        .msg-user { align-self: flex-end; background: var(--pico-primary-background);
+                    color: var(--pico-primary-inverse); border-radius: 12px;
+                    padding: 0.6rem 1rem; max-width: 75%; }
+        .msg-assistant { align-self: flex-start; max-width: 85%; }
+        .msg-assistant .text { background: var(--pico-card-background-color);
+                                border-radius: 12px; padding: 0.6rem 1rem; }
+        .msg-streaming::after { content: '\\25CB'; animation: blink 1s step-end infinite; }
+        @keyframes blink { 50% { opacity: 0; } }
+        .article-card-block { border: 1px solid var(--pico-muted-border-color);
+                               border-radius: 8px; padding: 0.75rem; margin: 0.5rem 0;
+                               display: flex; gap: 0.75rem; }
+        .article-card-block img { width: 80px; height: 56px; object-fit: cover;
+                                   border-radius: 4px; flex-shrink: 0; }
+        .article-card-block .meta { font-size: 0.8rem; color: var(--pico-muted-color); }
+        .suggestions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.5rem; }
+        .suggestion-chip { font-size: 0.85rem; padding: 0.3rem 0.75rem;
+                            border-radius: 999px; border: 1px solid var(--pico-primary);
+                            color: var(--pico-primary); cursor: pointer; background: none; }
+        .suggestion-chip:hover { background: var(--pico-primary-background);
+                                  color: var(--pico-primary-inverse); }
+        .pref-confirm { background: var(--pico-ins-color); border-radius: 8px;
+                        padding: 0.6rem 1rem; font-size: 0.9rem; }
+        #chat-input-row { display: flex; gap: 0.5rem; padding: 1rem 0; position: sticky;
+                          bottom: 0; background: var(--pico-background-color); }
+        #chat-input-row input { flex: 1; margin: 0; }
+        #chat-input-row button { margin: 0; width: auto; }
       `}</style>
     </head>
     <body>
@@ -47,10 +76,12 @@ export const Layout = ({
           </strong>
           {user ? (
             <span style="display:flex;gap:0.75rem;align-items:center">
+              <a href="/chat">Chat</a>
+              <a href="/feed">Feed</a>
               <a href="/admin">Admin</a>
               <form action="/oauth/logout" method="post" style="margin:0">
-                <button type="submit" class="outline secondary" style="margin:0">
-                  Sign out @{user.handle}
+                <button type="submit" class="outline secondary" style="margin:0;padding:0.3rem 0.75rem;font-size:0.85rem">
+                  @{user.handle}
                 </button>
               </form>
             </span>
