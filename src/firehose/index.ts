@@ -199,12 +199,28 @@ async function start() {
     }
   }, CURSOR_PERSIST_INTERVAL_MS);
 
-  // Heartbeat: log stats every 30s
+  // Heartbeat: log stats every 30s (shows counts for the last interval, not cumulative)
   setInterval(() => {
     logger.info(
       { ...stats, watchedDids: watchedDids.size, cursor: currentCursor?.toString() },
-      'Firehose heartbeat'
+      'Firehose heartbeat (last 30s)'
     );
+
+    // Stale connection detection: if connected to full firehose with 0 events, reconnect
+    if (stats.events === 0 && ws?.readyState === 1 /* OPEN */) {
+      logger.warn('Firehose appears stale (0 events in 30s), forcing reconnect');
+      connect();
+    } else if (ws?.readyState === 1) {
+      // Send a ping to keep the connection alive
+      ws.ping();
+    }
+
+    // Reset for next interval
+    stats.events = 0;
+    stats.posts = 0;
+    stats.mentions = 0;
+    stats.urlsFound = 0;
+    stats.jobsQueued = 0;
   }, STATS_LOG_INTERVAL_MS);
 
   // Refresh DID list every 60s and reconnect if changed

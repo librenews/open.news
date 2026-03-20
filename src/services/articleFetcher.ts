@@ -2,8 +2,11 @@ import * as cheerio from 'cheerio';
 import { logger } from '../lib/logger.js';
 
 const USER_AGENT = 'opennews-bot/1.0 (+https://open.news)';
+// Many publishers whitelist social crawler UAs to allow link unfurling
+const CRAWLER_UA = 'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)';
 const FETCH_TIMEOUT_MS = 10_000;
 const MAX_RESPONSE_BYTES = 5 * 1024 * 1024; // 5MB
+const CRAWLER_MAX_BYTES = 15 * 1024;         // 15KB — enough for <head> OG tags
 
 export interface FetchedMeta {
   canonicalUrl: string | null;
@@ -19,7 +22,11 @@ export interface FetchedMeta {
   finalUrl: string;
 }
 
-export async function fetchUrlMeta(url: string): Promise<FetchedMeta> {
+export async function fetchUrlMeta(url: string, options?: { crawlerMode?: boolean }): Promise<FetchedMeta> {
+  const crawlerMode = options?.crawlerMode ?? false;
+  const maxBytes = crawlerMode ? CRAWLER_MAX_BYTES : MAX_RESPONSE_BYTES;
+  const ua = crawlerMode ? CRAWLER_UA : USER_AGENT;
+
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 
@@ -30,7 +37,7 @@ export async function fetchUrlMeta(url: string): Promise<FetchedMeta> {
     const response = await fetch(url, {
       signal: controller.signal,
       headers: {
-        'User-Agent': USER_AGENT,
+        'User-Agent': ua,
         Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         'Accept-Language': 'en-US,en;q=0.5',
       },
@@ -39,7 +46,6 @@ export async function fetchUrlMeta(url: string): Promise<FetchedMeta> {
 
     finalUrl = response.url || url;
 
-    // Stream and cap at MAX_RESPONSE_BYTES
     const reader = response.body?.getReader();
     if (!reader) throw new Error('No response body');
 
@@ -51,7 +57,9 @@ export async function fetchUrlMeta(url: string): Promise<FetchedMeta> {
       if (value) {
         bytesRead += value.length;
         chunks.push(value);
-        if (bytesRead >= MAX_RESPONSE_BYTES) {
+        // In crawler mode, stop as soon as we have enough for the <head>
+        const partial = new TextDecoder().decode(value);
+        if (bytesRead >= maxBytes || (crawlerMode && partial.includes('</head>'))) {
           await reader.cancel();
           break;
         }

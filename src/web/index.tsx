@@ -67,6 +67,7 @@ app.get('/feed', sessionRequired, async (c) => {
   const serialized = articles.map((a) => ({
     ...a,
     id: Number(a.id),
+    fetch_status: a.fetch_status,
     published_at: a.published_at?.toISOString() ?? null,
     seen_at: a.seen_at?.toISOString() ?? null,
     saved_at: a.saved_at?.toISOString() ?? null,

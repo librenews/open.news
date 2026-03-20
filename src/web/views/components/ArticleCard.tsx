@@ -9,6 +9,7 @@ export interface ArticleData {
   author: string | null;
   published_at: string | null;
   site_name: string | null;
+  fetch_status: string;
   sources: { handle: string | null; display_name: string | null }[];
   seen_at: string | null;
 }
@@ -64,7 +65,12 @@ export const ArticleCard = ({ article }: { article: ArticleData }) => {
       {article.description && (
         <p style="margin: 0.25rem 0; font-size: 0.9rem;">{article.description}</p>
       )}
-      <p class="article-meta">{metaParts.join(' · ')}</p>
+      <p class="article-meta">
+        {article.fetch_status === 'paywalled' && (
+          <span title="Paywall — article may require a subscription" style="margin-right:0.3rem">🔒</span>
+        )}
+        {metaParts.join(' · ')}
+      </p>
     </div>
   );
 };

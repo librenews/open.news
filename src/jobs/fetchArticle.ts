@@ -54,10 +54,38 @@ export async function fetchArticleJob(data: FetchArticleJobData): Promise<void> 
     return;
   }
 
-  // Skip known paywall/bot-blocked domains immediately
+  // Paywalled / bot-blocked domains: use crawler UA to get OG tags only (no full text)
   if (isDenylisted(url)) {
-    logger.info({ url }, 'Skipping denylisted domain');
-    await updateArticleMeta(article.id, { news_score: 0, is_news: false, fetch_status: 'skipped', fetch_error: 'domain denylisted' });
+    try {
+      const meta = await fetchUrlMeta(url, { crawlerMode: true });
+      const { score, isNews } = detectNews(meta, url, 0); // wordCount=0, no full text
+      await updateArticleMeta(article.id, {
+        canonical_url: meta.canonicalUrl,
+        title: meta.title,
+        description: meta.description,
+        image_url: meta.imageUrl,
+        author: meta.author,
+        published_at: meta.publishedAt,
+        site_name: meta.siteName,
+        og_type: meta.ogType,
+        jsonld_type: meta.jsonldType,
+        news_score: score,
+        is_news: isNews,
+        fetch_status: 'paywalled',
+      });
+      logger.info({ url, score, isNews }, 'Paywalled article: OG tags fetched via crawler UA');
+      if (isNews) {
+        const source = await getSourceByDid(sourceDid);
+        if (source) {
+          await upsertArticleSource(article.id, source.id, postUri, postCid);
+          await fanOutArticleToUsers(article.id, sourceDid);
+        }
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      logger.warn({ url, err: message }, 'Paywalled article: crawler fetch also failed');
+      await updateArticleMeta(article.id, { news_score: 0, is_news: false, fetch_status: 'skipped', fetch_error: 'domain denylisted' });
+    }
     return;
   }
 
