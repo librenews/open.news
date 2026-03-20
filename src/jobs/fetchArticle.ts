@@ -5,6 +5,7 @@ import {
   findArticleByUrl,
   insertArticle,
   updateArticleMeta,
+  setArticleUrl,
   upsertArticleSource,
   fanOutArticleToUsers,
 } from '../db/queries/articles.js';
@@ -62,10 +63,36 @@ export async function fetchArticleJob(data: FetchArticleJobData): Promise<void> 
 
   try {
     const meta = await fetchUrlMeta(url);
-    const { fullText, wordCount } = extractArticleText(meta.html, meta.finalUrl);
-    const { score, isNews } = detectNews(meta, url, wordCount);
+    const finalUrl = meta.finalUrl ?? url;
 
-    await updateArticleMeta(article.id, {
+    // ── Short-URL resolution ───────────────────────────────────────────────
+    // If the fetch followed a redirect to a different URL, check whether
+    // the destination already exists. If so, use it and discard the stub.
+    let targetArticleId = article.id;
+    if (finalUrl !== url) {
+      const atFinal = await findArticleByUrl(finalUrl);
+      if (atFinal) {
+        // Destination already in DB — mark stub as redirect, fan-out via existing
+        await updateArticleMeta(article.id, { news_score: 0, is_news: false, fetch_status: 'redirect', fetch_error: `-> ${finalUrl}` });
+        if (atFinal.is_news) {
+          const source = await getSourceByDid(sourceDid);
+          if (source) {
+            await upsertArticleSource(atFinal.id, source.id, postUri, postCid);
+            await fanOutArticleToUsers(atFinal.id, sourceDid);
+          }
+        }
+        logger.info({ url, finalUrl }, 'Short URL resolved to existing article');
+        return;
+      }
+      // Destination is new — update stub URL so future dedup hits the real URL
+      await setArticleUrl(article.id, finalUrl);
+      logger.debug({ url, finalUrl }, 'Short URL resolved, updated article URL');
+    }
+
+    const { fullText, wordCount } = extractArticleText(meta.html, finalUrl);
+    const { score, isNews } = detectNews(meta, finalUrl, wordCount);
+
+    await updateArticleMeta(targetArticleId, {
       canonical_url: meta.canonicalUrl,
       title: meta.title,
       description: meta.description,

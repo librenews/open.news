@@ -44,16 +44,20 @@ export const ArticleCard = ({ article }: { article: ArticleData }) => {
 
   return (
     <div class={`article-card clearfix${article.seen_at ? ' seen' : ''}`}>
-      {article.image_url && (
-        <img
-          class="article-image"
-          src={article.image_url}
-          alt=""
-          loading="lazy"
-          width="100"
-          height="70"
-        />
-      )}
+      {article.image_url && (() => {
+        const proxied = `https://images.weserv.nl/?url=${encodeURIComponent(article.image_url)}&w=200&h=140&fit=cover&output=webp`;
+        return (
+          <img
+            class="article-image"
+            src={proxied}
+            alt=""
+            loading="lazy"
+            width="100"
+            height="70"
+            onerror="this.style.display='none'"
+          />
+        );
+      })()}
       <a href={article.url} target="_blank" rel="noopener noreferrer">
         <strong>{article.title || article.url}</strong>
       </a>

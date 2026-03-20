@@ -50,6 +50,13 @@ export async function insertArticle(params: {
   return rows[0]!;
 }
 
+/** Update the url column — used after resolving a short URL to its final destination. */
+export async function setArticleUrl(id: bigint | number, newUrl: string): Promise<void> {
+  await db.query(
+    `UPDATE articles SET url = $2, updated_at = NOW() WHERE id = $1`,
+    [id, newUrl]
+  );
+}
 export async function updateArticleMeta(
   id: bigint | number,
   params: {
@@ -190,7 +197,12 @@ export async function getArticlesForUser(
 
   const articles: ArticleWithSources[] = slice.map((r) => ({
     ...r,
-    sources: r.sources ? (JSON.parse(r.sources as unknown as string) ?? []) : [],
+    // pg driver auto-parses json_agg into a JS array — no JSON.parse needed
+    sources: Array.isArray(r.sources)
+      ? r.sources
+      : r.sources
+        ? (JSON.parse(r.sources as unknown as string) ?? [])
+        : [],
   }));
 
   const nextCursor = hasMore
