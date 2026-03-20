@@ -26,6 +26,15 @@ export const Layout = ({
         .article-meta { font-size: 0.85rem; color: var(--pico-muted-color); margin: 0.25rem 0 0; }
         .article-image { float: right; margin-left: 1rem; width: 100px; height: 70px; object-fit: cover; border-radius: 4px; }
         .clearfix::after { content: ''; display: table; clear: both; }
+        .shared-by { display: flex; align-items: center; gap: 0.4rem; margin-top: 0.4rem; font-size: 0.82rem; color: var(--pico-muted-color); flex-wrap: wrap; }
+        .shared-first { display: flex; align-items: center; gap: 0.3rem; }
+        .shared-first img { border-radius: 50%; vertical-align: middle; }
+        .shared-first a, .shared-first span { color: var(--pico-muted-color); text-decoration: none; }
+        .shared-first a:hover { text-decoration: underline; }
+        .shared-rest { display: flex; align-items: center; gap: 0.2rem; }
+        .shared-avatar img { border-radius: 50%; display: block; }
+        .shared-avatar a { display: block; line-height: 0; }
+        .shared-overflow { font-size: 0.78rem; color: var(--pico-muted-color); }
       `}</style>
     </head>
     <body>

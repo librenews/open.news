@@ -47,33 +47,38 @@ export async function fetchUrlMeta(url: string, options?: { crawlerMode?: boolea
     finalUrl = response.url || url;
 
     const reader = response.body?.getReader();
-    if (!reader) throw new Error('No response body');
-
-    let bytesRead = 0;
-    const chunks: Uint8Array[] = [];
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      if (value) {
-        bytesRead += value.length;
-        chunks.push(value);
-        // In crawler mode, stop as soon as we have enough for the <head>
-        const partial = new TextDecoder().decode(value);
-        if (bytesRead >= maxBytes || (crawlerMode && partial.includes('</head>'))) {
-          await reader.cancel();
-          break;
+    if (reader) {
+      try {
+        let bytesRead = 0;
+        const chunks: Uint8Array[] = [];
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          if (value) {
+            bytesRead += value.length;
+            chunks.push(value);
+            // In crawler mode, stop as soon as we have enough for the <head>
+            const partial = new TextDecoder().decode(value);
+            if (bytesRead >= maxBytes || (crawlerMode && partial.includes('</head>'))) {
+              await reader.cancel();
+              break;
+            }
+          }
         }
+        html = new TextDecoder().decode(
+          chunks.reduce((acc, chunk) => {
+            const merged = new Uint8Array(acc.length + chunk.length);
+            merged.set(acc);
+            merged.set(chunk, acc.length);
+            return merged;
+          }, new Uint8Array())
+        );
+      } catch {
+        // Body read failed (timeout, bot-block, dropped connection).
+        // finalUrl is already set from response headers — return partial meta.
+        logger.debug({ url, finalUrl }, 'Body read incomplete, returning partial meta');
       }
     }
-
-    html = new TextDecoder().decode(
-      chunks.reduce((acc, chunk) => {
-        const merged = new Uint8Array(acc.length + chunk.length);
-        merged.set(acc);
-        merged.set(chunk, acc.length);
-        return merged;
-      }, new Uint8Array())
-    );
   } finally {
     clearTimeout(timeout);
   }

@@ -27,6 +27,13 @@ const FETCH_DENYLIST = new Set([
   'wired.com', 'newyorker.com', 'theatlantic.com',
 ]);
 
+// Known short-URL domains — resolve to final URL via HEAD before storing anything.
+const SHORTENER_DOMAINS = new Set([
+  'bit.ly', 'trib.al', 't.co', 'ow.ly', 'buff.ly', 'dlvr.it',
+  'ift.tt', 'goo.gl', 'tiny.cc', 'tinyurl.com', 'rb.gy', 'is.gd',
+  'shorturl.at', 'cutt.ly', 'link.medium.com',
+]);
+
 function isDenylisted(url: string): boolean {
   try {
     const host = new URL(url).hostname.replace(/^www\./, '');

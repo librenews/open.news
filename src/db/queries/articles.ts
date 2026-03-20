@@ -177,10 +177,19 @@ export async function getArticlesForUser(
             ua.saved_at,
             ua.created_at AS ua_created_at,
             (
-              SELECT json_agg(json_build_object('handle', s.handle, 'display_name', s.display_name))
-              FROM article_sources ars
-              JOIN sources s ON s.id = ars.source_id
-              WHERE ars.article_id = a.id
+              SELECT json_agg(src)
+              FROM (
+                SELECT json_build_object(
+                  'handle', s.handle,
+                  'display_name', s.display_name,
+                  'avatar_url', s.avatar_url,
+                  'post_uri', ars2.post_uri
+                ) AS src
+                FROM article_sources ars2
+                JOIN sources s ON s.id = ars2.source_id
+                WHERE ars2.article_id = a.id
+                ORDER BY ars2.discovered_at ASC
+              ) ordered_sources
             ) AS sources
      FROM user_articles ua
      JOIN articles a ON a.id = ua.article_id
