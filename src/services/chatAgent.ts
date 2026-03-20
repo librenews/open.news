@@ -265,6 +265,12 @@ export async function processUserMessage(
           llmProvider,
         });
 
+        // Send cleaned text (XML tags stripped) to replace raw streamed tokens
+        sseRegistry.push(userId, {
+          event: 'text_update',
+          data: { message_id: msgId, text: cleanText },
+        });
+
         if (blocks.length > 0) {
           sseRegistry.push(userId, {
             event: 'blocks',
