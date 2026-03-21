@@ -15,6 +15,7 @@ let currentCursor: bigint | null = null;
 let watchedDids: Set<string> = new Set();
 let ws: WebSocket | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+let intentionalClose = false; // prevents ghost reconnect from old socket's close event
 
 // ─── Stats ───────────────────────────────────────────────────────────────────
 const stats = { events: 0, posts: 0, mentions: 0, urlsFound: 0, jobsQueued: 0 };
@@ -56,7 +57,15 @@ function buildJetstreamUrl(dids: string[], cursor: bigint | null): string {
 }
 
 function connect() {
+  // Clear any pending reconnect timer
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
+
+  // Tear down old socket without triggering a ghost reconnect
   if (ws) {
+    intentionalClose = true;
     try { ws.terminate(); } catch {}
     ws = null;
   }
@@ -68,6 +77,7 @@ function connect() {
   ws = socket;
 
   socket.on('open', () => {
+    intentionalClose = false;
     logger.info('Jetstream connected');
   });
 
@@ -84,8 +94,16 @@ function connect() {
     }
   });
 
-  socket.on('close', () => {
-    logger.warn('Jetstream disconnected, reconnecting in 5s');
+  socket.on('close', (code, reason) => {
+    // If this close was triggered by our own connect() call, don't reconnect
+    if (intentionalClose) {
+      intentionalClose = false;
+      return;
+    }
+    logger.warn(
+      { code, reason: reason?.toString() },
+      'Jetstream disconnected, reconnecting in 5s'
+    );
     reconnectTimer = setTimeout(() => connect(), 5_000);
   });
 
@@ -202,19 +220,19 @@ async function start() {
     }
   }, CURSOR_PERSIST_INTERVAL_MS);
 
-  // Heartbeat: log stats every 30s (shows counts for the last interval, not cumulative)
+  // Heartbeat: log stats every 30s
   setInterval(() => {
     logger.info(
       { ...stats, watchedDids: watchedDids.size, cursor: currentCursor?.toString() },
       'Firehose heartbeat (last 30s)'
     );
 
-    // Stale connection detection: if connected to full firehose with 0 events, reconnect
-    if (stats.events === 0 && ws?.readyState === 1 /* OPEN */) {
+    // Stale connection detection: if connected & had 0 events in the last interval, reconnect
+    // Only reconnect if the socket is in OPEN state (readyState 1)
+    if (stats.events === 0 && ws?.readyState === WebSocket.OPEN) {
       logger.warn('Firehose appears stale (0 events in 30s), forcing reconnect');
       connect();
-    } else if (ws?.readyState === 1) {
-      // Send a ping to keep the connection alive
+    } else if (ws?.readyState === WebSocket.OPEN) {
       ws.ping();
     }
 
