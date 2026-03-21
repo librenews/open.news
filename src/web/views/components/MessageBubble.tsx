@@ -1,6 +1,28 @@
 /** @jsxImportSource hono/jsx */
 import type { Message } from '../../../db/queries/conversations.js';
 
+/** Convert basic markdown to HTML for server-rendered messages. */
+function renderMarkdown(text: string): string {
+  if (!text) return '';
+  let html = text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+  // Bold **text**
+  html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  // Italic *text*
+  html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
+  // Inline code
+  html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+  // Numbered lists
+  html = html.replace(/^(\d+)\.\s+(.+)$/gm, '<li>$2</li>');
+  html = html.replace(/((?:<li>.*<\/li>\n?)+)/g, '<ol>$1</ol>');
+  // Paragraphs
+  html = html.replace(/\n\n+/g, '</p><p>');
+  html = html.replace(/\n/g, '<br>');
+  return '<p>' + html + '</p>';
+}
+
 /** Render a block of content based on its type. */
 function renderBlock(block: Record<string, unknown>): string {
   const type = block.type as string;
@@ -42,7 +64,7 @@ export const MessageBubble = ({ message }: { message: Message }) => {
 
   return (
     <div class="msg-assistant">
-      {message.text && <div class="text">{message.text}</div>}
+      {message.text && <div class="text" dangerouslySetInnerHTML={{ __html: renderMarkdown(message.text) }} />}
       {blocks.length > 0 && (
         <div dangerouslySetInnerHTML={{ __html: blocks.map(renderBlock).join('') }} />
       )}
