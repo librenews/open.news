@@ -78,6 +78,16 @@
           }).join('') +
           '</div>';
       }
+      if (block.type === 'link_list') {
+        return '<div class="article-list">' +
+          (block.heading ? '<p><strong>' + escapeHtml(block.heading) + '</strong></p>' : '') +
+          (block.links || []).map(function(lnk) {
+            var desc = lnk.description ? '<p style="margin:0.2rem 0;font-size:0.85rem">' + escapeHtml(lnk.description) + '</p>' : '';
+            var meta = lnk.site_name ? '<p class="meta">' + escapeHtml(lnk.site_name) + '</p>' : '';
+            return '<div class="article-card-block"><div><a href="' + escapeHtml(lnk.url) + '" target="_blank" rel="noopener noreferrer"><strong>' + escapeHtml(lnk.title) + '</strong></a>' + desc + meta + '</div></div>';
+          }).join('') +
+          '</div>';
+      }
       return '';
     }).join('');
   }
@@ -145,9 +155,10 @@
     if (!msg) return;
     msg.textDiv.classList.remove('msg-streaming');
     // If text_update hasn't arrived yet, strip XML tags as fallback
-    if (msg.text.indexOf('<articles') !== -1 || msg.text.indexOf('<suggestions') !== -1) {
+    if (msg.text.indexOf('<articles') !== -1 || msg.text.indexOf('<suggestions') !== -1 || msg.text.indexOf('<links') !== -1) {
       var cleaned = msg.text
         .replace(/<articles[^>]*>[\s\S]*?<\/articles>/g, '')
+        .replace(/<links[^>]*>[\s\S]*?<\/links>/g, '')
         .replace(/<suggestions>[\s\S]*?<\/suggestions>/g, '')
         .trim();
       msg.textDiv.innerHTML = renderMarkdown(cleaned);

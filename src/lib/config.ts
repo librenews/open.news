@@ -19,6 +19,9 @@ const schema = z.object({
   LLM_MODEL: z.string().default('claude-3-5-haiku-20241022'),
   LLM_OLLAMA_URL: z.string().url().default('http://localhost:11434'),
 
+  // Search
+  BRAVE_API_KEY: z.string().optional(),
+
   // Web
   PORT: z.coerce.number().default(3000),
   SESSION_SECRET: z.string().min(16),

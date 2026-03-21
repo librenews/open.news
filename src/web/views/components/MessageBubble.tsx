@@ -39,6 +39,15 @@ function renderBlock(block: Record<string, unknown>): string {
     const suggestions = (block.suggestions as string[]) ?? [];
     return `<div class="suggestions">${suggestions.map(s => `<button class="suggestion-chip">${s}</button>`).join('')}</div>`;
   }
+  if (type === 'link_list') {
+    const heading = block.heading as string | undefined;
+    const links = (block.links as Record<string, unknown>[]) ?? [];
+    return `<div class="article-list">${heading ? `<p><strong>${heading}</strong></p>` : ''}${links.map(lnk => {
+      const desc = lnk.description ? `<p style="margin:0.2rem 0;font-size:0.85rem">${lnk.description}</p>` : '';
+      const meta = lnk.site_name ? `<p class="meta">${lnk.site_name}</p>` : '';
+      return `<div class="article-card-block"><div><a href="${lnk.url}" target="_blank" rel="noopener noreferrer"><strong>${lnk.title}</strong></a>${desc}${meta}</div></div>`;
+    }).join('')}</div>`;
+  }
   return '';
 }
 

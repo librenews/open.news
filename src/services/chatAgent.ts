@@ -2,6 +2,7 @@ import { logger } from '../lib/logger.js';
 import { llm, type LLMMessage } from './llm.js';
 import { classifyIntent } from './intentRouter.js';
 import { sseRegistry } from '../web/sseRegistry.js';
+import { braveSearch, type SearchResult } from './braveSearch.js';
 import {
   getMessages,
   insertMessage,
@@ -44,11 +45,12 @@ async function searchArticlesForUser(
   return rows;
 }
 
-/** Build the system prompt with user context and retrieved articles. */
+/** Build the system prompt with user context, retrieved articles, and web search results. */
 function buildSystemPrompt(
   handle: string,
   preferences: { type: string; value: string }[],
-  articles: ArticleContext[]
+  articles: ArticleContext[],
+  webResults?: SearchResult[]
 ): string {
   const prefLines = preferences.length > 0
     ? `\nActive preferences:\n${preferences.map(p => `- Do not include content from ${p.value}`).join('\n')}`
@@ -58,23 +60,38 @@ function buildSystemPrompt(
     ? `\nRelevant articles from their network:\n${articles.map(a =>
         `[${a.id}] "${a.title}" (${a.site_name ?? 'unknown'}, ${a.published_at ? new Date(a.published_at).toLocaleDateString() : 'no date'})\n${a.text_excerpt ?? a.description ?? ''}`
       ).join('\n\n')}`
-    : '\nNo relevant articles found in their network for this query.';
+    : '';
+
+  const webLines = webResults && webResults.length > 0
+    ? `\nWeb search results:\n${webResults.map((r, i) =>
+        `[W${i + 1}] "${r.title}" (${r.site_name ?? r.url})${r.age ? ` — ${r.age}` : ''}\n${r.description}`
+      ).join('\n\n')}`
+    : '';
+
+  const noContext = !articles.length && (!webResults || !webResults.length);
 
   return `You are the open.news assistant for @${handle}.
 You answer questions about news based on articles their Bluesky network has shared.
+When web search results are available, you may also use those to enrich your answers.
 ${prefLines}
 ${articleLines}
+${webLines}
+${noContext ? '\nNo relevant articles or search results found for this query.' : ''}
 
-Answer using these articles as context. Cite article titles.
-If context is insufficient, say so briefly.
+Answer using the provided context. Cite article titles when referencing network articles.
+For web search results, provide the relevant information and include the URL so the user can visit the page.
 Keep responses conversational. Do not fabricate information.
 
 After your text response, you may emit structured content using these tags.
 Emit them at the end, after your prose response, never inline.
 
-To show articles from context, emit:
+To show articles from the user's network context, emit:
 <articles heading="Top articles">1,4,7</articles>
 (comma-separated article IDs from the provided context)
+
+To show web search result links, emit:
+<links heading="Search results">W1,W3</links>
+(comma-separated web result IDs, e.g. W1, W2)
 
 To suggest follow-up queries, emit:
 <suggestions>Tell me more|Mute this topic|Find related</suggestions>
@@ -83,7 +100,11 @@ Do not emit these tags if they would not add value.`;
 }
 
 /** Parse structured blocks from LLM output. */
-function parseBlocks(text: string, articles: ArticleContext[]): { cleanText: string; blocks: unknown[] } {
+function parseBlocks(
+  text: string,
+  articles: ArticleContext[],
+  webResults?: SearchResult[]
+): { cleanText: string; blocks: unknown[] } {
   const blocks: unknown[] = [];
   let cleanText = text;
 
@@ -109,6 +130,26 @@ function parseBlocks(text: string, articles: ArticleContext[]): { cleanText: str
       blocks.push({ type: 'article_list', heading, articles: matchedArticles });
     }
     cleanText = cleanText.replace(/<articles[^>]*>[\s\S]*?<\/articles>/, '').trim();
+  }
+
+  // Parse <links> tags (web search results)
+  const linksMatch = text.match(/<links heading="([^"]*)">([\w,\s]+)<\/links>/);
+  if (linksMatch && webResults) {
+    const heading = linksMatch[1];
+    const ids = linksMatch[2].split(',').map(s => parseInt(s.trim().replace(/^W/i, ''), 10) - 1);
+    const matchedLinks = ids
+      .map(i => webResults[i])
+      .filter(Boolean)
+      .map(r => ({
+        title: r.title,
+        url: r.url,
+        description: r.description,
+        site_name: r.site_name,
+      }));
+    if (matchedLinks.length > 0) {
+      blocks.push({ type: 'link_list', heading, links: matchedLinks });
+    }
+    cleanText = cleanText.replace(/<links[^>]*>[\s\S]*?<\/links>/, '').trim();
   }
 
   // Parse <suggestions> tags
@@ -209,15 +250,30 @@ export async function processUserMessage(
     return;
   }
 
-  // ── RAG / Article / Discovery — streamed LLM response ─────────────────────
+  // ── RAG / Search / Article / Discovery — streamed LLM response ────────────
   const preferences = await getUserPreferences(userId);
-  const articles = await searchArticlesForUser(userId, text);
+  const articles = intent !== 'search' ? await searchArticlesForUser(userId, text) : [];
+
+  // Web search: explicit search intent, or fallback when FTS returns no articles
+  let webResults: SearchResult[] = [];
+  if (intent === 'search' || (articles.length === 0 && (intent === 'news_question' || intent === 'discovery'))) {
+    try {
+      webResults = await braveSearch(text, { count: 5 });
+      logger.info({ query: text, results: webResults.length }, 'Brave Search completed');
+    } catch (err) {
+      logger.warn({ err }, 'Brave Search failed, proceeding without web results');
+    }
+  }
 
   // Load recent conversation history (last 6 messages)
   const recentMessages = (await getMessages(conversationId, { limit: 6 })).reverse();
 
+  const agentType = intent === 'search' ? 'search'
+    : intent === 'discovery' ? 'discovery'
+    : intent === 'article_explain' ? 'article' : 'rag';
+
   const llmMessages: LLMMessage[] = [
-    { role: 'system', content: buildSystemPrompt(user.handle, preferences, articles) },
+    { role: 'system', content: buildSystemPrompt(user.handle, preferences, articles, webResults) },
     ...recentMessages
       .filter(m => m.role === 'user' || m.role === 'assistant')
       .map(m => ({ role: m.role as 'user' | 'assistant', content: m.text || '' })),
@@ -229,7 +285,7 @@ export async function processUserMessage(
     conversationId,
     role: 'assistant',
     text: '',
-    agent: intent === 'discovery' ? 'discovery' : intent === 'article_explain' ? 'article' : 'rag',
+    agent: agentType,
     intent,
     articlesUsed: articles.map(a => BigInt(a.id)),
     isComplete: false,
@@ -257,7 +313,7 @@ export async function processUserMessage(
       } else {
         llmProvider = `${config.LLM_PROVIDER}/${config.LLM_MODEL}`;
         // Parse blocks from completed text
-        const { cleanText, blocks } = parseBlocks(fullText, articles);
+        const { cleanText, blocks } = parseBlocks(fullText, articles, webResults);
         await updateMessage(assistantMsg.id, {
           text: cleanText,
           blocks,

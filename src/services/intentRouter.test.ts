@@ -79,6 +79,27 @@ describe('classifyIntent', () => {
     expect(classifyIntent('explain the main points')).toBe('article_explain');
   });
 
+  // ── Search ──────────────────────────────────────────────────────────────────
+  it('classifies "search for ATmosphere conference" as search', () => {
+    expect(classifyIntent('search for ATmosphere conference')).toBe('search');
+  });
+
+  it('classifies "look up Node.js streaming" as search', () => {
+    expect(classifyIntent('look up Node.js streaming')).toBe('search');
+  });
+
+  it('classifies "find me the registration page" as search', () => {
+    expect(classifyIntent('find me the registration page')).toBe('search');
+  });
+
+  it('classifies "where can I register for ATmosphere" as search', () => {
+    expect(classifyIntent('where can I register for ATmosphere')).toBe('search');
+  });
+
+  it('classifies "how do I sign up for the event" as search', () => {
+    expect(classifyIntent('how do I sign up for the event')).toBe('search');
+  });
+
   // ── Default → news_question ─────────────────────────────────────────────────
   it('classifies "What happened with the Fed rate decision?" as news_question', () => {
     expect(classifyIntent('What happened with the Fed rate decision?')).toBe('news_question');

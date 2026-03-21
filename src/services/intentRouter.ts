@@ -1,5 +1,6 @@
 export type Intent =
   | 'news_question'
+  | 'search'
   | 'mute_domain'
   | 'mute_source'
   | 'topic_filter'
@@ -17,6 +18,7 @@ const REGEX_INTENTS: [RegExp, Intent][] = [
   [/trending|popular|what'?s hot/i, 'discovery'],
   [/tell me more about (this|that) article/i, 'article_explain'],
   [/summarize|explain|break down/i, 'article_explain'],
+  [/search (for|the|about)?|look(ing)? up|find me|google|where (can|do) I|how (do|can) I (register|sign up|get|buy|find)/i, 'search'],
 ];
 
 /** Classify intent from user text using regex shortcuts. */
