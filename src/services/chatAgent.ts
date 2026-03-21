@@ -78,9 +78,9 @@ ${articleLines}
 ${webLines}
 ${noContext ? '\nNo relevant articles or search results found for this query.' : ''}
 
-Answer using the provided context. Cite article titles when referencing network articles.
-For web search results, provide the relevant information and include the URL so the user can visit the page.
-Keep responses conversational. Do not fabricate information.
+Answer using the provided context. When referencing an article or search result, always link to it using markdown: [Title](url).
+For example: According to [Bluesky announces $100M Series B](https://techcrunch.com/...), the company...
+Keep responses conversational. Do not fabricate information or URLs.
 
 After your text response, you may emit structured content using these tags.
 Emit them at the end, after your prose response, never inline.

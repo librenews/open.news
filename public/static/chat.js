@@ -22,6 +22,8 @@
     html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
     // Inline code `text`
     html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+    // Markdown links [text](url)
+    html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
     // Numbered lists: lines starting with "1. ", "2. ", etc.
     html = html.replace(/^(\d+)\.\s+(.+)$/gm, '<li>$2</li>');
     html = html.replace(/((?:<li>.*<\/li>\n?)+)/g, '<ol>$1</ol>');
