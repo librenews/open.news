@@ -19,14 +19,22 @@ interface BraveWebResult {
 
 interface BraveSearchResponse {
   web?: { results: BraveWebResult[] };
+  news?: { results: BraveWebResult[] };
   query?: { original: string };
 }
 
-/**
- * Search the web using Brave Search API.
- * Returns empty array if BRAVE_API_KEY is not configured.
- */
-export async function braveSearch(
+function mapResults(results: BraveWebResult[]): SearchResult[] {
+  return results.map((r) => ({
+    title: r.title,
+    url: r.url,
+    description: r.description,
+    age: r.age,
+    site_name: r.meta_url?.hostname,
+  }));
+}
+
+async function braveSearchInternal(
+  endpoint: 'web' | 'news',
   query: string,
   opts?: { count?: number; freshness?: string }
 ): Promise<SearchResult[]> {
@@ -44,7 +52,8 @@ export async function braveSearch(
   });
   if (opts?.freshness) params.set('freshness', opts.freshness);
 
-  const response = await fetch(`https://api.search.brave.com/res/v1/web/search?${params}`, {
+  const url = `https://api.search.brave.com/res/v1/${endpoint}/search?${params}`;
+  const response = await fetch(url, {
     headers: {
       'Accept': 'application/json',
       'Accept-Encoding': 'gzip',
@@ -53,18 +62,37 @@ export async function braveSearch(
   });
 
   if (!response.ok) {
-    logger.error({ status: response.status, statusText: response.statusText }, 'Brave Search API error');
+    logger.error({ status: response.status, statusText: response.statusText, endpoint }, 'Brave Search API error');
     return [];
   }
 
   const data = (await response.json()) as BraveSearchResponse;
-  const results = data.web?.results ?? [];
+  const results = endpoint === 'news'
+    ? data.news?.results ?? []
+    : data.web?.results ?? [];
 
-  return results.map((r) => ({
-    title: r.title,
-    url: r.url,
-    description: r.description,
-    age: r.age,
-    site_name: r.meta_url?.hostname,
-  }));
+  return mapResults(results);
+}
+
+/**
+ * Search the web using Brave Web Search API.
+ * Returns empty array if BRAVE_API_KEY is not configured.
+ */
+export async function braveSearch(
+  query: string,
+  opts?: { count?: number; freshness?: string }
+): Promise<SearchResult[]> {
+  return braveSearchInternal('web', query, opts);
+}
+
+/**
+ * Search news using Brave News Search API.
+ * Prioritized for news_question intents as results are more relevant.
+ * Returns empty array if BRAVE_API_KEY is not configured.
+ */
+export async function braveNewsSearch(
+  query: string,
+  opts?: { count?: number; freshness?: string }
+): Promise<SearchResult[]> {
+  return braveSearchInternal('news', query, opts);
 }

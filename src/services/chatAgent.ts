@@ -2,7 +2,7 @@ import { logger } from '../lib/logger.js';
 import { llm, type LLMMessage } from './llm.js';
 import { classifyIntent } from './intentRouter.js';
 import { sseRegistry } from '../web/sseRegistry.js';
-import { braveSearch, type SearchResult } from './braveSearch.js';
+import { braveSearch, braveNewsSearch, type SearchResult } from './braveSearch.js';
 import {
   getMessages,
   insertMessage,
@@ -254,12 +254,30 @@ export async function processUserMessage(
   const preferences = await getUserPreferences(userId);
   const articles = intent !== 'search' ? await searchArticlesForUser(userId, text) : [];
 
-  // Web search: explicit search intent, or fallback when FTS returns no articles
+  // Web/news search: explicit search intent, or fallback when FTS returns no articles
   let webResults: SearchResult[] = [];
-  if (intent === 'search' || (articles.length === 0 && (intent === 'news_question' || intent === 'discovery'))) {
+  let contextSource: 'network' | 'web_search' | 'none' = articles.length > 0 ? 'network' : 'none';
+
+  if (intent === 'search') {
+    // Explicit search → use web search
     try {
       webResults = await braveSearch(text, { count: 5 });
-      logger.info({ query: text, results: webResults.length }, 'Brave Search completed');
+      logger.info({ query: text, results: webResults.length, type: 'web' }, 'Brave Search completed');
+      if (webResults.length > 0) contextSource = 'web_search';
+    } catch (err) {
+      logger.warn({ err }, 'Brave Search failed, proceeding without web results');
+    }
+  } else if (articles.length === 0 && (intent === 'news_question' || intent === 'discovery')) {
+    // Fallback → try news search first, then web search
+    try {
+      webResults = await braveNewsSearch(text, { count: 5, freshness: 'pw' });
+      logger.info({ query: text, results: webResults.length, type: 'news' }, 'Brave News Search completed');
+      // If news search returns nothing, fall back to web search
+      if (webResults.length === 0) {
+        webResults = await braveSearch(text, { count: 5 });
+        logger.info({ query: text, results: webResults.length, type: 'web_fallback' }, 'Brave Web Search fallback completed');
+      }
+      if (webResults.length > 0) contextSource = 'web_search';
     } catch (err) {
       logger.warn({ err }, 'Brave Search failed, proceeding without web results');
     }
@@ -302,6 +320,23 @@ export async function processUserMessage(
   // Stream LLM response
   let fullText = '';
   let llmProvider = '';
+
+  // Transparency prefix: let the user know where context is coming from
+  let transparencyPrefix = '';
+  if (contextSource === 'web_search' && intent !== 'search') {
+    transparencyPrefix = "*I didn't find this in your network's shared articles, so I searched the web to help answer.*\n\n";
+  } else if (contextSource === 'none') {
+    transparencyPrefix = "*I couldn't find relevant articles in your network or on the web for this one.*\n\n";
+  }
+
+  if (transparencyPrefix) {
+    fullText += transparencyPrefix;
+    sseRegistry.push(userId, {
+      event: 'token',
+      data: { message_id: msgId, token: transparencyPrefix },
+    });
+  }
+
   try {
     for await (const chunk of llm.stream(llmMessages)) {
       if ('token' in chunk) {

@@ -11,6 +11,7 @@ vi.mock('../lib/config.js', () => ({
     LLM_MODEL: 'test-model',
     LLM_API_KEY: 'test-key',
     LLM_OLLAMA_URL: 'http://localhost:11434',
+    BRAVE_API_KEY: undefined,
     DATABASE_URL: 'postgresql://test:test@localhost:5432/test',
     PORT: 3000,
     SESSION_SECRET: 'testsecretstring01',
@@ -164,10 +165,10 @@ describe('processUserMessage', () => {
     // Should call LLM stream
     expect(llm.stream).toHaveBeenCalledTimes(1);
 
-    // Should push SSE token events
+    // Should push SSE token events (transparency prefix + 3 LLM tokens)
     const pushCalls = vi.mocked(sseRegistry.push).mock.calls;
     const tokenEvents = pushCalls.filter(call => (call[1] as { event: string }).event === 'token');
-    expect(tokenEvents.length).toBe(3); // 'The ', 'Fed ', 'held rates.'
+    expect(tokenEvents.length).toBe(4); // transparency prefix + 'The ', 'Fed ', 'held rates.'
 
     // Should finalize message
     expect(updateMessage).toHaveBeenCalledWith(
