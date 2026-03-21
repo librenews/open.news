@@ -19,6 +19,7 @@ let intentionalClose = false; // prevents ghost reconnect from old socket's clos
 
 // ─── Stats ───────────────────────────────────────────────────────────────────
 const stats = { events: 0, posts: 0, mentions: 0, urlsFound: 0, jobsQueued: 0 };
+let lastEventTimeUs: bigint | null = null;  // microsecond timestamp of most recent event
 const STATS_LOG_INTERVAL_MS = 30_000;
 
 // ─── Cursor persistence ───────────────────────────────────────────────────────
@@ -85,7 +86,10 @@ function connect() {
     stats.events++;
     try {
       const event = JSON.parse(data.toString()) as JetstreamEvent;
-      if (event.time_us) currentCursor = BigInt(event.time_us);
+      if (event.time_us) {
+        currentCursor = BigInt(event.time_us);
+        lastEventTimeUs = currentCursor;
+      }
       handleEvent(event).catch((err) =>
         logger.error({ err }, 'Error handling Jetstream event')
       );
@@ -222,8 +226,13 @@ async function start() {
 
   // Heartbeat: log stats every 30s
   setInterval(() => {
+    const lagMs = lastEventTimeUs
+      ? Number(BigInt(Date.now()) * 1000n - lastEventTimeUs) / 1000
+      : null;
+    const lagDisplay = lagMs != null ? `${(lagMs / 1000).toFixed(1)}s` : 'n/a';
+
     logger.info(
-      { ...stats, watchedDids: watchedDids.size, cursor: currentCursor?.toString() },
+      { ...stats, watchedDids: watchedDids.size, cursor: currentCursor?.toString(), lagMs: lagMs != null ? Math.round(lagMs) : null, lag: lagDisplay },
       'Firehose heartbeat (last 30s)'
     );
 
