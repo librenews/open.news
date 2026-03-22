@@ -13,11 +13,92 @@ export interface BotReplyJobData {
   convoId?: string;
 }
 
-// In-memory rate limit store: senderDid → last reply timestamp
-const lastReplyAt = new Map<string, number>();
-const MENTION_USER_RATE_LIMIT_MS = 5 * 60 * 1000;       // 5 min for mention replies (users)
-const MENTION_ANON_RATE_LIMIT_MS = 60 * 60 * 1000;      // 1 hr for mention replies (non-users)
-const DM_RATE_LIMIT_MS = 10 * 1000;                       // 10s for DMs (conversational)
+// ─── Adaptive rate limiter (sliding window + exponential backoff) ─────────────
+//
+// Modeled after DDoS protection:
+// - Track request timestamps in a sliding window
+// - Allow a burst of messages normally (MIN_GAP between each)
+// - If burst threshold is exceeded in the window, apply exponential backoff
+// - Reset backoff after a quiet period
+
+interface RateLimitState {
+  timestamps: number[];   // recent request timestamps within the window
+  backoffLevel: number;   // current backoff multiplier (0 = normal, 1+ = throttled)
+  lastRequest: number;    // last request timestamp
+}
+
+const rateLimitState = new Map<string, RateLimitState>();
+
+// Configuration
+const WINDOW_MS = 5 * 60 * 1000;          // 5-minute sliding window
+const BURST_THRESHOLD = 10;               // max requests in window before backoff
+const MIN_GAP_MS = 2_000;                 // 2s minimum between any requests
+const BACKOFF_BASE_MS = 15_000;           // 15s base backoff
+const BACKOFF_MAX_MS = 10 * 60 * 1000;    // 10-minute max backoff
+const QUIET_RESET_MS = 5 * 60 * 1000;     // reset backoff after 5 min of silence
+
+function getRateLimitKey(senderDid: string, interactionType: string): string {
+  return `${senderDid}:${interactionType}`;
+}
+
+/**
+ * Check if a request should be rate-limited.
+ * Returns { allowed: true } or { allowed: false, retryAfterMs }.
+ */
+export function checkRateLimit(
+  key: string,
+  now = Date.now()
+): { allowed: boolean; retryAfterMs?: number; reason?: string } {
+  let state = rateLimitState.get(key);
+
+  if (!state) {
+    state = { timestamps: [], backoffLevel: 0, lastRequest: 0 };
+    rateLimitState.set(key, state);
+  }
+
+  // Prune timestamps outside the sliding window
+  state.timestamps = state.timestamps.filter((t) => now - t < WINDOW_MS);
+
+  // Reset backoff after quiet period
+  if (state.lastRequest > 0 && now - state.lastRequest >= QUIET_RESET_MS) {
+    if (state.backoffLevel > 0) {
+      logger.info({ key, previousLevel: state.backoffLevel }, 'Rate limit backoff reset after quiet period');
+    }
+    state.backoffLevel = 0;
+  }
+
+  // Enforce minimum gap between requests
+  const sinceLastMs = now - state.lastRequest;
+  if (state.lastRequest > 0 && sinceLastMs < MIN_GAP_MS) {
+    return { allowed: false, retryAfterMs: MIN_GAP_MS - sinceLastMs, reason: 'min_gap' };
+  }
+
+  // If in backoff, check if enough time has passed
+  if (state.backoffLevel > 0) {
+    const backoffMs = Math.min(BACKOFF_BASE_MS * Math.pow(2, state.backoffLevel - 1), BACKOFF_MAX_MS);
+    if (sinceLastMs < backoffMs) {
+      return { allowed: false, retryAfterMs: backoffMs - sinceLastMs, reason: `backoff_level_${state.backoffLevel}` };
+    }
+  }
+
+  // Check burst threshold
+  if (state.timestamps.length >= BURST_THRESHOLD) {
+    // Escalate backoff
+    state.backoffLevel = Math.min(state.backoffLevel + 1, 6); // cap at level 6 (~10min)
+    const backoffMs = Math.min(BACKOFF_BASE_MS * Math.pow(2, state.backoffLevel - 1), BACKOFF_MAX_MS);
+    state.lastRequest = now;
+    logger.warn(
+      { key, level: state.backoffLevel, backoffMs, windowRequests: state.timestamps.length },
+      'Rate limit backoff escalated'
+    );
+    return { allowed: false, retryAfterMs: backoffMs, reason: `burst_exceeded_level_${state.backoffLevel}` };
+  }
+
+  // Allowed — record the request
+  state.timestamps.push(now);
+  state.lastRequest = now;
+  return { allowed: true };
+}
 
 export async function botReplyJob(data: BotReplyJobData): Promise<void> {
   const { postUri, postCid, senderDid, text, interactionType, convoId } = data;
@@ -27,16 +108,14 @@ export async function botReplyJob(data: BotReplyJobData): Promise<void> {
   if (!question) return;
 
   const user = await getUserByDid(senderDid);
+  const key = getRateLimitKey(senderDid, interactionType);
+  const rateCheck = checkRateLimit(key);
 
-  // Rate limit: DMs are conversational (short cooldown), mentions are public (longer cooldown)
-  const rateLimit = interactionType === 'dm'
-    ? DM_RATE_LIMIT_MS
-    : (user ? MENTION_USER_RATE_LIMIT_MS : MENTION_ANON_RATE_LIMIT_MS);
-  const rateLimitKey = `${senderDid}:${interactionType}`;
-  const lastAt = lastReplyAt.get(rateLimitKey) ?? 0;
-
-  if (Date.now() - lastAt < rateLimit) {
-    logger.info({ senderDid, interactionType, cooldownMs: rateLimit }, 'Bot reply rate-limited');
+  if (!rateCheck.allowed) {
+    logger.info(
+      { senderDid, interactionType, reason: rateCheck.reason, retryAfterMs: rateCheck.retryAfterMs },
+      'Bot reply rate-limited'
+    );
     return;
   }
 
@@ -62,8 +141,6 @@ export async function botReplyJob(data: BotReplyJobData): Promise<void> {
         await sendDm(convoId, part);
       }
     }
-
-    lastReplyAt.set(rateLimitKey, Date.now());
 
     // Log interaction
     await db.query(
