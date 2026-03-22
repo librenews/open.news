@@ -53,6 +53,9 @@ vi.mock('../db/queries/conversations.js', () => ({
 vi.mock('../db/queries/preferences.js', () => ({
   getUserPreferences: vi.fn(),
   upsertPreference: vi.fn(),
+  getPersona: vi.fn(),
+  getPersonaPreferences: vi.fn(),
+  deletePreferenceById: vi.fn(),
 }));
 
 vi.mock('../db/queries/users.js', () => ({

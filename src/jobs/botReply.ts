@@ -4,6 +4,7 @@ import { db } from '../db/client.js';
 import { postReply, sendDm } from '../services/atproto.js';
 import { classifyIntentHybrid } from '../services/intentRouter.js';
 import { insertFeedback } from '../db/queries/feedback.js';
+import { upsertPreference, getPersonaPreferences, deletePreferenceById } from '../db/queries/preferences.js';
 import { llm, type LLMMessage } from '../services/llm.js';
 import { logger } from '../lib/logger.js';
 
@@ -121,6 +122,67 @@ function handleGreeting(): string {
   return "Hey there! 👋 I'm the open.news bot — ask me about the latest news, trending stories, or any topic you're curious about!";
 }
 
+async function handleSetPreference(question: string, userId: bigint | null): Promise<string> {
+  let personaStatement = question;
+  try {
+    const messages: LLMMessage[] = [
+      {
+        role: 'system',
+        content: `Extract a concise user persona statement from the user's message. Reply with ONLY a single sentence, nothing else.
+Examples:
+User: "remember I'm interested in AI policy" → Interested in AI policy.
+User: "I prefer analysis over breaking news" → Prefers analysis over breaking news.`,
+      },
+      { role: 'user', content: question },
+    ];
+    const result = await llm.complete(messages, { maxTokens: 100 });
+    personaStatement = result.text.trim();
+  } catch (err) {
+    logger.warn({ err }, 'Bot persona extraction failed, storing raw text');
+  }
+
+  if (!userId) {
+    return `I'd love to remember that, but you'll need to sign up at open.news first so I can save your preferences!`;
+  }
+
+  await upsertPreference(userId, 'persona', personaStatement);
+
+  // Check for conflicts with existing persona preferences
+  const existing = await getPersonaPreferences(userId);
+  const others = existing.filter(p => p.value !== personaStatement);
+  let conflictNote = '';
+  if (others.length > 0) {
+    try {
+      const conflictMessages: LLMMessage[] = [
+        {
+          role: 'system',
+          content: `Check if a new user preference conflicts with any existing preferences. A conflict means they are contradictory or the new one supersedes the old one on the same topic.
+
+Reply with ONLY valid JSON: {"conflicting_index": <0-based index or -1 if no conflict>}
+
+Existing preferences:
+${others.map((p, i) => `[${i}] ${p.value}`).join('\n')}
+
+New preference: ${personaStatement}`,
+        },
+        { role: 'user', content: 'Check for conflicts.' },
+      ];
+      const conflictResult = await llm.complete(conflictMessages, { maxTokens: 50 });
+      const parsed = JSON.parse(conflictResult.text.trim());
+      if (typeof parsed.conflicting_index === 'number' && parsed.conflicting_index >= 0 && parsed.conflicting_index < others.length) {
+        const old = others[parsed.conflicting_index];
+        await deletePreferenceById(old.id);
+        conflictNote = ` (Updated — replaced: "${old.value}")`;
+        logger.info({ oldPref: old.value, newPref: personaStatement }, 'Bot persona preference conflict resolved');
+      }
+    } catch (err) {
+      logger.warn({ err }, 'Bot persona conflict detection failed, keeping both');
+    }
+  }
+
+  return `Got it! I'll remember: "${personaStatement}"${conflictNote} — this will help me tailor news to your interests.`;
+}
+
 // ─── Main bot reply job ──────────────────────────────────────────────────────
 
 export async function botReplyJob(data: BotReplyJobData): Promise<void> {
@@ -156,6 +218,8 @@ export async function botReplyJob(data: BotReplyJobData): Promise<void> {
       replyText = handleOffTopic();
     } else if (intent === 'greeting') {
       replyText = handleGreeting();
+    } else if (intent === 'set_preference') {
+      replyText = await handleSetPreference(question, user ? BigInt(user.id) : null);
     } else {
       // News-related intents: search, trending, or general news question
       const result = await composeBotReply({

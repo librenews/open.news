@@ -2,6 +2,7 @@ import { llm, type LLMMessage } from './llm.js';
 import { db } from '../db/client.js';
 import { getContextArticlesForUser, getContextArticlesPopular } from '../db/queries/articles.js';
 import { getUserByDid } from '../db/queries/users.js';
+import { getPersona } from '../db/queries/preferences.js';
 import { logger } from '../lib/logger.js';
 
 export interface BotContext {
@@ -107,6 +108,12 @@ export async function composeBotReply(ctx: BotContext): Promise<{
     ? `\n\nConversation history is included below for context. The user may be changing topics — always answer their CURRENT question. Use the history only to avoid repeating the same articles or information.`
     : '';
 
+  // Fetch persona for registered users
+  const persona = user ? await getPersona(BigInt(user.id)) : null;
+  const personaNote = persona
+    ? `\n\nUser profile: ${persona}\nUse this to prioritize topics and frame your responses to match their interests.`
+    : '';
+
   if (user && articlesToUse.length > 0) {
     systemPrompt = `You are the open.news assistant on Bluesky. You help users discover and discuss news from articles their network has shared.
 
@@ -114,13 +121,13 @@ The user @${user.handle} has articles shared by their network. Here are the most
 
 ${formatArticles(articlesToUse)}
 
-Answer their CURRENT question using these articles. Be specific and cite article titles with their URLs. If these articles don't relate to what they're asking, say you don't have information on that topic right now.${conversationNote}
+Answer their CURRENT question using these articles. Be specific and cite article titles with their URLs. If these articles don't relate to what they're asking, say you don't have information on that topic right now.${personaNote}${conversationNote}
 
 Keep replies concise — Bluesky posts have a 300 grapheme limit. Do not make up information not in the articles. Do not suggest "checking your feed."`;
   } else if (user) {
     systemPrompt = `You are the open.news assistant on Bluesky. You help users discover and discuss news from articles their network has shared.
 
-The user @${user.handle} is registered but no articles matched their CURRENT question. Let them know you don't have information on that specific topic right now.${conversationNote}
+The user @${user.handle} is registered but no articles matched their CURRENT question. Let them know you don't have information on that specific topic right now.${personaNote}${conversationNote}
 
 Keep replies concise — Bluesky posts have a 300 grapheme limit. Do not suggest "checking your feed." Do not reference topics from previous messages unless the user does.`;
   } else {

@@ -8,7 +8,7 @@ import {
   insertMessage,
   updateMessage,
 } from '../db/queries/conversations.js';
-import { getUserPreferences, upsertPreference } from '../db/queries/preferences.js';
+import { getUserPreferences, upsertPreference, getPersona, getPersonaPreferences, deletePreferenceById } from '../db/queries/preferences.js';
 import { getUserById } from '../db/queries/users.js';
 import { getUnseenArticlesForUser, markArticlesSeen } from '../db/queries/articles.js';
 import { insertFeedback } from '../db/queries/feedback.js';
@@ -52,10 +52,15 @@ function buildSystemPrompt(
   handle: string,
   preferences: { type: string; value: string }[],
   articles: ArticleContext[],
-  webResults?: SearchResult[]
+  webResults?: SearchResult[],
+  persona?: string | null
 ): string {
   const prefLines = preferences.length > 0
     ? `\nActive preferences:\n${preferences.map(p => `- Do not include content from ${p.value}`).join('\n')}`
+    : '';
+
+  const personaLine = persona
+    ? `\n\nUser profile: ${persona}\nUse this to prioritize topics and frame your responses in a way that matches their interests.`
     : '';
 
   const articleLines = articles.length > 0
@@ -75,7 +80,7 @@ function buildSystemPrompt(
   return `You are the open.news assistant for @${handle}.
 You answer questions about news based on articles their Bluesky network has shared.
 When web search results are available, you may also use those to enrich your answers.
-${prefLines}
+${prefLines}${personaLine}
 ${articleLines}
 ${webLines}
 ${noContext ? '\nNo relevant articles or search results found for this query.' : ''}
@@ -278,6 +283,104 @@ export async function processUserMessage(
     return;
   }
 
+  // ── Set preference (persona) ──────────────────────────────────────────────
+  if (intent === 'set_preference') {
+    // Use LLM to extract a clean persona statement
+    let personaStatement = text;
+    try {
+      const extractionMessages: LLMMessage[] = [
+        {
+          role: 'system',
+          content: `Extract a concise user persona statement from the user's message. The statement should be a single sentence describing their interest, background, or preference. Reply with ONLY the persona statement, nothing else.
+
+Examples:
+User: "remember that I'm interested in AI policy and regulation"
+Statement: Interested in AI policy and regulation.
+
+User: "I prefer in-depth analysis over breaking news"
+Statement: Prefers in-depth analysis over breaking news.
+
+User: "I'm a journalist covering tech and social media"
+Statement: Journalist covering tech and social media.`,
+        },
+        { role: 'user', content: text },
+      ];
+      const result = await llm.complete(extractionMessages, { maxTokens: 100 });
+      personaStatement = result.text.trim();
+    } catch (err) {
+      logger.warn({ err }, 'Persona extraction failed, storing raw text');
+    }
+
+    await upsertPreference(userId, 'persona', personaStatement);
+
+    // Check for conflicts with existing persona preferences
+    const existing = await getPersonaPreferences(userId);
+    // Filter out the one we just inserted (same value)
+    const others = existing.filter(p => p.value !== personaStatement);
+    let conflictNote = '';
+    if (others.length > 0) {
+      try {
+        const conflictMessages: LLMMessage[] = [
+          {
+            role: 'system',
+            content: `Check if a new user preference conflicts with any existing preferences. A conflict means they are contradictory or the new one supersedes the old one on the same topic (e.g. "prefers breaking news" conflicts with "prefers in-depth analysis").
+
+Reply with ONLY valid JSON: {"conflicting_index": <0-based index or -1 if no conflict>}
+
+Existing preferences:
+${others.map((p, i) => `[${i}] ${p.value}`).join('\n')}
+
+New preference: ${personaStatement}`,
+          },
+          { role: 'user', content: 'Check for conflicts.' },
+        ];
+        const conflictResult = await llm.complete(conflictMessages, { maxTokens: 50 });
+        const parsed = JSON.parse(conflictResult.text.trim());
+        if (typeof parsed.conflicting_index === 'number' && parsed.conflicting_index >= 0 && parsed.conflicting_index < others.length) {
+          const old = others[parsed.conflicting_index];
+          await deletePreferenceById(old.id);
+          conflictNote = ` (Updated — replaced: "${old.value}")`;
+          logger.info({ oldPref: old.value, newPref: personaStatement }, 'Persona preference conflict resolved');
+        }
+      } catch (err) {
+        logger.warn({ err }, 'Persona conflict detection failed, keeping both');
+      }
+    }
+
+    const responseText = `Got it! I'll remember: "${personaStatement}"${conflictNote} — this will help me tailor news and briefings to what matters most to you. You can update this anytime.`;
+    const msg = await insertMessage({
+      conversationId,
+      role: 'assistant',
+      text: responseText,
+      blocks: [{ type: 'suggestion', suggestions: ['Update my preferences', "What's trending?", 'Latest news'] }],
+      agent: 'preferences',
+      intent: 'set_preference',
+      isComplete: true,
+    });
+
+    sseRegistry.push(userId, {
+      event: 'message',
+      data: { conversation_id: conversationId, message: { id: Number(msg.id), role: 'assistant', is_complete: false, text: '' } },
+    });
+    sseRegistry.push(userId, {
+      event: 'token',
+      data: { message_id: Number(msg.id), token: responseText },
+    });
+    sseRegistry.push(userId, {
+      event: 'text_update',
+      data: { message_id: Number(msg.id), clean_text: responseText },
+    });
+    sseRegistry.push(userId, {
+      event: 'blocks',
+      data: { message_id: Number(msg.id), blocks: msg.blocks },
+    });
+    sseRegistry.push(userId, {
+      event: 'done',
+      data: { message_id: Number(msg.id), is_complete: true },
+    });
+    return;
+  }
+
   // ── Product feedback ────────────────────────────────────────────────────────
   if (intent === 'product_feedback') {
     // Use LLM to extract structured feedback
@@ -359,6 +462,7 @@ User: "I love the briefing feature!"
 
   // ── RAG / Search / Article / Discovery — streamed LLM response ────────────
   const preferences = await getUserPreferences(userId);
+  const persona = await getPersona(userId);
   const articles = intent !== 'search' ? await searchArticlesForUser(userId, text) : [];
 
   // Web/news search: explicit search intent, or fallback when FTS returns no articles
@@ -398,7 +502,7 @@ User: "I love the briefing feature!"
     : intent === 'article_explain' ? 'article' : 'rag';
 
   const llmMessages: LLMMessage[] = [
-    { role: 'system', content: buildSystemPrompt(user.handle, preferences, articles, webResults) },
+    { role: 'system', content: buildSystemPrompt(user.handle, preferences, articles, webResults, persona) },
     ...recentMessages
       .filter(m => m.role === 'user' || m.role === 'assistant')
       .map(m => ({ role: m.role as 'user' | 'assistant', content: m.text || '' })),

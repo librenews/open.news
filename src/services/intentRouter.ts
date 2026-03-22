@@ -7,6 +7,7 @@ export type Intent =
   | 'mute_domain'
   | 'mute_source'
   | 'topic_filter'
+  | 'set_preference'
   | 'article_explain'
   | 'discovery'
   | 'greeting'
@@ -35,7 +36,7 @@ export function classifyIntent(text: string): Intent | null {
 
 const VALID_INTENTS = new Set<Intent>([
   'news_question', 'search', 'mute_domain', 'mute_source',
-  'topic_filter', 'article_explain', 'discovery', 'greeting',
+  'topic_filter', 'set_preference', 'article_explain', 'discovery', 'greeting',
   'product_feedback', 'off_topic',
 ]);
 
@@ -53,6 +54,7 @@ Available intents:
 - mute_domain: wants to hide/block/stop seeing articles from a specific site or domain
 - mute_source: wants to mute a specific person/account
 - topic_filter: wants to only see specific topics or categories
+- set_preference: telling the bot to remember something about them, their interests, reading preferences, or how they want news delivered. Examples: "remember I'm a journalist", "I prefer analysis over breaking news", "I'm interested in climate policy"
 - article_explain: wants a deeper explanation or summary of a specific article
 - product_feedback: feedback about this product — feature requests, suggestions, bug reports, praise, questions about how the app works
 - off_topic: ANYTHING that is not about news, not about managing their news experience, and not about this product. This includes: creative writing, coding help, image generation, adult content, personal advice, math homework, general knowledge questions unrelated to current events, etc.
@@ -63,6 +65,9 @@ Examples:
 "I don't want to see CNN anymore" → mute_domain
 "what are people talking about?" → discovery
 "tell me more about that article" → article_explain
+"remember that I'm interested in AI policy" → set_preference
+"I prefer in-depth analysis over breaking news" → set_preference
+"I'm a journalist covering tech" → set_preference
 "I wish I could filter by topic" → product_feedback
 "write me a poem" → off_topic
 "what's 2+2?" → off_topic

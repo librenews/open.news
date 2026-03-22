@@ -64,3 +64,33 @@ export async function getMutedDomains(userId: bigint | number): Promise<string[]
   );
   return rows.map(r => r.value);
 }
+
+/** Get the user's persona (natural language preferences, concatenated). */
+export async function getPersona(userId: bigint | number): Promise<string | null> {
+  const { rows } = await db.query<{ value: string }>(
+    `SELECT value FROM user_preferences
+     WHERE user_id = $1 AND type = 'persona'
+       AND (expires_at IS NULL OR expires_at > NOW())
+     ORDER BY created_at ASC`,
+    [userId]
+  );
+  if (rows.length === 0) return null;
+  return rows.map(r => r.value).join('. ');
+}
+
+/** Get individual persona preference rows (for conflict detection). */
+export async function getPersonaPreferences(userId: bigint | number): Promise<{ id: bigint; value: string }[]> {
+  const { rows } = await db.query<{ id: bigint; value: string }>(
+    `SELECT id, value FROM user_preferences
+     WHERE user_id = $1 AND type = 'persona'
+       AND (expires_at IS NULL OR expires_at > NOW())
+     ORDER BY created_at ASC`,
+    [userId]
+  );
+  return rows;
+}
+
+/** Delete a preference by ID. */
+export async function deletePreferenceById(id: bigint | number): Promise<void> {
+  await db.query(`DELETE FROM user_preferences WHERE id = $1`, [id]);
+}
