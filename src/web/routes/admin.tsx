@@ -11,18 +11,18 @@ type AppEnv = { Variables: { userId: bigint } };
 
 export const adminRouter = new Hono<AppEnv>();
 
-// Optional protection: set ADMIN_DID env var to restrict to one account.
-// Falls back to librenews.bsky.social handle.
-const ADMIN_DID = (process.env.ADMIN_DID ?? '').trim();
-const ADMIN_HANDLES = ['librenews.bsky.social'];
+// ADMIN_HANDLES env var: comma-separated list of Bluesky handles with admin access.
+// Example: ADMIN_HANDLES=librenews.bsky.social,other.bsky.social
+const ADMIN_HANDLES = (process.env.ADMIN_HANDLES ?? '')
+  .split(',')
+  .map((h) => h.trim().toLowerCase())
+  .filter(Boolean);
 
 async function isAdmin(userId: bigint): Promise<{ ok: boolean; user: { handle: string } | null }> {
   const user = await getUserById(userId);
   if (!user) return { ok: false, user: null };
-  if (ADMIN_DID && user.did === ADMIN_DID) return { ok: true, user };
-  if (ADMIN_HANDLES.includes(user.handle)) return { ok: true, user };
-  // In development without ADMIN_DID set, allow any user
-  if (!ADMIN_DID) return { ok: true, user };
+  if (ADMIN_HANDLES.length === 0) return { ok: true, user }; // No restriction in dev
+  if (ADMIN_HANDLES.includes(user.handle.toLowerCase())) return { ok: true, user };
   return { ok: false, user };
 }
 
