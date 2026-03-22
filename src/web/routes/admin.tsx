@@ -3,25 +3,34 @@ import { Hono } from 'hono';
 import { sessionRequired } from '../middleware/session.js';
 import { db } from '../../db/client.js';
 import { getUserById } from '../../db/queries/users.js';
+import { getAllFeedback, getFeedbackCounts, updateFeedbackStatus } from '../../db/queries/feedback.js';
 import { AdminPage, type AdminData } from '../views/admin.js';
+import { AdminProductPage } from '../views/adminProduct.js';
 
 type AppEnv = { Variables: { userId: bigint } };
 
 export const adminRouter = new Hono<AppEnv>();
 
 // Optional protection: set ADMIN_DID env var to restrict to one account.
-// Without it, any logged-in user can view admin (fine for single-user dev).
+// Falls back to librenews.bsky.social handle.
 const ADMIN_DID = (process.env.ADMIN_DID ?? '').trim();
+const ADMIN_HANDLES = ['librenews.bsky.social'];
+
+async function isAdmin(userId: bigint): Promise<{ ok: boolean; user: { handle: string } | null }> {
+  const user = await getUserById(userId);
+  if (!user) return { ok: false, user: null };
+  if (ADMIN_DID && user.did === ADMIN_DID) return { ok: true, user };
+  if (ADMIN_HANDLES.includes(user.handle)) return { ok: true, user };
+  // In development without ADMIN_DID set, allow any user
+  if (!ADMIN_DID) return { ok: true, user };
+  return { ok: false, user };
+}
 
 adminRouter.get('/admin', sessionRequired, async (c) => {
   const userId = c.get('userId');
-  const user = await getUserById(userId);
+  const { ok, user } = await isAdmin(userId);
   if (!user) return c.redirect('/login');
-
-  // Enforce admin check in production
-  if (ADMIN_DID && user.did !== ADMIN_DID) {
-    return c.text('Forbidden', 403);
-  }
+  if (!ok) return c.text('Forbidden', 403);
 
   const [usersRes, articlesRes, sourcesRes, countsRes] = await Promise.all([
     db.query<{ id: string; handle: string; created_at: string }>(`
@@ -59,4 +68,46 @@ adminRouter.get('/admin', sessionRequired, async (c) => {
   };
 
   return c.html((<AdminPage data={data} user={user} />) as unknown as string);
+});
+
+// ─── Product Feedback Dashboard ──────────────────────────────────────────────
+
+adminRouter.get('/admin/product', sessionRequired, async (c) => {
+  const userId = c.get('userId');
+  const { ok, user } = await isAdmin(userId);
+  if (!user) return c.redirect('/login');
+  if (!ok) return c.text('Forbidden', 403);
+
+  const status = c.req.query('status') || undefined;
+  const category = c.req.query('category') || undefined;
+
+  const [feedback, counts] = await Promise.all([
+    getAllFeedback({ status, category }),
+    getFeedbackCounts(),
+  ]);
+
+  const feedbackSerialized = feedback.map((f) => ({
+    ...f,
+    id: String(f.id),
+    created_at: f.created_at instanceof Date ? f.created_at.toISOString() : String(f.created_at),
+  }));
+
+  return c.html((
+    <AdminProductPage feedback={feedbackSerialized} counts={counts} user={user} filter={{ status, category }} />
+  ) as unknown as string);
+});
+
+adminRouter.post('/admin/product/:id', sessionRequired, async (c) => {
+  const userId = c.get('userId');
+  const { ok } = await isAdmin(userId);
+  if (!ok) return c.text('Forbidden', 403);
+
+  const feedbackId = Number(c.req.param('id'));
+  const body = await c.req.parseBody();
+  const status = body.status as string | undefined;
+  const adminNotes = body.admin_notes as string | undefined;
+
+  await updateFeedbackStatus(feedbackId, { status, adminNotes });
+
+  return c.redirect('/admin/product');
 });

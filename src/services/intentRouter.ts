@@ -10,6 +10,7 @@ export type Intent =
   | 'article_explain'
   | 'discovery'
   | 'greeting'
+  | 'product_feedback'
   | 'unknown';
 
 // ─── Regex shortcuts for obvious patterns ────────────────────────────────────
@@ -24,6 +25,7 @@ const REGEX_INTENTS: [RegExp, Intent][] = [
   [/tell me more about (this|that) article/i, 'article_explain'],
   [/summarize|explain|break down/i, 'article_explain'],
   [/search (for|the|about)?|look(ing)? up|find me|google|where (can|do) I|how (do|can) I (register|sign up|get|buy|find)/i, 'search'],
+  [/feature request|i wish|would be (nice|great|cool)|suggestion:|can you add|you should add|please add|it would help|bug report/i, 'product_feedback'],
 ];
 
 /** Fast regex-only classification (always synchronous). */
@@ -39,6 +41,7 @@ export function classifyIntent(text: string): Intent {
 const VALID_INTENTS = new Set<Intent>([
   'news_question', 'search', 'mute_domain', 'mute_source',
   'topic_filter', 'article_explain', 'discovery', 'greeting',
+  'product_feedback',
 ]);
 
 const CLASSIFY_SYSTEM_PROMPT = `You are an intent classifier for a news assistant chatbot.
@@ -53,6 +56,7 @@ Intents:
 - mute_source: wants to mute a specific person/account
 - topic_filter: wants to only see specific topics
 - article_explain: wants a deeper explanation or summary of a specific article
+- product_feedback: feedback about this product (feature requests, suggestions, bug reports, complaints, praise, questions about how the app works)
 
 Examples:
 "what's going on with Ukraine?" → news_question
@@ -60,7 +64,11 @@ Examples:
 "I don't want to see CNN anymore" → mute_domain
 "hey!" → greeting
 "what are people talking about?" → discovery
-"stop showing me posts from that account" → mute_source`;
+"stop showing me posts from that account" → mute_source
+"I wish I could filter by topic" → product_feedback
+"this app is great!" → product_feedback
+"why doesn't the search work better?" → product_feedback
+"can you add dark mode?" → product_feedback`;
 
 /**
  * Hybrid intent classification: regex-first, LLM-fallback.

@@ -11,6 +11,7 @@ import {
 import { getUserPreferences, upsertPreference } from '../db/queries/preferences.js';
 import { getUserById } from '../db/queries/users.js';
 import { getUnseenArticlesForUser, markArticlesSeen } from '../db/queries/articles.js';
+import { insertFeedback } from '../db/queries/feedback.js';
 import { db } from '../db/client.js';
 
 /** Article context from FTS search. */
@@ -248,6 +249,85 @@ export async function processUserMessage(
         data: { message_id: Number(msg.id), is_complete: true },
       });
     }
+    return;
+  }
+
+  // ── Product feedback ────────────────────────────────────────────────────────
+  if (intent === 'product_feedback') {
+    // Use LLM to extract structured feedback
+    let category = 'suggestion';
+    let summary = text;
+    let clarification = "Could you tell me a bit more about what you'd like to see?";
+
+    try {
+      const extractionMessages: LLMMessage[] = [
+        {
+          role: 'system',
+          content: `Extract product feedback from the user message. Reply with ONLY valid JSON:
+{"category": "suggestion"|"bug"|"question"|"praise", "summary": "one-line summary of the core feedback", "clarification": "one follow-up question to better understand their feedback"}
+
+Examples:
+User: "I wish there was a dark mode"
+{"category": "suggestion", "summary": "User wants dark mode support", "clarification": "Would you prefer a toggle to switch modes, or should it follow your system settings?"}
+
+User: "the search results are terrible"
+{"category": "bug", "summary": "User finds search results low quality", "clarification": "Could you give me an example of a search that didn't work well for you?"}
+
+User: "I love the briefing feature!"
+{"category": "praise", "summary": "User loves the auto-briefing feature", "clarification": "Glad you like it! Is there anything about the briefing you'd tweak or change?"}`,
+        },
+        { role: 'user', content: text },
+      ];
+
+      const extraction = await llm.complete(extractionMessages, { maxTokens: 200 });
+      const parsed = JSON.parse(extraction.text.trim());
+      if (parsed.category) category = parsed.category;
+      if (parsed.summary) summary = parsed.summary;
+      if (parsed.clarification) clarification = parsed.clarification;
+    } catch (err) {
+      logger.warn({ err }, 'Product feedback extraction failed, using defaults');
+    }
+
+    // Store the feedback
+    await insertFeedback({
+      userId: BigInt(userId),
+      category,
+      summary,
+      rawText: text,
+    });
+
+    const responseText = `Thank you for sharing that! 🙏\n\n${clarification}\n\nEither way, I've noted your feedback for the team. If we have any further questions, we may reach out. Now — anything else I can help with?`;
+
+    const msg = await insertMessage({
+      conversationId,
+      role: 'assistant',
+      text: responseText,
+      blocks: [{ type: 'suggestion', suggestions: ["What's trending?", 'Latest news', 'Search the web'] }],
+      agent: 'product',
+      intent: 'product_feedback',
+      isComplete: true,
+    });
+
+    sseRegistry.push(userId, {
+      event: 'message',
+      data: { conversation_id: conversationId, message: { id: Number(msg.id), role: 'assistant', is_complete: false, text: '' } },
+    });
+    sseRegistry.push(userId, {
+      event: 'token',
+      data: { message_id: Number(msg.id), token: responseText },
+    });
+    sseRegistry.push(userId, {
+      event: 'text_update',
+      data: { message_id: Number(msg.id), text: responseText },
+    });
+    sseRegistry.push(userId, {
+      event: 'blocks',
+      data: { message_id: Number(msg.id), blocks: msg.blocks },
+    });
+    sseRegistry.push(userId, {
+      event: 'done',
+      data: { message_id: Number(msg.id), is_complete: true },
+    });
     return;
   }
 

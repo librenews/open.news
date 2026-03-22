@@ -64,6 +64,10 @@ vi.mock('../db/queries/articles.js', () => ({
   markArticlesSeen: vi.fn(),
 }));
 
+vi.mock('../db/queries/feedback.js', () => ({
+  insertFeedback: vi.fn().mockResolvedValue({ id: BigInt(1) }),
+}));
+
 import { processUserMessage, generateBriefing } from './chatAgent.js';
 import { sseRegistry } from '../web/sseRegistry.js';
 import { insertMessage, getMessages, updateMessage } from '../db/queries/conversations.js';
