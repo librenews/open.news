@@ -6,7 +6,7 @@ export const LoginPage = () => (
     <article style="max-width: 420px; margin: 4rem auto; text-align: center;">
       <hgroup>
         <h1>open.news</h1>
-        <p>News from the people you follow on Bluesky.</p>
+        <p>Agentic news discovery.</p>
       </hgroup>
       <form action="/oauth/login" method="get">
         <input

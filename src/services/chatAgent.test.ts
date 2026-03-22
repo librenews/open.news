@@ -31,6 +31,10 @@ vi.mock('./llm.js', () => ({
   },
 }));
 
+vi.mock('./intentRouter.js', () => ({
+  classifyIntentHybrid: vi.fn().mockResolvedValue('news_question'),
+}));
+
 vi.mock('../web/sseRegistry.js', () => ({
   sseRegistry: {
     push: vi.fn(),
@@ -74,6 +78,7 @@ import { insertMessage, getMessages, updateMessage } from '../db/queries/convers
 import { getUserPreferences, upsertPreference } from '../db/queries/preferences.js';
 import { getUserById } from '../db/queries/users.js';
 import { getUnseenArticlesForUser, markArticlesSeen } from '../db/queries/articles.js';
+import { classifyIntentHybrid } from './intentRouter.js';
 import { llm } from './llm.js';
 import { db } from '../db/client.js';
 
@@ -102,6 +107,7 @@ beforeEach(() => {
 describe('processUserMessage', () => {
   // ── Greeting ────────────────────────────────────────────────────────────────
   it('handles greeting without LLM call', async () => {
+    vi.mocked(classifyIntentHybrid).mockResolvedValue('greeting');
     await processUserMessage(1, 1, 'Hello');
 
     // Should NOT call LLM
@@ -126,6 +132,7 @@ describe('processUserMessage', () => {
   });
 
   it('greeting includes suggestion chips', async () => {
+    vi.mocked(classifyIntentHybrid).mockResolvedValue('greeting');
     await processUserMessage(1, 1, 'hey');
 
     const insertCall = vi.mocked(insertMessage).mock.calls[0][0] as { blocks: unknown[] };
@@ -136,7 +143,8 @@ describe('processUserMessage', () => {
   });
 
   // ── Mute domain ─────────────────────────────────────────────────────────────
-  it('handles mute domain command without LLM', async () => {
+  it('handles mute domain command', async () => {
+    vi.mocked(classifyIntentHybrid).mockResolvedValue('mute_domain');
     await processUserMessage(1, 1, 'mute nytimes.com');
 
     expect(llm.stream).not.toHaveBeenCalled();
@@ -150,6 +158,7 @@ describe('processUserMessage', () => {
   });
 
   it('mute domain extracts domain from "block washingtonpost.com articles"', async () => {
+    vi.mocked(classifyIntentHybrid).mockResolvedValue('mute_domain');
     await processUserMessage(1, 1, 'block washingtonpost.com articles');
 
     expect(upsertPreference).toHaveBeenCalledWith(1, 'mute_domain', 'washingtonpost.com', BigInt(100));
@@ -157,6 +166,7 @@ describe('processUserMessage', () => {
 
   // ── RAG agent (LLM streaming) ──────────────────────────────────────────────
   it('routes news questions to LLM streaming', async () => {
+    vi.mocked(classifyIntentHybrid).mockResolvedValue('news_question');
     vi.mocked(getUserPreferences).mockResolvedValue([]);
     vi.mocked(getMessages).mockResolvedValue([]);
     vi.mocked(db.query).mockResolvedValue({ rows: [], rowCount: 0, command: '', oid: 0, fields: [] } as never);
@@ -188,6 +198,7 @@ describe('processUserMessage', () => {
   });
 
   it('handles LLM streaming error gracefully', async () => {
+    vi.mocked(classifyIntentHybrid).mockResolvedValue('news_question');
     vi.mocked(getUserPreferences).mockResolvedValue([]);
     vi.mocked(getMessages).mockResolvedValue([]);
     vi.mocked(db.query).mockResolvedValue({ rows: [], rowCount: 0, command: '', oid: 0, fields: [] } as never);

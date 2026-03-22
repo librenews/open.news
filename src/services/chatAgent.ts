@@ -214,6 +214,32 @@ export async function processUserMessage(
     return;
   }
 
+  // ── Off-topic (prime directive) ────────────────────────────────────────────
+  if (intent === 'off_topic') {
+    const msg = await insertMessage({
+      conversationId,
+      role: 'assistant',
+      text: `I appreciate the question, but that's outside what I'm built for! 😊 I'm here to help you discover and discuss the news from your network. Ask me about what's happening in the world, or what your network is sharing — I'd love to help with that!`,
+      blocks: [{ type: 'suggestion', suggestions: ["What's trending?", 'Latest news', 'Search the web'] }],
+      agent: 'system',
+      intent: 'off_topic',
+      isComplete: true,
+    });
+    sseRegistry.push(userId, {
+      event: 'message',
+      data: { conversation_id: conversationId, message: { id: Number(msg.id), role: 'assistant', is_complete: true, text: msg.text } },
+    });
+    sseRegistry.push(userId, {
+      event: 'blocks',
+      data: { message_id: Number(msg.id), blocks: msg.blocks },
+    });
+    sseRegistry.push(userId, {
+      event: 'done',
+      data: { message_id: Number(msg.id), is_complete: true },
+    });
+    return;
+  }
+
   // ── Mute domain ───────────────────────────────────────────────────────────
   if (intent === 'mute_domain') {
     const domain = extractDomainFromText(text);
