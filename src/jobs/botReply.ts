@@ -15,8 +15,9 @@ export interface BotReplyJobData {
 
 // In-memory rate limit store: senderDid → last reply timestamp
 const lastReplyAt = new Map<string, number>();
-const USER_RATE_LIMIT_MS = 5 * 60 * 1000;       // 5 min for users
-const NON_USER_RATE_LIMIT_MS = 60 * 60 * 1000;  // 1 hr for non-users
+const MENTION_USER_RATE_LIMIT_MS = 5 * 60 * 1000;       // 5 min for mention replies (users)
+const MENTION_ANON_RATE_LIMIT_MS = 60 * 60 * 1000;      // 1 hr for mention replies (non-users)
+const DM_RATE_LIMIT_MS = 10 * 1000;                       // 10s for DMs (conversational)
 
 export async function botReplyJob(data: BotReplyJobData): Promise<void> {
   const { postUri, postCid, senderDid, text, interactionType, convoId } = data;
@@ -26,11 +27,16 @@ export async function botReplyJob(data: BotReplyJobData): Promise<void> {
   if (!question) return;
 
   const user = await getUserByDid(senderDid);
-  const rateLimit = user ? USER_RATE_LIMIT_MS : NON_USER_RATE_LIMIT_MS;
-  const lastAt = lastReplyAt.get(senderDid) ?? 0;
+
+  // Rate limit: DMs are conversational (short cooldown), mentions are public (longer cooldown)
+  const rateLimit = interactionType === 'dm'
+    ? DM_RATE_LIMIT_MS
+    : (user ? MENTION_USER_RATE_LIMIT_MS : MENTION_ANON_RATE_LIMIT_MS);
+  const rateLimitKey = `${senderDid}:${interactionType}`;
+  const lastAt = lastReplyAt.get(rateLimitKey) ?? 0;
 
   if (Date.now() - lastAt < rateLimit) {
-    logger.debug({ senderDid }, 'Bot reply rate-limited');
+    logger.info({ senderDid, interactionType, cooldownMs: rateLimit }, 'Bot reply rate-limited');
     return;
   }
 
@@ -57,7 +63,7 @@ export async function botReplyJob(data: BotReplyJobData): Promise<void> {
       }
     }
 
-    lastReplyAt.set(senderDid, Date.now());
+    lastReplyAt.set(rateLimitKey, Date.now());
 
     // Log interaction
     await db.query(
