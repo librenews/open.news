@@ -20,6 +20,12 @@ interface ContextArticle {
   text_excerpt: string | null;
 }
 
+interface RecentInteraction {
+  input_text: string;
+  response_text: string;
+  created_at: Date;
+}
+
 function formatArticles(articles: ContextArticle[]): string {
   return articles
     .map((a, i) => {
@@ -30,6 +36,36 @@ function formatArticles(articles: ContextArticle[]): string {
       return `${i + 1}. "${a.title ?? 'Untitled'}" — ${a.url}${date ? ` (${date})` : ''}${excerpt}`;
     })
     .join('\n\n');
+}
+
+/**
+ * Get recent bot interactions with this sender (for conversation continuity).
+ * Returns up to 5 recent exchanges, newest first.
+ */
+async function getRecentInteractions(senderDid: string, limit = 5): Promise<RecentInteraction[]> {
+  const { rows } = await db.query<RecentInteraction>(
+    `SELECT input_text, response_text, created_at
+     FROM bot_interactions
+     WHERE sender_did = $1 AND input_text IS NOT NULL AND response_text IS NOT NULL
+     ORDER BY created_at DESC LIMIT $2`,
+    [senderDid, limit]
+  );
+  return rows.reverse(); // chronological order
+}
+
+/**
+ * Extract article titles already mentioned in recent interactions.
+ */
+function getAlreadyMentionedTitles(interactions: RecentInteraction[]): Set<string> {
+  const titles = new Set<string>();
+  for (const i of interactions) {
+    // Match quoted article titles from bot responses like "Article Title"
+    const matches = i.response_text.matchAll(/"([^"]{10,})"/g);
+    for (const m of matches) {
+      titles.add(m[1].toLowerCase());
+    }
+  }
+  return titles;
 }
 
 /**
@@ -47,38 +83,59 @@ export async function composeBotReply(ctx: BotContext): Promise<{
 
   const articlesUsed: bigint[] = []; // TODO: track article IDs used
 
+  // Get conversation history for context
+  const recentInteractions = await getRecentInteractions(ctx.senderDid);
+  const alreadyMentioned = getAlreadyMentionedTitles(recentInteractions);
+
+  // Filter out articles we've already discussed
+  const freshArticles = articles.filter(
+    (a) => !a.title || !alreadyMentioned.has(a.title.toLowerCase())
+  );
+  const articlesToUse = freshArticles.length > 0 ? freshArticles : articles;
+
+  // Build conversation history for LLM context
+  const historyMessages: LLMMessage[] = recentInteractions.flatMap((i) => [
+    { role: 'user' as const, content: i.input_text },
+    { role: 'assistant' as const, content: i.response_text },
+  ]);
+
   let systemPrompt: string;
 
-  if (user && articles.length > 0) {
-    systemPrompt = `You are the open.news assistant. You answer questions about news based on articles the user's network has shared on Bluesky.
+  const conversationNote = recentInteractions.length > 0
+    ? `\n\nYou have been chatting with this user recently. The conversation history is included. Do NOT repeat articles or stories you've already mentioned — find fresh angles, new details, or different stories. If you have nothing new to add, say so honestly.`
+    : '';
 
-The user @${user.handle} has articles in their reading history. Here are the most relevant ones for their question:
+  if (user && articlesToUse.length > 0) {
+    systemPrompt = `You are the open.news assistant on Bluesky. You help users discover and discuss news from articles their network has shared.
 
-${formatArticles(articles)}
+The user @${user.handle} has articles shared by their network. Here are the most relevant ones for their question:
 
-Answer their question using these articles as context. Be specific and cite article titles. If you don't have enough context to answer well, say so briefly and suggest they check their feed.
+${formatArticles(articlesToUse)}
 
-Keep replies concise — Bluesky posts have a 300 grapheme limit. If the answer requires more, note you can elaborate. Do not make up information not present in the articles.`;
+Answer their question using these articles as context. Be specific and cite article titles with their URLs so users can click through. If you don't have enough context, say so briefly.${conversationNote}
+
+Keep replies concise — Bluesky posts have a 300 grapheme limit. Do not make up information not present in the articles. Do not suggest "checking your feed" or "checking your follows" — just answer with what you have.`;
   } else if (user) {
-    systemPrompt = `You are the open.news assistant. You answer questions about news based on articles the user's network has shared on Bluesky.
+    systemPrompt = `You are the open.news assistant on Bluesky. You help users discover and discuss news from articles their network has shared.
 
-The user @${user.handle} is registered, but no articles matched their question. Suggest they check their feed or rephrase, and note that open.news tracks news from their Bluesky follows.
+The user @${user.handle} is registered but no articles matched their question. Let them know you don't have information on that topic right now, and suggest they try a different wording or topic.${conversationNote}
 
-Keep replies concise — Bluesky posts have a 300 grapheme limit.`;
+Keep replies concise — Bluesky posts have a 300 grapheme limit. Do not suggest "checking your feed" or "checking your follows."`;
   } else {
-    systemPrompt = `You are the open.news assistant. You answer questions about news based on articles shared across the open.news network.
+    systemPrompt = `You are the open.news assistant on Bluesky. You help people discover news from articles shared across the open.news network.
 
-This person isn't a registered open.news user yet. Here are the most-read articles on this topic across the open.news network:
+This person isn't a registered open.news user yet. Here are popular articles on this topic:
 
-${formatArticles(articles)}
+${formatArticles(articlesToUse)}
 
-Answer helpfully, note this is based on network-wide popularity, and mention they can get personalized answers by signing up at open.news.
+Answer helpfully and mention they can get personalized answers by signing up at open.news.${conversationNote}
 
 Keep replies concise — Bluesky posts have a 300 grapheme limit. Do not make up information not present in the articles.`;
   }
 
   const messages: LLMMessage[] = [
     { role: 'system', content: systemPrompt },
+    ...historyMessages,
     { role: 'user', content: ctx.question },
   ];
 
@@ -91,6 +148,9 @@ Keep replies concise — Bluesky posts have a 300 grapheme limit. Do not make up
     outputTokens: response.outputTokens,
     senderDid: ctx.senderDid,
     interactionType: ctx.interactionType,
+    freshArticles: freshArticles.length,
+    totalArticles: articles.length,
+    historyTurns: recentInteractions.length,
   }, 'LLM bot reply generated');
 
   return {
