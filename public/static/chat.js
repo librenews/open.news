@@ -168,7 +168,8 @@
         inputEl.focus();
       });
     });
-    scrollToBottom();
+    // Pin scroll to the message top (not bottom), so user reads from the start
+    if (msg.wrapper) scrollToElementTop(msg.wrapper);
   }
 
   function finishMessage(msgId) {
@@ -196,6 +197,8 @@
     inputEl.disabled = false;
     sendBtn.disabled = false;
     inputEl.focus();
+    // Pin viewport to the top of the completed message so user starts reading there
+    scrollToElementTop(msg.wrapper);
     delete streamingMessages[msgId];
   }
 
