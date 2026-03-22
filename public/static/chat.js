@@ -116,19 +116,25 @@
 
   function createAssistantMessage(msgId) {
     var wrapper = document.createElement('div');
-    wrapper.className = 'msg-assistant';
+    wrapper.className = 'msg-assistant msg-streaming';
     wrapper.id = 'msg-' + msgId;
 
     var textDiv = document.createElement('div');
-    textDiv.className = 'text msg-streaming';
+    textDiv.className = 'text';
     wrapper.appendChild(textDiv);
+
+    // Typing indicator (3 bouncing dots) — visible while streaming
+    var typingDiv = document.createElement('div');
+    typingDiv.className = 'typing-indicator';
+    typingDiv.innerHTML = '<span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span>';
+    wrapper.appendChild(typingDiv);
 
     var blocksDiv = document.createElement('div');
     blocksDiv.className = 'blocks-container';
     wrapper.appendChild(blocksDiv);
 
     messagesEl.appendChild(wrapper);
-    streamingMessages[msgId] = { wrapper: wrapper, textDiv: textDiv, blocksDiv: blocksDiv, text: '' };
+    streamingMessages[msgId] = { wrapper: wrapper, textDiv: textDiv, blocksDiv: blocksDiv, typingDiv: typingDiv, text: '' };
     // Pin viewport to the top of this new message
     scrollToElementTop(wrapper);
   }
@@ -168,7 +174,15 @@
   function finishMessage(msgId) {
     var msg = streamingMessages[msgId];
     if (!msg) return;
-    msg.textDiv.classList.remove('msg-streaming');
+
+    // Remove typing indicator
+    if (msg.typingDiv && msg.typingDiv.parentNode) {
+      msg.typingDiv.parentNode.removeChild(msg.typingDiv);
+    }
+
+    // Remove streaming class and add reveal class (triggers fade-in)
+    msg.wrapper.classList.remove('msg-streaming');
+    msg.wrapper.classList.add('msg-reveal');
     // If text_update hasn't arrived yet, strip XML tags as fallback
     if (msg.text.indexOf('<articles') !== -1 || msg.text.indexOf('<suggestions') !== -1 || msg.text.indexOf('<links') !== -1) {
       var cleaned = msg.text

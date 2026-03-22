@@ -44,8 +44,18 @@ export const Layout = ({
         .msg-assistant { align-self: flex-start; max-width: 85%; }
         .msg-assistant .text { background: var(--pico-card-background-color);
                                 border-radius: 12px; padding: 0.6rem 1rem; }
-        .msg-streaming::after { content: '\\25CB'; animation: blink 1s step-end infinite; }
-        @keyframes blink { 50% { opacity: 0; } }
+        .msg-streaming .text { visibility: hidden; max-height: 0; overflow: hidden; padding: 0 !important; }
+        .typing-indicator { display: flex; align-items: center; gap: 5px;
+                             padding: 0.8rem 1.2rem; background: var(--pico-card-background-color);
+                             border-radius: 12px; width: fit-content; }
+        .typing-dot { width: 8px; height: 8px; border-radius: 50%;
+                       background: var(--pico-muted-color); animation: typingBounce 1.4s ease-in-out infinite; }
+        .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+        .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes typingBounce { 0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+                                   30% { transform: translateY(-6px); opacity: 1; } }
+        .msg-reveal .text { animation: fadeIn 0.25s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
         .article-card-block { border: 1px solid var(--pico-muted-border-color);
                                border-radius: 8px; padding: 0.75rem; margin: 0.5rem 0;
                                display: flex; gap: 0.75rem; }
