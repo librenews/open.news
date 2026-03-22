@@ -10,6 +10,7 @@ import {
 } from '../db/queries/conversations.js';
 import { getUserPreferences, upsertPreference } from '../db/queries/preferences.js';
 import { getUserById } from '../db/queries/users.js';
+import { getUnseenArticlesForUser, markArticlesSeen } from '../db/queries/articles.js';
 import { db } from '../db/client.js';
 
 /** Article context from FTS search. */
@@ -394,3 +395,171 @@ export async function processUserMessage(
 
 // Re-export config for use in the streaming loop
 import { config } from '../lib/config.js';
+
+/**
+ * Generate a proactive news briefing from unseen articles.
+ * Called when user returns to the chat after being away, or on login.
+ */
+export async function generateBriefing(
+  conversationId: number,
+  userId: number
+): Promise<void> {
+  const user = await getUserById(BigInt(userId));
+  if (!user) {
+    logger.warn({ userId }, 'Briefing: user not found');
+    return;
+  }
+
+  const unseenArticles = await getUnseenArticlesForUser(userId, 10);
+
+  if (unseenArticles.length === 0) {
+    // "You're all caught up!" message
+    const msg = await insertMessage({
+      conversationId,
+      role: 'assistant',
+      text: null,
+      blocks: [{
+        type: 'suggestion',
+        suggestions: ["What's trending?", 'Search the web', 'Show my preferences'],
+      }],
+      agent: 'briefing',
+      intent: 'briefing',
+      isComplete: true,
+    });
+    sseRegistry.push(userId, {
+      event: 'message',
+      data: { conversation_id: conversationId, message: { id: Number(msg.id), role: 'assistant', is_complete: false, text: '' } },
+    });
+    const caughtUpText = "✨ You're all caught up! No new articles from your network since your last visit.";
+    sseRegistry.push(userId, {
+      event: 'token',
+      data: { message_id: Number(msg.id), token: caughtUpText },
+    });
+    sseRegistry.push(userId, {
+      event: 'text_update',
+      data: { message_id: Number(msg.id), text: caughtUpText },
+    });
+    sseRegistry.push(userId, {
+      event: 'blocks',
+      data: { message_id: Number(msg.id), blocks: msg.blocks },
+    });
+    sseRegistry.push(userId, {
+      event: 'done',
+      data: { message_id: Number(msg.id), is_complete: true },
+    });
+    await updateMessage(msg.id, { text: caughtUpText, isComplete: true });
+    return;
+  }
+
+  // Build briefing system prompt
+  const articleContext = unseenArticles.map((a, i) =>
+    `[${a.id}] "${a.title}" (${a.site_name ?? 'unknown'}, ${a.published_at ? new Date(a.published_at).toLocaleDateString() : 'no date'})\nURL: ${a.url}\n${a.text_excerpt ?? a.description ?? ''}`
+  ).join('\n\n');
+
+  const systemPrompt = `You are the open.news assistant for @${user.handle}.
+You are delivering a proactive news briefing of articles from their Bluesky network that they haven't seen yet.
+
+Here are ${unseenArticles.length} unseen articles from their network:
+${articleContext}
+
+Create a concise, engaging briefing that highlights the most interesting stories.
+Group related stories together if applicable.
+Always link to articles using markdown: [Title](url).
+Keep it conversational and scannable — use bold for key themes.
+End with a brief sentence inviting the user to ask for more details on any topic.
+
+Do NOT use the structured tags (articles, links, suggestions) — they will be added programmatically.`;
+
+  const llmMessages: LLMMessage[] = [
+    { role: 'system', content: systemPrompt },
+    { role: 'user', content: 'Give me my news briefing.' },
+  ];
+
+  // Create the assistant message
+  const assistantMsg = await insertMessage({
+    conversationId,
+    role: 'assistant',
+    text: '',
+    agent: 'briefing',
+    intent: 'briefing',
+    articlesUsed: unseenArticles.map(a => BigInt(a.id)),
+    isComplete: false,
+  });
+
+  const msgId = Number(assistantMsg.id);
+
+  sseRegistry.push(userId, {
+    event: 'message',
+    data: { conversation_id: conversationId, message: { id: msgId, role: 'assistant', is_complete: false, text: '' } },
+  });
+
+  // Stream LLM response
+  let fullText = '';
+  try {
+    for await (const chunk of llm.stream(llmMessages)) {
+      if ('token' in chunk) {
+        fullText += chunk.token;
+        sseRegistry.push(userId, {
+          event: 'token',
+          data: { message_id: msgId, token: chunk.token },
+        });
+      } else {
+        // Build article cards block
+        const articleBlocks: unknown[] = [];
+        const articleCards = unseenArticles.slice(0, 5).map(a => ({
+          type: 'article_card' as const,
+          article_id: a.id,
+          title: a.title,
+          url: a.url,
+          description: a.description,
+          image_url: a.image_url,
+          site_name: a.site_name,
+          published_at: a.published_at?.toISOString() ?? null,
+        }));
+        if (articleCards.length > 0) {
+          articleBlocks.push({ type: 'article_list', heading: 'From your network', articles: articleCards });
+        }
+        articleBlocks.push({
+          type: 'suggestion',
+          suggestions: ['Tell me more', "What's trending?", 'Search the web'],
+        });
+
+        await updateMessage(assistantMsg.id, {
+          text: fullText,
+          blocks: articleBlocks,
+          isComplete: true,
+          llmProvider: `${config.LLM_PROVIDER}/${config.LLM_MODEL}`,
+        });
+
+        sseRegistry.push(userId, {
+          event: 'text_update',
+          data: { message_id: msgId, text: fullText },
+        });
+        sseRegistry.push(userId, {
+          event: 'blocks',
+          data: { message_id: msgId, blocks: articleBlocks },
+        });
+        sseRegistry.push(userId, {
+          event: 'done',
+          data: { message_id: msgId, is_complete: true },
+        });
+      }
+    }
+
+    // Mark articles as seen
+    await markArticlesSeen(userId, unseenArticles.map(a => a.id));
+    logger.info({ userId, articleCount: unseenArticles.length }, 'Briefing delivered, articles marked as seen');
+  } catch (err) {
+    logger.error({ err, conversationId, msgId }, 'Briefing LLM streaming error');
+    const errorText = "I wanted to give you a news briefing, but I'm having trouble right now. Ask me what's new and I'll try again!";
+    await updateMessage(assistantMsg.id, { text: errorText, isComplete: true });
+    sseRegistry.push(userId, {
+      event: 'token',
+      data: { message_id: msgId, token: errorText },
+    });
+    sseRegistry.push(userId, {
+      event: 'done',
+      data: { message_id: msgId, is_complete: true },
+    });
+  }
+}

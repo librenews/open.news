@@ -7,7 +7,7 @@ import {
   isParticipant,
 } from '../../db/queries/conversations.js';
 import { sseRegistry } from '../sseRegistry.js';
-import { processUserMessage } from '../../services/chatAgent.js';
+import { processUserMessage, generateBriefing } from '../../services/chatAgent.js';
 
 const app = new Hono();
 
@@ -68,6 +68,22 @@ app.post('/:id/messages', async (c) => {
   });
 
   return c.json({ message: userMessage }, 201);
+});
+
+/** Trigger a proactive news briefing. */
+app.post('/:id/briefing', async (c) => {
+  const userId = c.get('userId' as never) as number;
+  const conversationId = Number(c.req.param('id'));
+  if (!(await isParticipant(conversationId, userId))) {
+    return c.json({ error: 'Not found' }, 404);
+  }
+
+  // Fire-and-forget — briefing streams via SSE
+  generateBriefing(conversationId, userId).catch((err: unknown) => {
+    console.error('Briefing error:', err);
+  });
+
+  return c.json({ status: 'briefing_started' });
 });
 
 export default app;

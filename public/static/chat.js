@@ -242,7 +242,45 @@
     if (e.key === 'Enter') sendMessage();
   });
 
+  // ── Auto-briefing ──────────────────────────────────────────────────────────
+  var BRIEFING_AWAY_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
+  var lastVisibleAt = Date.now();
+  var briefingInFlight = false;
+
+  function requestBriefing() {
+    if (briefingInFlight || sending) return;
+    briefingInFlight = true;
+    fetch('/api/conversations/' + convoId + '/briefing', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    }).catch(function(err) {
+      console.error('Briefing request failed:', err);
+    }).finally(function() {
+      // Allow another briefing after 30s cooldown
+      setTimeout(function() { briefingInFlight = false; }, 30000);
+    });
+  }
+
+  // Page Visibility API — detect user returning after being away
+  document.addEventListener('visibilitychange', function() {
+    if (document.visibilityState === 'hidden') {
+      lastVisibleAt = Date.now();
+    } else if (document.visibilityState === 'visible') {
+      var awayMs = Date.now() - lastVisibleAt;
+      if (awayMs >= BRIEFING_AWAY_THRESHOLD_MS) {
+        requestBriefing();
+      }
+    }
+  });
+
   // Initialize
   connectSSE();
   scrollToBottom();
+
+  // Trigger briefing on page load if flagged (login or first visit)
+  var chatDataEl = document.getElementById('chat-data');
+  if (chatDataEl && chatDataEl.dataset.triggerBriefing === 'true') {
+    // Small delay to let SSE connect first
+    setTimeout(requestBriefing, 1000);
+  }
 })();

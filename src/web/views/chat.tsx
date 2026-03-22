@@ -2,15 +2,16 @@
 import type { Message } from '../../db/queries/conversations.js';
 import { MessageBubble } from './components/MessageBubble.js';
 
-export const ChatPage = ({ user, conversation, messages }: {
+export const ChatPage = ({ user, conversation, messages, triggerBriefing }: {
   user: { handle: string };
   conversation: { id: number | bigint };
   messages: Message[];
+  triggerBriefing?: boolean;
 }) => {
   const convoId = Number(conversation.id);
   return (
     <>
-      <div id="chat-data" data-conversation-id={convoId.toString()} />
+      <div id="chat-data" data-conversation-id={convoId.toString()} data-trigger-briefing={triggerBriefing ? 'true' : 'false'} />
 
       <div id="chat-messages">
         {messages.map(m => <MessageBubble message={m} />)}

@@ -82,9 +82,12 @@ app.get('/chat', sessionRequired, async (c) => {
   const conversation = await getOrCreateDefaultConversation(userId);
   const messages = (await getMessages(conversation.id, { limit: 50 })).reverse();
 
+  // Trigger briefing on login redirect (?briefing=1) or first visit (no messages)
+  const triggerBriefing = c.req.query('briefing') === '1' || messages.length === 0;
+
   return c.html(
     (<Layout title="Chat" user={user}>
-      <ChatPage user={user} conversation={{ id: Number(conversation.id) }} messages={messages} />
+      <ChatPage user={user} conversation={{ id: Number(conversation.id) }} messages={messages} triggerBriefing={triggerBriefing} />
     </Layout>) as unknown as string
   );
 });

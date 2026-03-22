@@ -59,11 +59,17 @@ vi.mock('../db/client.js', () => ({
   db: { query: vi.fn() },
 }));
 
-import { processUserMessage } from './chatAgent.js';
+vi.mock('../db/queries/articles.js', () => ({
+  getUnseenArticlesForUser: vi.fn(),
+  markArticlesSeen: vi.fn(),
+}));
+
+import { processUserMessage, generateBriefing } from './chatAgent.js';
 import { sseRegistry } from '../web/sseRegistry.js';
 import { insertMessage, getMessages, updateMessage } from '../db/queries/conversations.js';
 import { getUserPreferences, upsertPreference } from '../db/queries/preferences.js';
 import { getUserById } from '../db/queries/users.js';
+import { getUnseenArticlesForUser, markArticlesSeen } from '../db/queries/articles.js';
 import { llm } from './llm.js';
 import { db } from '../db/client.js';
 
@@ -213,5 +219,57 @@ describe('processUserMessage', () => {
 
     expect(insertMessage).not.toHaveBeenCalled();
     expect(sseRegistry.push).not.toHaveBeenCalled();
+  });
+});
+
+describe('generateBriefing', () => {
+  it('sends caught-up message when no unseen articles', async () => {
+    vi.mocked(getUnseenArticlesForUser).mockResolvedValue([]);
+
+    await generateBriefing(1, 1);
+
+    // Should insert a caught-up message
+    expect(insertMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agent: 'briefing',
+        intent: 'briefing',
+        isComplete: true,
+      })
+    );
+
+    // Should push SSE events including done
+    const pushCalls = vi.mocked(sseRegistry.push).mock.calls;
+    const doneEvents = pushCalls.filter(call => (call[1] as { event: string }).event === 'done');
+    expect(doneEvents.length).toBe(1);
+
+    // Should NOT call LLM
+    expect(llm.stream).not.toHaveBeenCalled();
+  });
+
+  it('streams LLM briefing with article cards when unseen articles exist', async () => {
+    const mockArticles = [
+      { id: 1, title: 'Test Article', description: 'A test', url: 'https://example.com/1', published_at: new Date(), site_name: 'Example', image_url: null, text_excerpt: 'Excerpt' },
+      { id: 2, title: 'Another One', description: 'Another', url: 'https://example.com/2', published_at: new Date(), site_name: 'Example', image_url: null, text_excerpt: 'More text' },
+    ];
+    vi.mocked(getUnseenArticlesForUser).mockResolvedValue(mockArticles);
+
+    async function* mockStream() {
+      yield { token: 'Here is your briefing.' };
+      yield { done: true as const, usage: { input: 100, output: 20 } };
+    }
+    vi.mocked(llm.stream).mockReturnValue(mockStream());
+
+    await generateBriefing(1, 1);
+
+    // Should call LLM
+    expect(llm.stream).toHaveBeenCalledTimes(1);
+
+    // Should mark articles as seen
+    expect(markArticlesSeen).toHaveBeenCalledWith(1, [1, 2]);
+
+    // Should push blocks event with article cards
+    const pushCalls = vi.mocked(sseRegistry.push).mock.calls;
+    const blocksEvents = pushCalls.filter(call => (call[1] as { event: string }).event === 'blocks');
+    expect(blocksEvents.length).toBe(1);
   });
 });

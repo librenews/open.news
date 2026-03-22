@@ -234,6 +234,51 @@ export async function markArticleSeen(
   );
 }
 
+/** Get recent unseen news articles for a user's briefing. */
+export async function getUnseenArticlesForUser(
+  userId: bigint | number,
+  limit = 10
+): Promise<{
+  id: number;
+  title: string;
+  description: string | null;
+  url: string;
+  published_at: Date | null;
+  site_name: string | null;
+  image_url: string | null;
+  text_excerpt: string | null;
+}[]> {
+  const { rows } = await db.query(
+    `SELECT a.id, a.title, a.description, a.url, a.published_at,
+            a.site_name, a.image_url,
+            LEFT(a.full_text, 1500) AS text_excerpt
+     FROM user_articles ua
+     JOIN articles a ON a.id = ua.article_id
+     WHERE ua.user_id = $1
+       AND ua.seen_at IS NULL
+       AND a.is_news = TRUE
+       AND a.fetch_status = 'complete'
+       AND a.title IS NOT NULL
+     ORDER BY a.published_at DESC NULLS LAST, ua.created_at DESC
+     LIMIT $2`,
+    [userId, limit]
+  );
+  return rows;
+}
+
+/** Mark multiple articles as seen in bulk. */
+export async function markArticlesSeen(
+  userId: bigint | number,
+  articleIds: (bigint | number)[]
+): Promise<void> {
+  if (articleIds.length === 0) return;
+  await db.query(
+    `UPDATE user_articles SET seen_at = NOW()
+     WHERE user_id = $1 AND article_id = ANY($2) AND seen_at IS NULL`,
+    [userId, articleIds]
+  );
+}
+
 export async function toggleArticleSaved(
   userId: bigint | number,
   articleId: bigint | number

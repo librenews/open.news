@@ -147,7 +147,7 @@ authRouter.get('/oauth/callback', async (c) => {
 
     await enqueueJob('syncFollows', { userId: user.id.toString(), userDid: did });
 
-    return c.redirect('/feed');
+    return c.redirect('/chat?briefing=1');
   } catch (err) {
     logger.error({ err }, 'OAuth callback failed');
     return c.html('<p>Login failed. <a href="/login">Try again</a></p>', 500);
