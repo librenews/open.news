@@ -50,6 +50,14 @@
     });
   }
 
+  // Scroll so the top of an element is visible (with a small offset).
+  // Used to anchor the viewport at the start of a new assistant message.
+  function scrollToElementTop(el) {
+    requestAnimationFrame(function() {
+      el.scrollIntoView({ block: 'start', behavior: 'auto' });
+    });
+  }
+
   function escapeHtml(s) {
     var div = document.createElement('div');
     div.textContent = s;
@@ -121,7 +129,8 @@
 
     messagesEl.appendChild(wrapper);
     streamingMessages[msgId] = { wrapper: wrapper, textDiv: textDiv, blocksDiv: blocksDiv, text: '' };
-    scrollToBottom();
+    // Pin viewport to the top of this new message
+    scrollToElementTop(wrapper);
   }
 
   function appendToken(msgId, token) {
@@ -130,7 +139,7 @@
     msg.text += token;
     // During streaming, show as plain text (will be replaced with rendered HTML on completion)
     msg.textDiv.textContent = msg.text;
-    scrollToBottom();
+    // Don't scroll — user reads downward naturally from the anchored message top
   }
 
   function updateText(msgId, cleanText) {
@@ -139,7 +148,7 @@
     msg.text = cleanText;
     // Replace raw text with rendered markdown HTML
     msg.textDiv.innerHTML = renderMarkdown(cleanText);
-    scrollToBottom();
+    // Don't scroll — preserve reading position
   }
 
   function setBlocks(msgId, blocks) {
