@@ -46,7 +46,9 @@ async function getRecentInteractions(senderDid: string, limit = 5): Promise<Rece
   const { rows } = await db.query<RecentInteraction>(
     `SELECT input_text, response_text, created_at
      FROM bot_interactions
-     WHERE sender_did = $1 AND input_text IS NOT NULL AND response_text IS NOT NULL
+     WHERE sender_did = $1
+       AND input_text IS NOT NULL AND response_text IS NOT NULL
+       AND created_at > NOW() - INTERVAL '30 minutes'
      ORDER BY created_at DESC LIMIT $2`,
     [senderDid, limit]
   );
@@ -102,35 +104,35 @@ export async function composeBotReply(ctx: BotContext): Promise<{
   let systemPrompt: string;
 
   const conversationNote = recentInteractions.length > 0
-    ? `\n\nYou have been chatting with this user recently. The conversation history is included. Do NOT repeat articles or stories you've already mentioned — find fresh angles, new details, or different stories. If you have nothing new to add, say so honestly.`
+    ? `\n\nConversation history is included below for context. The user may be changing topics — always answer their CURRENT question. Use the history only to avoid repeating the same articles or information.`
     : '';
 
   if (user && articlesToUse.length > 0) {
     systemPrompt = `You are the open.news assistant on Bluesky. You help users discover and discuss news from articles their network has shared.
 
-The user @${user.handle} has articles shared by their network. Here are the most relevant ones for their question:
+The user @${user.handle} has articles shared by their network. Here are the most relevant ones for their CURRENT question:
 
 ${formatArticles(articlesToUse)}
 
-Answer their question using these articles as context. Be specific and cite article titles with their URLs so users can click through. If you don't have enough context, say so briefly.${conversationNote}
+Answer their CURRENT question using these articles. Be specific and cite article titles with their URLs. If these articles don't relate to what they're asking, say you don't have information on that topic right now.${conversationNote}
 
-Keep replies concise — Bluesky posts have a 300 grapheme limit. Do not make up information not present in the articles. Do not suggest "checking your feed" or "checking your follows" — just answer with what you have.`;
+Keep replies concise — Bluesky posts have a 300 grapheme limit. Do not make up information not in the articles. Do not suggest "checking your feed."`;
   } else if (user) {
     systemPrompt = `You are the open.news assistant on Bluesky. You help users discover and discuss news from articles their network has shared.
 
-The user @${user.handle} is registered but no articles matched their question. Let them know you don't have information on that topic right now, and suggest they try a different wording or topic.${conversationNote}
+The user @${user.handle} is registered but no articles matched their CURRENT question. Let them know you don't have information on that specific topic right now.${conversationNote}
 
-Keep replies concise — Bluesky posts have a 300 grapheme limit. Do not suggest "checking your feed" or "checking your follows."`;
+Keep replies concise — Bluesky posts have a 300 grapheme limit. Do not suggest "checking your feed." Do not reference topics from previous messages unless the user does.`;
   } else {
     systemPrompt = `You are the open.news assistant on Bluesky. You help people discover news from articles shared across the open.news network.
 
-This person isn't a registered open.news user yet. Here are popular articles on this topic:
+This person isn't a registered open.news user yet. Here are popular articles on their CURRENT topic:
 
 ${formatArticles(articlesToUse)}
 
 Answer helpfully and mention they can get personalized answers by signing up at open.news.${conversationNote}
 
-Keep replies concise — Bluesky posts have a 300 grapheme limit. Do not make up information not present in the articles.`;
+Keep replies concise — Bluesky posts have a 300 grapheme limit. Do not make up information not in the articles.`;
   }
 
   const messages: LLMMessage[] = [
