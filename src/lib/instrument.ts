@@ -1,15 +1,11 @@
 /**
  * OpenTelemetry auto-instrumentation bootstrap.
  *
- * This file must be loaded BEFORE the application code via:
- *   node --import tsx/esm --require ./src/lib/instrument.ts src/web/index.tsx
- *
- * Or in ESM mode via --import flag (see ecosystem.config.js).
- *
  * Env vars:
- *   OTEL_ENABLED=true          — enable tracing/metrics (default: false)
- *   OTEL_SERVICE_NAME          — service name (default: open-news)
- *   OTEL_EXPORTER_OTLP_ENDPOINT — collector endpoint (default: http://localhost:4318)
+ *   OTEL_ENABLED=true                    — enable tracing/metrics (default: false)
+ *   OTEL_SERVICE_NAME                    — service name (default: open-news)
+ *   OTEL_EXPORTER_OTLP_ENDPOINT         — collector endpoint (default: http://localhost:4318)
+ *   OTEL_EXPORTER_OTLP_HEADERS          — auth headers, e.g. "Authorization=Basic xxx" (optional)
  */
 
 import { NodeSDK } from '@opentelemetry/sdk-node';
@@ -26,6 +22,18 @@ if (enabled) {
   const serviceName = process.env.OTEL_SERVICE_NAME || 'open-news';
   const endpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT || 'http://localhost:4318';
 
+  // Parse OTEL_EXPORTER_OTLP_HEADERS (format: "Key=Value,Key2=Value2")
+  const headers: Record<string, string> = {};
+  const rawHeaders = process.env.OTEL_EXPORTER_OTLP_HEADERS;
+  if (rawHeaders) {
+    for (const pair of rawHeaders.split(',')) {
+      const eqIdx = pair.indexOf('=');
+      if (eqIdx > 0) {
+        headers[pair.slice(0, eqIdx).trim()] = pair.slice(eqIdx + 1).trim();
+      }
+    }
+  }
+
   const resource = resourceFromAttributes({
     [ATTR_SERVICE_NAME]: serviceName,
     [ATTR_SERVICE_VERSION]: process.env.npm_package_version || '0.1.0',
@@ -36,19 +44,19 @@ if (enabled) {
     resource,
     traceExporter: new OTLPTraceExporter({
       url: `${endpoint}/v1/traces`,
+      headers,
     }),
     metricReader: new PeriodicExportingMetricReader({
       exporter: new OTLPMetricExporter({
         url: `${endpoint}/v1/metrics`,
+        headers,
       }),
       exportIntervalMillis: 30_000,
     }),
     instrumentations: [
       getNodeAutoInstrumentations({
-        // Auto-instrument HTTP, fetch, pg, dns, net, etc.
         '@opentelemetry/instrumentation-http': { enabled: true },
         '@opentelemetry/instrumentation-pg': { enabled: true },
-        // Disable noisy/unnecessary instrumentations
         '@opentelemetry/instrumentation-fs': { enabled: false },
       }),
     ],
@@ -56,7 +64,6 @@ if (enabled) {
 
   sdk.start();
 
-  // Graceful shutdown
   const shutdown = () => {
     sdk.shutdown()
       .then(() => console.log('OpenTelemetry SDK shut down'))
