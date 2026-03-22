@@ -10,6 +10,10 @@ function renderMarkdown(text: string): string {
     .replace(/>/g, '&gt;');
   // Bold **text**
   html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  // Headers (### h3, ## h2, # h1) — must be before italic
+  html = html.replace(/^### (.+)$/gm, '<h4>$1</h4>');
+  html = html.replace(/^## (.+)$/gm, '<h3>$1</h3>');
+  html = html.replace(/^# (.+)$/gm, '<h3>$1</h3>');
   // Italic *text*
   html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
   // Inline code

@@ -16,6 +16,10 @@
     if (!text) return '';
     // Escape HTML first
     let html = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    // Headers (### h3, ## h2, # h1) — must be before bold/italic
+    html = html.replace(/^### (.+)$/gm, '<h4>$1</h4>');
+    html = html.replace(/^## (.+)$/gm, '<h3>$1</h3>');
+    html = html.replace(/^# (.+)$/gm, '<h3>$1</h3>');
     // Bold **text**
     html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
     // Italic *text*
