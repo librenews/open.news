@@ -257,7 +257,7 @@ export async function getUnseenArticlesForUser(
      WHERE ua.user_id = $1
        AND ua.seen_at IS NULL
        AND a.is_news = TRUE
-       AND a.fetch_status = 'complete'
+       AND a.fetch_status = 'fetched'
        AND a.title IS NOT NULL
      ORDER BY a.published_at DESC NULLS LAST, ua.created_at DESC
      LIMIT $2`,
