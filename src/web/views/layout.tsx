@@ -44,7 +44,7 @@ export const Layout = ({
         .msg-assistant { align-self: flex-start; max-width: 85%; }
         .msg-assistant .text { background: var(--pico-card-background-color);
                                 border-radius: 12px; padding: 0.6rem 1rem; }
-        .msg-streaming .text { visibility: hidden; max-height: 0; overflow: hidden; padding: 0 !important; }
+        .msg-streaming .text { display: none; }
         .typing-indicator { display: flex; align-items: center; gap: 5px;
                              padding: 0.8rem 1.2rem; background: var(--pico-card-background-color);
                              border-radius: 12px; width: fit-content; }

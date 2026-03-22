@@ -368,7 +368,7 @@ New preference: ${personaStatement}`,
     });
     sseRegistry.push(userId, {
       event: 'text_update',
-      data: { message_id: Number(msg.id), clean_text: responseText },
+      data: { message_id: Number(msg.id), text: responseText },
     });
     sseRegistry.push(userId, {
       event: 'blocks',
