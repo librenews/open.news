@@ -1,4 +1,4 @@
-import { AtpAgent } from '@atproto/api';
+import { AtpAgent, RichText } from '@atproto/api';
 import { config } from '../lib/config.js';
 import { logger } from '../lib/logger.js';
 
@@ -60,7 +60,7 @@ export async function getFollowedDids(userDid: string): Promise<
 }
 
 /**
- * Post a reply to a mention.
+ * Post a reply to a mention (with auto-detected facets for clickable links).
  */
 export async function postReply(params: {
   text: string;
@@ -68,8 +68,12 @@ export async function postReply(params: {
   replyToCid: string;
 }): Promise<void> {
   const agent = await getBotAgent();
+  const rt = new RichText({ text: params.text });
+  await rt.detectFacets(agent);
+
   await agent.post({
-    text: params.text,
+    text: rt.text,
+    facets: rt.facets,
     reply: {
       root: { uri: params.replyToUri, cid: params.replyToCid },
       parent: { uri: params.replyToUri, cid: params.replyToCid },
@@ -78,21 +82,27 @@ export async function postReply(params: {
 }
 
 /**
- * Post a new standalone post (for article discovery).
+ * Post a new standalone post (with auto-detected facets for clickable links).
  */
 export async function postNew(text: string): Promise<void> {
   const agent = await getBotAgent();
-  await agent.post({ text });
+  const rt = new RichText({ text });
+  await rt.detectFacets(agent);
+
+  await agent.post({ text: rt.text, facets: rt.facets });
 }
 
 /**
- * Send a DM reply in a conversation.
+ * Send a DM reply in a conversation (with auto-detected facets for clickable links).
  */
 export async function sendDm(convoId: string, text: string): Promise<void> {
   const agent = await getBotAgent();
+  const rt = new RichText({ text });
+  await rt.detectFacets(agent);
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   await (agent.api as any).chat.bsky.convo.sendMessage(
-    { convoId, message: { text } },
+    { convoId, message: { text: rt.text, facets: rt.facets } },
     { headers: { 'atproto-proxy': 'did:web:api.bsky.chat#bsky_chat' } },
   );
 }
