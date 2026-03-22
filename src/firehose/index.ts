@@ -266,6 +266,19 @@ async function start() {
     }
   }, DID_REFRESH_INTERVAL_MS);
 
+  // Start DM poller alongside firehose
+  const { startDmPoller, stopDmPoller } = await import('../services/dmPoller.js');
+  startDmPoller();
+
+  // Graceful shutdown — stop DM poller too
+  const shutdown = () => {
+    stopDmPoller();
+    if (ws) ws.close();
+    process.exit(0);
+  };
+  process.on('SIGTERM', shutdown);
+  process.on('SIGINT', shutdown);
+
   logger.info({ cursor: currentCursor, dids: watchedDids.size }, 'Firehose consumer started');
 }
 

@@ -91,8 +91,77 @@ export async function postNew(text: string): Promise<void> {
 export async function sendDm(convoId: string, text: string): Promise<void> {
   const agent = await getBotAgent();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await (agent.api as any).chat.bsky.convo.sendMessage({
-    convoId,
-    message: { text },
-  });
+  await (agent.api as any).chat.bsky.convo.sendMessage(
+    { convoId, message: { text } },
+    { headers: { 'atproto-proxy': 'did:web:api.bsky.chat#bsky_chat' } },
+  );
+}
+
+// ─── Chat API helpers for DM polling ─────────────────────────────────────────
+
+export interface ConvoView {
+  id: string;
+  unreadCount: number;
+  lastMessage?: {
+    id: string;
+    rev: string;
+    text: string;
+    sender: { did: string };
+    sentAt: string;
+  };
+  members: Array<{ did: string; handle: string; displayName?: string }>;
+}
+
+export interface ChatMessage {
+  id: string;
+  rev: string;
+  text: string;
+  sender: { did: string };
+  sentAt: string;
+}
+
+/**
+ * List conversations with unread messages.
+ */
+export async function listConvos(): Promise<ConvoView[]> {
+  const agent = await getBotAgent();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const res = await (agent.api as any).chat.bsky.convo.listConvos(
+    {},
+    { headers: { 'atproto-proxy': 'did:web:api.bsky.chat#bsky_chat' } },
+  );
+  return (res.data.convos ?? []) as ConvoView[];
+}
+
+/**
+ * Get messages in a conversation, optionally after a cursor.
+ */
+export async function getConvoMessages(
+  convoId: string,
+  cursor?: string
+): Promise<{ messages: ChatMessage[]; cursor?: string }> {
+  const agent = await getBotAgent();
+  const params: Record<string, string> = { convoId, limit: '50' };
+  if (cursor) params.cursor = cursor;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const res = await (agent.api as any).chat.bsky.convo.getMessages(
+    params,
+    { headers: { 'atproto-proxy': 'did:web:api.bsky.chat#bsky_chat' } },
+  );
+  return {
+    messages: (res.data.messages ?? []) as ChatMessage[],
+    cursor: res.data.cursor,
+  };
+}
+
+/**
+ * Mark a conversation as read up to a given message.
+ */
+export async function markConvoRead(convoId: string): Promise<void> {
+  const agent = await getBotAgent();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await (agent.api as any).chat.bsky.convo.updateRead(
+    { convoId },
+    { headers: { 'atproto-proxy': 'did:web:api.bsky.chat#bsky_chat' } },
+  );
 }
