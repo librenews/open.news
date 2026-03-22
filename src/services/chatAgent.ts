@@ -1,6 +1,6 @@
 import { logger } from '../lib/logger.js';
 import { llm, type LLMMessage } from './llm.js';
-import { classifyIntent } from './intentRouter.js';
+import { classifyIntentHybrid } from './intentRouter.js';
 import { sseRegistry } from '../web/sseRegistry.js';
 import { braveSearch, braveNewsSearch, type SearchResult } from './braveSearch.js';
 import {
@@ -181,7 +181,7 @@ export async function processUserMessage(
   userId: number,
   text: string
 ): Promise<void> {
-  const intent = classifyIntent(text);
+  const intent = await classifyIntentHybrid(text);
   logger.info({ conversationId, userId, intent }, 'Processing user message');
 
   const user = await getUserById(userId);
