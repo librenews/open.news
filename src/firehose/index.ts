@@ -5,6 +5,7 @@ import { normalizeArticleUrl, extractUrlsFromPost } from '../lib/urls.js';
 import { config } from '../lib/config.js';
 import { logger } from '../lib/logger.js';
 import { enqueueJob } from '../web/jobEnqueue.js';
+import { xaddPost } from '../lib/redis.js';
 
 const CURSOR_PERSIST_INTERVAL_MS = 30_000;
 const DID_REFRESH_INTERVAL_MS = 60_000;
@@ -167,10 +168,13 @@ function handleEvent(event: JetstreamEvent): void {
     return;
   }
 
-  // ── Posts: bot mentions + URL extraction ───────────────────────────────────
+  // ── Posts: bot mentions + URL extraction + track stream ─────────────────────
   if (commit.collection !== 'app.bsky.feed.post' || !commit.record) return;
 
   const post = commit.record;
+
+  // Push every post to Redis stream for track matching (fire-and-forget)
+  xaddPost(did, String(post.text ?? ''), postUri, String(event.time_us ?? Date.now() * 1000));
 
   // Bot mention detection
   const isMention = Array.isArray(post.facets) &&

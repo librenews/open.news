@@ -23,6 +23,10 @@ const schema = z.object({
   // Search
   BRAVE_API_KEY: z.string().optional(),
 
+  // Track infrastructure
+  REDIS_URL: z.string().default('redis://localhost:6379'),
+  OPENSEARCH_URL: z.string().url().default('http://localhost:9200'),
+
   // Web
   PORT: z.coerce.number().default(3000),
   SESSION_SECRET: z.string().min(16),
