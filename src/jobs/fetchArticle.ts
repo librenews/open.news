@@ -9,7 +9,7 @@ import {
   upsertArticleSource,
   fanOutArticleToUsers,
 } from '../db/queries/articles.js';
-import { getSourceByDid } from '../db/queries/sources.js';
+import { getSourceByDid, touchSourceLastSeen } from '../db/queries/sources.js';
 import { logger } from '../lib/logger.js';
 
 export interface FetchArticleJobData {
@@ -44,6 +44,9 @@ function isDenylisted(url: string): boolean {
 export async function fetchArticleJob(data: FetchArticleJobData): Promise<void> {
   const { url, sourceDid, postUri, postCid } = data;
   logger.info({ url }, 'Fetching article');
+
+  // Update source last-seen timestamp (moved here from firehose)
+  await touchSourceLastSeen(sourceDid);
 
   // Dedup check (may have been inserted by another concurrent job)
   const existing = await findArticleByUrl(url);

@@ -1,7 +1,6 @@
 import WebSocket from 'ws';
 import { db } from '../db/client.js';
-import { getAllSourceDids, touchSourceLastSeen } from '../db/queries/sources.js';
-import { findArticleByUrl, insertArticle, upsertArticleSource, fanOutArticleToUsers } from '../db/queries/articles.js';
+import { getAllSourceDids } from '../db/queries/sources.js';
 import { normalizeArticleUrl, extractUrlsFromPost } from '../lib/urls.js';
 import { config } from '../lib/config.js';
 import { logger } from '../lib/logger.js';
@@ -18,9 +17,29 @@ let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let intentionalClose = false; // prevents ghost reconnect from old socket's close event
 
 // ─── Stats ───────────────────────────────────────────────────────────────────
-const stats = { events: 0, posts: 0, mentions: 0, urlsFound: 0, jobsQueued: 0 };
+const stats = { events: 0, posts: 0, mentions: 0, urlsFound: 0, jobsQueued: 0, lruHits: 0 };
 let lastEventTimeUs: bigint | null = null;  // microsecond timestamp of most recent event
 const STATS_LOG_INTERVAL_MS = 30_000;
+
+// ─── LRU URL cache ──────────────────────────────────────────────────────────
+// Avoids enqueuing duplicate jobs for the same URL within a short window.
+// Pure in-memory — no DB queries. The worker still does its own dedup check.
+const URL_LRU_MAX = 10_000;
+const recentUrls = new Map<string, number>(); // url → timestamp
+
+function isRecentlySeen(url: string): boolean {
+  if (recentUrls.has(url)) {
+    stats.lruHits++;
+    return true;
+  }
+  recentUrls.set(url, Date.now());
+  // Evict oldest entries when over capacity
+  if (recentUrls.size > URL_LRU_MAX) {
+    const firstKey = recentUrls.keys().next().value;
+    if (firstKey) recentUrls.delete(firstKey);
+  }
+  return false;
+}
 
 // ─── Cursor persistence ───────────────────────────────────────────────────────
 
@@ -90,9 +109,7 @@ function connect() {
         currentCursor = BigInt(event.time_us);
         lastEventTimeUs = currentCursor;
       }
-      handleEvent(event).catch((err) =>
-        logger.error({ err }, 'Error handling Jetstream event')
-      );
+      handleEvent(event);
     } catch (err) {
       logger.debug({ err }, 'Failed to parse Jetstream message');
     }
@@ -116,7 +133,7 @@ function connect() {
   });
 }
 
-// ─── Event handling ───────────────────────────────────────────────────────────
+// ─── Event handling (zero DB queries — parse, extract, enqueue) ──────────────
 
 interface JetstreamEvent {
   kind: string;
@@ -131,7 +148,7 @@ interface JetstreamEvent {
   };
 }
 
-async function handleEvent(event: JetstreamEvent): Promise<void> {
+function handleEvent(event: JetstreamEvent): void {
   if (event.kind !== 'commit') return;
   if (event.commit?.operation === 'delete') return;
 
@@ -145,65 +162,54 @@ async function handleEvent(event: JetstreamEvent): Promise<void> {
   if (commit.collection === 'app.bsky.graph.follow') {
     const subject = (commit.record?.subject as string | undefined);
     if (subject === BOT_DID) {
-      await enqueueJob('followSignup', { followerDid: did });
+      enqueueJob('followSignup', { followerDid: did });
     }
     return;
   }
 
-  // ── Bot mention/DM detection ──────────────────────────────────────────────
-  if (commit.collection === 'app.bsky.feed.post' && commit.record) {
-    const post = commit.record;
-    const isMention = Array.isArray(post.facets) &&
-      (post.facets as { features: { $type: string; did?: string }[] }[])
-        .flatMap((f) => f.features)
-        .some((f) => f.$type === 'app.bsky.richtext.facet#mention' && f.did === BOT_DID);
+  // ── Posts: bot mentions + URL extraction ───────────────────────────────────
+  if (commit.collection !== 'app.bsky.feed.post' || !commit.record) return;
 
-    if (isMention) {
-      stats.mentions++;
-      logger.debug({ did, uri: postUri }, 'Bot mention detected');
-      await enqueueJob('botReply', {
-        postUri,
-        postCid: commit.cid ?? '',
-        senderDid: did,
-        text: (post.text as string) ?? '',
-        interactionType: 'mention',
-      });
-      return;
-    }
+  const post = commit.record;
 
-    // ── URL extraction ──────────────────────────────────────────────────────
-    if (watchedDids.has(did)) {
-      stats.posts++;
-      await touchSourceLastSeen(did);
+  // Bot mention detection
+  const isMention = Array.isArray(post.facets) &&
+    (post.facets as { features: { $type: string; did?: string }[] }[])
+      .flatMap((f) => f.features)
+      .some((f) => f.$type === 'app.bsky.richtext.facet#mention' && f.did === BOT_DID);
 
-      const urls = extractUrlsFromPost(post as Parameters<typeof extractUrlsFromPost>[0]);
-      for (const rawUrl of urls) {
-        const url = normalizeArticleUrl(rawUrl);
-        if (!url) continue;
-        stats.urlsFound++;
+  if (isMention) {
+    stats.mentions++;
+    enqueueJob('botReply', {
+      postUri,
+      postCid: commit.cid ?? '',
+      senderDid: did,
+      text: (post.text as string) ?? '',
+      interactionType: 'mention',
+    });
+    return;
+  }
 
-        const existing = await findArticleByUrl(url);
-        if (existing) {
-          const { rows } = await db.query<{ id: string }>(
-            `SELECT id FROM sources WHERE did = $1 AND type = 'bluesky'`, [did]
-          );
-          if (rows[0]) {
-            await upsertArticleSource(existing.id, BigInt(rows[0].id), postUri, commit.cid);
-            await fanOutArticleToUsers(existing.id, did);
-          }
-          continue;
-        }
+  // URL extraction — only for watched DIDs
+  if (!watchedDids.has(did)) return;
 
-        stats.jobsQueued++;
-        logger.debug({ url, did }, 'Enqueueing fetchArticle');
-        await enqueueJob('fetchArticle', {
-          url,
-          sourceDid: did,
-          postUri,
-          postCid: commit.cid ?? '',
-        });
-      }
-    }
+  stats.posts++;
+  const urls = extractUrlsFromPost(post as Parameters<typeof extractUrlsFromPost>[0]);
+  for (const rawUrl of urls) {
+    const url = normalizeArticleUrl(rawUrl);
+    if (!url) continue;
+    stats.urlsFound++;
+
+    // LRU check — skip if we already enqueued this URL recently
+    if (isRecentlySeen(url)) continue;
+
+    stats.jobsQueued++;
+    enqueueJob('fetchArticle', {
+      url,
+      sourceDid: did,
+      postUri,
+      postCid: commit.cid ?? '',
+    });
   }
 }
 
@@ -232,7 +238,7 @@ async function start() {
     const lagDisplay = lagMs != null ? `${(lagMs / 1000).toFixed(1)}s` : 'n/a';
 
     logger.info(
-      { ...stats, watchedDids: watchedDids.size, cursor: currentCursor?.toString(), lagMs: lagMs != null ? Math.round(lagMs) : null, lag: lagDisplay },
+      { ...stats, watchedDids: watchedDids.size, lruSize: recentUrls.size, cursor: currentCursor?.toString(), lagMs: lagMs != null ? Math.round(lagMs) : null, lag: lagDisplay },
       'Firehose heartbeat (last 30s)'
     );
 
@@ -251,6 +257,7 @@ async function start() {
     stats.mentions = 0;
     stats.urlsFound = 0;
     stats.jobsQueued = 0;
+    stats.lruHits = 0;
   }, STATS_LOG_INTERVAL_MS);
 
   // Refresh DID list every 60s and reconnect if changed

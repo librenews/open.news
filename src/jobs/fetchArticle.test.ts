@@ -11,6 +11,7 @@ vi.mock('../db/queries/articles.js', () => ({
 }));
 vi.mock('../db/queries/sources.js', () => ({
   getSourceByDid: vi.fn(),
+  touchSourceLastSeen: vi.fn(),
 }));
 vi.mock('../web/jobEnqueue.js', () => ({
   enqueueJob: vi.fn(),
