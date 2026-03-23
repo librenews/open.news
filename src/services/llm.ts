@@ -28,6 +28,7 @@ export interface LLMService {
 
 class AnthropicLLM implements LLMService {
   private client = new Anthropic({ apiKey: config.LLM_API_KEY });
+  constructor(private model: string) {}
 
   async complete(messages: LLMMessage[], options: { maxTokens?: number } = {}): Promise<LLMResponse> {
     const systemMsg = messages.find((m) => m.role === 'system')?.content ?? '';
@@ -37,7 +38,7 @@ class AnthropicLLM implements LLMService {
     }));
 
     const response = await this.client.messages.create({
-      model: config.LLM_MODEL,
+      model: this.model,
       max_tokens: options.maxTokens ?? 1024,
       system: systemMsg,
       messages: userMessages,
@@ -53,7 +54,7 @@ class AnthropicLLM implements LLMService {
       inputTokens: response.usage.input_tokens,
       outputTokens: response.usage.output_tokens,
       provider: 'anthropic',
-      model: config.LLM_MODEL,
+      model: this.model,
     };
   }
 
@@ -68,7 +69,7 @@ class AnthropicLLM implements LLMService {
     }));
 
     const stream = this.client.messages.stream({
-      model: config.LLM_MODEL,
+      model: this.model,
       max_tokens: options.maxTokens ?? 1024,
       system: systemMsg,
       messages: userMessages,
@@ -89,10 +90,11 @@ class AnthropicLLM implements LLMService {
 
 class OpenAILLM implements LLMService {
   private client = new OpenAI({ apiKey: config.LLM_API_KEY });
+  constructor(private model: string) {}
 
   async complete(messages: LLMMessage[], options: { maxTokens?: number } = {}): Promise<LLMResponse> {
     const response = await this.client.chat.completions.create({
-      model: config.LLM_MODEL,
+      model: this.model,
       max_tokens: options.maxTokens ?? 1024,
       messages: messages.map((m) => ({ role: m.role, content: m.content })),
     });
@@ -103,7 +105,7 @@ class OpenAILLM implements LLMService {
       inputTokens: response.usage?.prompt_tokens ?? 0,
       outputTokens: response.usage?.completion_tokens ?? 0,
       provider: 'openai',
-      model: config.LLM_MODEL,
+      model: this.model,
     };
   }
 
@@ -112,7 +114,7 @@ class OpenAILLM implements LLMService {
     options: { maxTokens?: number } = {}
   ): AsyncGenerator<{ token: string } | { done: true; usage: { input: number; output: number } }> {
     const stream = await this.client.chat.completions.create({
-      model: config.LLM_MODEL,
+      model: this.model,
       max_tokens: options.maxTokens ?? 1024,
       messages: messages.map((m) => ({ role: m.role, content: m.content })),
       stream: true,
@@ -138,12 +140,14 @@ class OpenAILLM implements LLMService {
 // ─── Ollama ───────────────────────────────────────────────────────────────────
 
 class OllamaLLM implements LLMService {
+  constructor(private model: string) {}
+
   async complete(messages: LLMMessage[], options: { maxTokens?: number } = {}): Promise<LLMResponse> {
     const response = await fetch(`${config.LLM_OLLAMA_URL}/api/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: config.LLM_MODEL,
+        model: this.model,
         messages: messages.map((m) => ({ role: m.role, content: m.content })),
         stream: false,
         options: { num_predict: options.maxTokens ?? 1024 },
@@ -163,7 +167,7 @@ class OllamaLLM implements LLMService {
       inputTokens: data.prompt_eval_count ?? 0,
       outputTokens: data.eval_count ?? 0,
       provider: 'ollama',
-      model: config.LLM_MODEL,
+      model: this.model,
     };
   }
 
@@ -176,7 +180,7 @@ class OllamaLLM implements LLMService {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: config.LLM_MODEL,
+        model: this.model,
         messages: messages.map((m) => ({ role: m.role, content: m.content })),
         stream: true,
         options: { num_predict: options.maxTokens ?? 1024 },
@@ -215,14 +219,18 @@ class OllamaLLM implements LLMService {
 
 // ─── Factory ──────────────────────────────────────────────────────────────────
 
-function createLLM(): LLMService {
+function createLLM(model: string): LLMService {
   switch (config.LLM_PROVIDER) {
-    case 'anthropic': return new AnthropicLLM();
-    case 'openai':    return new OpenAILLM();
-    case 'ollama':    return new OllamaLLM();
+    case 'anthropic': return new AnthropicLLM(model);
+    case 'openai':    return new OpenAILLM(model);
+    case 'ollama':    return new OllamaLLM(model);
     default: throw new Error(`Unknown LLM provider: ${config.LLM_PROVIDER}`);
   }
 }
 
-export const llm = createLLM();
+/** Primary LLM — used for RAG responses, briefings, and complex synthesis. */
+export const llm = createLLM(config.LLM_MODEL);
 
+/** Light LLM — used for intent classification, persona extraction, conflict detection.
+ *  Falls back to the primary model if LLM_LIGHT_MODEL is not set. */
+export const llmLight = createLLM(config.LLM_LIGHT_MODEL || config.LLM_MODEL);

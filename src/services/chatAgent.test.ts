@@ -29,6 +29,10 @@ vi.mock('./llm.js', () => ({
     complete: vi.fn(),
     stream: vi.fn(),
   },
+  llmLight: {
+    complete: vi.fn(),
+    stream: vi.fn(),
+  },
 }));
 
 vi.mock('./intentRouter.js', () => ({
@@ -82,7 +86,7 @@ import { getUserPreferences, upsertPreference } from '../db/queries/preferences.
 import { getUserById } from '../db/queries/users.js';
 import { getUnseenArticlesForUser, markArticlesSeen } from '../db/queries/articles.js';
 import { classifyIntentHybrid } from './intentRouter.js';
-import { llm } from './llm.js';
+import { llm, llmLight } from './llm.js';
 import { db } from '../db/client.js';
 
 const mockUser = { id: BigInt(1), did: 'did:plc:test', handle: 'test.bsky.social', display_name: 'Test', avatar_url: null };
@@ -115,7 +119,7 @@ describe('processUserMessage', () => {
 
     // Should NOT call LLM
     expect(llm.stream).not.toHaveBeenCalled();
-    expect(llm.complete).not.toHaveBeenCalled();
+    expect(llmLight.complete).not.toHaveBeenCalled();
 
     // Should insert a greeting message
     expect(insertMessage).toHaveBeenCalledWith(

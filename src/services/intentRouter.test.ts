@@ -24,14 +24,14 @@ vi.mock('../lib/config.js', () => ({
 }));
 
 vi.mock('./llm.js', () => ({
-  llm: {
+  llmLight: {
     complete: vi.fn(),
     stream: vi.fn(),
   },
 }));
 
 import { classifyIntent, classifyIntentHybrid } from './intentRouter.js';
-import { llm } from './llm.js';
+import { llmLight } from './llm.js';
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -68,7 +68,7 @@ describe('classifyIntent (regex — greetings only)', () => {
 
 describe('classifyIntentHybrid', () => {
   const mockLLMResponse = (intent: string) => {
-    vi.mocked(llm.complete).mockResolvedValue({
+    vi.mocked(llmLight.complete).mockResolvedValue({
       text: intent,
       inputTokens: 50,
       outputTokens: 1,
@@ -80,14 +80,14 @@ describe('classifyIntentHybrid', () => {
   it('returns greeting via regex without LLM call', async () => {
     const result = await classifyIntentHybrid('hello');
     expect(result).toBe('greeting');
-    expect(llm.complete).not.toHaveBeenCalled();
+    expect(llmLight.complete).not.toHaveBeenCalled();
   });
 
   it('calls LLM for news questions', async () => {
     mockLLMResponse('news_question');
     const result = await classifyIntentHybrid('What is happening in Ukraine?');
     expect(result).toBe('news_question');
-    expect(llm.complete).toHaveBeenCalledTimes(1);
+    expect(llmLight.complete).toHaveBeenCalledTimes(1);
   });
 
   it('classifies search via LLM', async () => {
@@ -127,7 +127,7 @@ describe('classifyIntentHybrid', () => {
   });
 
   it('falls back to news_question when LLM fails', async () => {
-    vi.mocked(llm.complete).mockRejectedValue(new Error('LLM timeout'));
+    vi.mocked(llmLight.complete).mockRejectedValue(new Error('LLM timeout'));
     const result = await classifyIntentHybrid('some message');
     expect(result).toBe('news_question');
   });

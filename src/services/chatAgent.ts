@@ -1,5 +1,5 @@
 import { logger } from '../lib/logger.js';
-import { llm, type LLMMessage } from './llm.js';
+import { llm, llmLight, type LLMMessage } from './llm.js';
 import { classifyIntentHybrid } from './intentRouter.js';
 import { sseRegistry } from '../web/sseRegistry.js';
 import { braveSearch, braveNewsSearch, type SearchResult } from './braveSearch.js';
@@ -305,7 +305,7 @@ Statement: Journalist covering tech and social media.`,
         },
         { role: 'user', content: text },
       ];
-      const result = await llm.complete(extractionMessages, { maxTokens: 100 });
+      const result = await llmLight.complete(extractionMessages, { maxTokens: 100 });
       personaStatement = result.text.trim();
     } catch (err) {
       logger.warn({ err }, 'Persona extraction failed, storing raw text');
@@ -334,7 +334,7 @@ New preference: ${personaStatement}`,
           },
           { role: 'user', content: 'Check for conflicts.' },
         ];
-        const conflictResult = await llm.complete(conflictMessages, { maxTokens: 50 });
+        const conflictResult = await llmLight.complete(conflictMessages, { maxTokens: 50 });
         const parsed = JSON.parse(conflictResult.text.trim());
         if (typeof parsed.conflicting_index === 'number' && parsed.conflicting_index >= 0 && parsed.conflicting_index < others.length) {
           const old = others[parsed.conflicting_index];
@@ -408,7 +408,7 @@ User: "I love the briefing feature!"
         { role: 'user', content: text },
       ];
 
-      const extraction = await llm.complete(extractionMessages, { maxTokens: 200 });
+      const extraction = await llmLight.complete(extractionMessages, { maxTokens: 200 });
       const parsed = JSON.parse(extraction.text.trim());
       if (parsed.category) category = parsed.category;
       if (parsed.summary) summary = parsed.summary;

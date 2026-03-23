@@ -5,7 +5,7 @@ import { postReply, sendDm } from '../services/atproto.js';
 import { classifyIntentHybrid } from '../services/intentRouter.js';
 import { insertFeedback } from '../db/queries/feedback.js';
 import { upsertPreference, getPersonaPreferences, deletePreferenceById } from '../db/queries/preferences.js';
-import { llm, type LLMMessage } from '../services/llm.js';
+import { llmLight, type LLMMessage } from '../services/llm.js';
 import { logger } from '../lib/logger.js';
 
 export interface BotReplyJobData {
@@ -98,7 +98,7 @@ async function handleProductFeedback(question: string, userId: bigint | null): P
       },
       { role: 'user', content: question },
     ];
-    const result = await llm.complete(messages, { maxTokens: 200 });
+    const result = await llmLight.complete(messages, { maxTokens: 200 });
     const parsed = JSON.parse(result.text.trim());
     if (parsed.category) category = parsed.category;
     if (parsed.summary) summary = parsed.summary;
@@ -135,7 +135,7 @@ User: "I prefer analysis over breaking news" → Prefers analysis over breaking 
       },
       { role: 'user', content: question },
     ];
-    const result = await llm.complete(messages, { maxTokens: 100 });
+    const result = await llmLight.complete(messages, { maxTokens: 100 });
     personaStatement = result.text.trim();
   } catch (err) {
     logger.warn({ err }, 'Bot persona extraction failed, storing raw text');
@@ -167,7 +167,7 @@ New preference: ${personaStatement}`,
         },
         { role: 'user', content: 'Check for conflicts.' },
       ];
-      const conflictResult = await llm.complete(conflictMessages, { maxTokens: 50 });
+      const conflictResult = await llmLight.complete(conflictMessages, { maxTokens: 50 });
       const parsed = JSON.parse(conflictResult.text.trim());
       if (typeof parsed.conflicting_index === 'number' && parsed.conflicting_index >= 0 && parsed.conflicting_index < others.length) {
         const old = others[parsed.conflicting_index];

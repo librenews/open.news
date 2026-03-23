@@ -1,4 +1,4 @@
-import { llm, type LLMMessage } from './llm.js';
+import { llmLight, type LLMMessage } from './llm.js';
 import { logger } from '../lib/logger.js';
 
 export type Intent =
@@ -90,7 +90,7 @@ export async function classifyIntentHybrid(text: string): Promise<Intent> {
       { role: 'system', content: CLASSIFY_SYSTEM_PROMPT },
       { role: 'user', content: text },
     ];
-    const response = await llm.complete(messages, { maxTokens: 20 });
+    const response = await llmLight.complete(messages, { maxTokens: 20 });
     const classified = response.text.trim().toLowerCase() as Intent;
 
     if (VALID_INTENTS.has(classified)) {

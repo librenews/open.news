@@ -17,6 +17,7 @@ const schema = z.object({
   LLM_PROVIDER: z.enum(['anthropic', 'openai', 'ollama']).default('anthropic'),
   LLM_API_KEY: z.string().optional(),
   LLM_MODEL: z.string().default('claude-3-5-haiku-20241022'),
+  LLM_LIGHT_MODEL: z.string().optional(),
   LLM_OLLAMA_URL: z.string().url().default('http://localhost:11434'),
 
   // Search
