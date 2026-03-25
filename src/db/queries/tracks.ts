@@ -174,3 +174,25 @@ export async function getMatchCountByTrack(
   );
   return rows;
 }
+
+/** Get matches for the Bluesky feed skeleton, ordered by matched_at DESC with cursor pagination. */
+export async function getFeedSkeletonMatches(
+  userDid: string,
+  limit = 30,
+  cursor?: string
+): Promise<{ post_uri: string; matched_at: string }[]> {
+  const params: (string | number)[] = [userDid, limit];
+  let sql = `
+    SELECT DISTINCT tm.post_uri, tm.matched_at
+    FROM track_matches tm
+    JOIN tracks t ON t.id = tm.track_id
+    JOIN track_users tu ON tu.id = t.user_id
+    WHERE tu.did = $1`;
+  if (cursor) {
+    sql += ` AND tm.matched_at < $3`;
+    params.push(cursor);
+  }
+  sql += ` ORDER BY tm.matched_at DESC LIMIT $2`;
+  const { rows } = await db.query<{ post_uri: string; matched_at: string }>(sql, params);
+  return rows;
+}

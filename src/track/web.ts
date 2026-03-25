@@ -8,10 +8,11 @@ import {
   createTrack, getTracksByUserId, getTrackById, getTrackByFeedToken,
   deleteTrack as dbDeleteTrack, updateTrackKeywords, updateTrackQueryEmbedding,
   getMatchesByTrackId, getMatchesByUserId, getMatchCountByTrack,
+  getFeedSkeletonMatches,
 } from '../db/queries/tracks.js';
 import { upsertTrackQuery, deleteTrackQuery } from './opensearch.js';
 import { embedText } from './embedClient.js';
-import { trackAuthRouter, getTrackUserById } from './auth.js';
+import { trackAuthRouter, getTrackUserById, getTrackUserByDid } from './auth.js';
 import { createMiddleware } from 'hono/factory';
 
 const TRACK_PORT = Number(process.env.TRACK_PORT ?? 4200);
@@ -24,6 +25,7 @@ const app = new Hono<Env>();
 app.use('/favicon.png', serveStatic({ root: './src/track/public', path: 'favicon.png' }));
 app.use('/logo.png', serveStatic({ root: './src/track/public', path: 'logo.png' }));
 app.use('/home-logo.png', serveStatic({ root: './src/track/public', path: 'home-logo.png' }));
+app.use('/.well-known/did.json', serveStatic({ root: './src/track/public', path: '.well-known/did.json' }));
 
 // ─── Track session middleware ───────────────────────────────────────────────
 
@@ -73,6 +75,68 @@ app.get('/rss/:token', async (c) => {
   return c.body(buildRss(track.name, matches), 200, {
     'Content-Type': 'application/rss+xml; charset=utf-8',
   });
+});
+
+// ─── Bluesky Feed Generator XRPC ───────────────────────────────────────────
+
+const FEED_URI = `at://did:web:track.social/app.bsky.feed.generator/track-matches`;
+const FEED_EXPLAINER_URI = process.env.TRACK_FEED_EXPLAINER_URI ?? '';
+
+app.get('/xrpc/app.bsky.feed.describeFeedGenerator', (c) => {
+  return c.json({
+    did: 'did:web:track.social',
+    feeds: [
+      { uri: FEED_URI },
+    ],
+  });
+});
+
+app.get('/xrpc/app.bsky.feed.getFeedSkeleton', async (c) => {
+  const feedParam = c.req.query('feed');
+  if (feedParam !== FEED_URI) {
+    return c.json({ error: 'UnknownFeed', message: 'Unknown feed' }, 400);
+  }
+
+  const limit = Math.min(parseInt(c.req.query('limit') ?? '30', 10), 100);
+  const cursor = c.req.query('cursor') ?? undefined;
+
+  // Extract requesting user's DID from JWT (Authorization: Bearer <jwt>)
+  const authHeader = c.req.header('Authorization');
+  let requesterDid: string | undefined;
+
+  if (authHeader?.startsWith('Bearer ')) {
+    try {
+      // Decode JWT payload without verification (AppView already verified)
+      const token = authHeader.slice(7);
+      const payloadB64 = token.split('.')[1];
+      const payload = JSON.parse(Buffer.from(payloadB64, 'base64url').toString());
+      requesterDid = payload.iss;
+    } catch {
+      // Ignore JWT parse errors — treat as unauthenticated
+    }
+  }
+
+  // If we have a requester DID, look up their matches
+  if (requesterDid) {
+    const user = await getTrackUserByDid(requesterDid);
+    if (user) {
+      const matches = await getFeedSkeletonMatches(requesterDid, limit, cursor);
+      if (matches.length > 0) {
+        const lastMatch = matches[matches.length - 1];
+        return c.json({
+          cursor: lastMatch.matched_at,
+          feed: matches.map((m) => ({ post: m.post_uri })),
+        });
+      }
+    }
+  }
+
+  // No matches or unauthenticated — return explainer post if configured
+  if (FEED_EXPLAINER_URI) {
+    return c.json({ feed: [{ post: FEED_EXPLAINER_URI }] });
+  }
+
+  return c.json({ feed: [] });
 });
 
 // ─── Auth wall ──────────────────────────────────────────────────────────────

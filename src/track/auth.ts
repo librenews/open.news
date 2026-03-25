@@ -123,6 +123,13 @@ export async function getTrackUserById(id: bigint | number): Promise<TrackUser |
   return rows[0] ?? null;
 }
 
+export async function getTrackUserByDid(did: string): Promise<TrackUser | null> {
+  const { rows } = await pool.query<TrackUser>(
+    'SELECT * FROM track_users WHERE did = $1', [did]
+  );
+  return rows[0] ?? null;
+}
+
 export const trackAuthRouter = new Hono();
 
 // Client metadata endpoint
