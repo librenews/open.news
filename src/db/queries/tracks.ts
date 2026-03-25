@@ -71,6 +71,31 @@ export async function updateTrackKeywords(
   );
 }
 
+export async function updateTrackQueryEmbedding(
+  id: bigint | number,
+  queryEmbedding: number[]
+): Promise<void> {
+  await db.query(
+    `UPDATE tracks SET query_embedding = $2, updated_at = NOW() WHERE id = $1`,
+    [id, queryEmbedding]
+  );
+}
+
+export interface TrackWithEmbedding {
+  id: number;
+  threshold: number;
+  query_embedding: number[];
+}
+
+/** Get all active tracks that have a semantic query embedding. */
+export async function getTracksWithEmbeddings(): Promise<TrackWithEmbedding[]> {
+  const { rows } = await db.query<TrackWithEmbedding>(
+    `SELECT id, threshold, query_embedding FROM tracks
+     WHERE is_active = TRUE AND query_embedding IS NOT NULL`
+  );
+  return rows;
+}
+
 export async function deleteTrack(id: bigint | number): Promise<void> {
   await db.query('DELETE FROM tracks WHERE id = $1', [id]);
 }

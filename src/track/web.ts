@@ -6,10 +6,11 @@ import { createHmac } from 'crypto';
 import { logger } from '../lib/logger.js';
 import {
   createTrack, getTracksByUserId, getTrackById, getTrackByFeedToken,
-  deleteTrack as dbDeleteTrack, updateTrackKeywords,
+  deleteTrack as dbDeleteTrack, updateTrackKeywords, updateTrackQueryEmbedding,
   getMatchesByTrackId, getMatchesByUserId, getMatchCountByTrack,
 } from '../db/queries/tracks.js';
 import { upsertTrackQuery, deleteTrackQuery } from './opensearch.js';
+import { embedText } from './embedClient.js';
 import { trackAuthRouter, getTrackUserById } from './auth.js';
 import { createMiddleware } from 'hono/factory';
 
@@ -156,8 +157,16 @@ app.post('/tracks', async (c) => {
   const keywords = keywordsRaw ? keywordsRaw.split(',').map((k) => k.trim()).filter(Boolean) : [];
 
   const track = await createTrack(userId, name, keywords, '', query);
-  const osQueryId = await upsertTrackQuery(track.id, keywords, query);
+  const osQueryId = await upsertTrackQuery(track.id, keywords);
   await updateTrackKeywords(track.id, keywords, osQueryId);
+
+  // Embed the semantic query and store for worker matching
+  try {
+    const queryEmbedding = await embedText(query);
+    await updateTrackQueryEmbedding(track.id, queryEmbedding);
+  } catch (err) {
+    logger.error({ err }, 'Failed to embed query — track created without semantic matching');
+  }
 
   return c.redirect('/');
 });
