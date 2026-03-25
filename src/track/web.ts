@@ -12,6 +12,7 @@ import { upsertTrackQuery, deleteTrackQuery } from './opensearch.js';
 import { getUserById } from '../db/queries/users.js';
 
 const TRACK_PORT = Number(process.env.TRACK_PORT ?? 4200);
+const TRACK_BASE_URL = process.env.TRACK_BASE_URL ?? `http://localhost:${TRACK_PORT}`;
 
 type Env = { Variables: { userId: bigint } };
 const app = new Hono<Env>();
@@ -35,7 +36,7 @@ app.get('/rss/:token', async (c) => {
 
 app.get('/login', (c) => {
   // Redirect to open.news OAuth login, which sets the session cookie
-  return c.redirect(`${config.BASE_URL}/oauth/login?redirect=${encodeURIComponent(`http://localhost:${TRACK_PORT}/`)}`);
+  return c.redirect(`${config.BASE_URL}/oauth/login?redirect=${encodeURIComponent(TRACK_BASE_URL + '/')}`);
 });
 
 // All routes below require auth
