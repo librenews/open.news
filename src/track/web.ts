@@ -177,7 +177,7 @@ app.post('/tracks/:id/delete', async (c) => {
   const userId = c.get('userId');
   const trackId = parseInt(c.req.param('id'), 10);
   const track = await getTrackById(trackId);
-  if (!track || track.user_id !== userId) return c.text('Not found', 404);
+  if (!track || String(track.user_id) !== String(userId)) return c.text('Not found', 404);
 
   await deleteTrackQuery(track.id);
   await dbDeleteTrack(track.id);
