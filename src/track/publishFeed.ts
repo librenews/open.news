@@ -42,8 +42,8 @@ async function main() {
   // Create the feed generator record
   const record: Record<string, unknown> = {
     did: FEED_GEN_DID,
-    displayName: 'Track Matches',
-    description: 'Posts matching your Track queries — powered by semantic AI search on the Bluesky firehose. Set up your tracks at track.social.',
+    displayName: 'Track',
+    description: 'Posts matching your Tracks — powered by semantic AI search on the Bluesky firehose. Set up your tracks at track.social.',
     createdAt: new Date().toISOString(),
   };
 
