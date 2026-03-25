@@ -1,24 +1,60 @@
 import { Hono } from 'hono';
 import { serve } from '@hono/node-server';
-import { config } from '../lib/config.js';
+import { getCookie } from 'hono/cookie';
+import { createHmac } from 'crypto';
 import { logger } from '../lib/logger.js';
-import { sessionMiddleware, sessionRequired } from '../web/middleware/session.js';
 import {
   createTrack, getTracksByUserId, getTrackById, getTrackByFeedToken,
   deleteTrack as dbDeleteTrack, updateTrackKeywords,
   getMatchesByTrackId, getMatchesByUserId, getMatchCountByTrack,
 } from '../db/queries/tracks.js';
 import { upsertTrackQuery, deleteTrackQuery } from './opensearch.js';
-import { getUserById } from '../db/queries/users.js';
+import { trackAuthRouter, getTrackUserById } from './auth.js';
+import { createMiddleware } from 'hono/factory';
 
 const TRACK_PORT = Number(process.env.TRACK_PORT ?? 4200);
-const TRACK_BASE_URL = process.env.TRACK_BASE_URL ?? `http://localhost:${TRACK_PORT}`;
+const SESSION_SECRET = process.env.SESSION_SECRET ?? 'dev-secret';
 
 type Env = { Variables: { userId: bigint } };
 const app = new Hono<Env>();
 
-// ─── Session ────────────────────────────────────────────────────────────────
-app.use('*', sessionMiddleware as never);
+// ─── Track session middleware (uses track_session cookie) ────────────────────
+
+function parseTrackSession(cookie: string): bigint | null {
+  const dot = cookie.lastIndexOf('.');
+  if (dot === -1) return null;
+  const payload = cookie.slice(0, dot);
+  const sig = cookie.slice(dot + 1);
+  const expected = createHmac('sha256', SESSION_SECRET).update(payload).digest('hex');
+  if (expected !== sig) return null;
+  try { return BigInt(payload); } catch { return null; }
+}
+
+const trackSessionOptional = createMiddleware<{
+  Variables: { userId?: bigint };
+}>(async (c, next) => {
+  const cookie = getCookie(c, 'track_session');
+  if (cookie) {
+    const userId = parseTrackSession(cookie);
+    if (userId) c.set('userId', userId);
+  }
+  await next();
+});
+
+const trackSessionRequired = createMiddleware<{
+  Variables: { userId: bigint };
+}>(async (c, next) => {
+  const cookie = getCookie(c, 'track_session');
+  if (!cookie) return c.redirect('/login');
+  const userId = parseTrackSession(cookie);
+  if (!userId) return c.redirect('/login');
+  c.set('userId', userId);
+  await next();
+});
+
+// ─── Auth routes ────────────────────────────────────────────────────────────
+app.use('*', trackSessionOptional as never);
+app.route('/', trackAuthRouter);
 
 // ─── Public: RSS feeds (UUID-obfuscated, no auth) ───────────────────────────
 
@@ -33,20 +69,13 @@ app.get('/rss/:token', async (c) => {
 });
 
 // ─── Auth wall ──────────────────────────────────────────────────────────────
-
-app.get('/login', (c) => {
-  // Redirect to open.news OAuth login, which sets the session cookie
-  return c.redirect(`${config.BASE_URL}/oauth/login?redirect=${encodeURIComponent(TRACK_BASE_URL + '/')}`);
-});
-
-// All routes below require auth
-app.use('/*', sessionRequired as never);
+app.use('/*', trackSessionRequired as never);
 
 // ─── Dashboard ──────────────────────────────────────────────────────────────
 
 app.get('/', async (c) => {
   const userId = c.get('userId');
-  const user = await getUserById(userId);
+  const user = await getTrackUserById(userId);
   const tracks = await getTracksByUserId(userId);
   const counts = await getMatchCountByTrack(userId);
   const countMap = new Map(counts.map((r) => [r.track_id, parseInt(r.count, 10)]));
@@ -106,11 +135,9 @@ app.post('/tracks', async (c) => {
   const keywords = keywordsRaw.split(',').map((k) => k.trim()).filter(Boolean);
   if (keywords.length === 0) return c.redirect('/');
 
-  const osQueryId = await upsertTrackQuery(0, keywords); // temp ID
   const track = await createTrack(userId, name, keywords, '');
-  // Now update with real ID
-  const realOsId = await upsertTrackQuery(track.id, keywords);
-  await updateTrackKeywords(track.id, keywords, realOsId);
+  const osQueryId = await upsertTrackQuery(track.id, keywords);
+  await updateTrackKeywords(track.id, keywords, osQueryId);
 
   return c.redirect('/');
 });
@@ -134,7 +161,7 @@ app.get('/tracks/:id', async (c) => {
   const track = await getTrackById(trackId);
   if (!track || track.user_id !== userId) return c.text('Not found', 404);
 
-  const user = await getUserById(userId);
+  const user = await getTrackUserById(userId);
   const before = c.req.query('before');
   const matches = await getMatchesByTrackId(track.id, 50, before);
 
@@ -154,7 +181,7 @@ app.get('/tracks/:id', async (c) => {
 
 app.get('/feed', async (c) => {
   const userId = c.get('userId');
-  const user = await getUserById(userId);
+  const user = await getTrackUserById(userId);
   const before = c.req.query('before');
   const matches = await getMatchesByUserId(userId, 50, before);
 
@@ -273,6 +300,7 @@ function renderPage(title: string, handle: string, content: string): string {
     <div style="display:flex;gap:1rem;align-items:center">
       <a href="/feed">All Matches</a>
       <span style="color:var(--text-muted);font-size:0.85rem">@${escHtml(handle)}</span>
+      <form method="POST" action="/oauth/logout" style="display:inline"><button type="submit" class="btn-ghost" style="font-size:0.8rem;padding:0.3rem 0.6rem">Logout</button></form>
     </div>
   </nav>
   ${content}
