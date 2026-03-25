@@ -84,6 +84,15 @@ async function getOAuthClient(): Promise<NodeOAuthClient> {
     },
   });
 
+  // Prevent unhandled TokenRefreshError from crashing the process
+  process.on('unhandledRejection', (err: unknown) => {
+    if (err instanceof Error && err.constructor.name === 'TokenRefreshError') {
+      logger.warn({ err: err.message }, 'Track OAuth token refresh failed (non-fatal)');
+      return;
+    }
+    throw err;  // re-throw everything else
+  });
+
   return _oauthClient;
 }
 
@@ -236,8 +245,8 @@ trackAuthRouter.get('/oauth/callback', async (c) => {
 });
 
 // Logout
-trackAuthRouter.post('/oauth/logout', (c) => {
-  const { deleteCookie } = require('hono/cookie');
+trackAuthRouter.post('/oauth/logout', async (c) => {
+  const { deleteCookie } = await import('hono/cookie');
   deleteCookie(c, 'track_session', { path: '/' });
   return c.redirect('/login');
 });
