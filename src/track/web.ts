@@ -279,7 +279,7 @@ function renderPage(title: string, handle: string, content: string): string {
   <link rel="icon" type="image/png" href="/favicon.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <script src="https://cdn.tailwindcss.com/4"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
 </head>
 <body class="bg-slate-50 font-[Inter] text-slate-800 min-h-screen">
   <nav class="bg-white border-b border-slate-200 sticky top-0 z-10">
