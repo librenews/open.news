@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { serve } from '@hono/node-server';
+import { serveStatic } from '@hono/node-server/serve-static';
 import { getCookie } from 'hono/cookie';
 import { createHmac } from 'crypto';
 import { logger } from '../lib/logger.js';
@@ -18,7 +19,10 @@ const SESSION_SECRET = process.env.SESSION_SECRET ?? 'dev-secret';
 type Env = { Variables: { userId: bigint } };
 const app = new Hono<Env>();
 
-// ─── Track session middleware (uses track_session cookie) ────────────────────
+// ─── Static files ───────────────────────────────────────────────────────────
+app.use('/*', serveStatic({ root: './src/track/public' }));
+
+// ─── Track session middleware ───────────────────────────────────────────────
 
 function parseTrackSession(cookie: string): bigint | null {
   const dot = cookie.lastIndexOf('.');
@@ -56,7 +60,7 @@ const trackSessionRequired = createMiddleware<{
 app.use('*', trackSessionOptional as never);
 app.route('/', trackAuthRouter);
 
-// ─── Public: RSS feeds (UUID-obfuscated, no auth) ───────────────────────────
+// ─── Public: RSS feeds ──────────────────────────────────────────────────────
 
 app.get('/rss/:token', async (c) => {
   const track = await getTrackByFeedToken(c.req.param('token'));
@@ -81,39 +85,47 @@ app.get('/', async (c) => {
   const countMap = new Map(counts.map((r) => [r.track_id, parseInt(r.count, 10)]));
 
   return c.html(renderPage('Dashboard', user?.handle ?? '', `
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
-      <h2 style="margin:0">Your Tracks</h2>
-      <button onclick="document.getElementById('new-track-form').style.display='block'" class="btn">+ New Track</button>
+    <div class="flex justify-between items-center mb-6">
+      <h2 class="text-xl font-semibold text-slate-800">Your Tracks</h2>
+      <button onclick="document.getElementById('new-track-form').classList.toggle('hidden')"
+        class="px-4 py-2 bg-gradient-to-r from-blue-500 to-emerald-500 text-white text-sm font-medium rounded-lg hover:from-blue-600 hover:to-emerald-600 transition-all shadow-sm cursor-pointer">
+        + New Track
+      </button>
     </div>
 
-    <form id="new-track-form" method="POST" action="/tracks" style="display:none;margin-bottom:1.5rem;padding:1rem;background:var(--surface-2);border-radius:8px">
-      <div style="margin-bottom:0.5rem">
-        <label>Name</label>
-        <input type="text" name="name" placeholder="e.g. PHP news" required style="width:100%">
+    <form id="new-track-form" method="POST" action="/tracks" class="hidden mb-6 p-5 bg-slate-50 border border-slate-200 rounded-xl space-y-4">
+      <div>
+        <label class="block text-xs font-medium text-slate-500 mb-1">Name</label>
+        <input type="text" name="name" placeholder="e.g. PHP news" required
+          class="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
       </div>
-      <div style="margin-bottom:0.5rem">
-        <label>Keywords (comma-separated)</label>
-        <input type="text" name="keywords" placeholder="PHP, Laravel, Symfony" required style="width:100%">
+      <div>
+        <label class="block text-xs font-medium text-slate-500 mb-1">Keywords (comma-separated)</label>
+        <input type="text" name="keywords" placeholder="PHP, Laravel, Symfony" required
+          class="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
       </div>
-      <button type="submit" class="btn btn-primary">Create Track</button>
+      <button type="submit"
+        class="px-5 py-2.5 bg-gradient-to-r from-blue-500 to-emerald-500 text-white text-sm font-medium rounded-lg hover:from-blue-600 hover:to-emerald-600 transition-all cursor-pointer">
+        Create Track
+      </button>
     </form>
 
-    ${tracks.length === 0 ? '<p style="color:var(--text-muted)">No tracks yet. Create one to start monitoring Bluesky posts.</p>' : ''}
+    ${tracks.length === 0 ? '<p class="text-slate-400 text-sm">No tracks yet. Create one to start monitoring Bluesky posts.</p>' : ''}
 
-    <div class="track-list">
+    <div class="space-y-3">
       ${tracks.map((t) => `
-        <div class="track-card">
-          <div style="display:flex;justify-content:space-between;align-items:center">
-            <a href="/tracks/${t.id}" style="font-weight:600;font-size:1.1rem;text-decoration:none">${escHtml(t.name)}</a>
-            <span class="badge">${countMap.get(String(t.id)) ?? 0} matches</span>
+        <div class="bg-white border border-slate-200 rounded-xl p-4 hover:shadow-sm transition-shadow">
+          <div class="flex justify-between items-center">
+            <a href="/tracks/${t.id}" class="font-semibold text-slate-800 hover:text-blue-600 transition-colors no-underline">${escHtml(t.name)}</a>
+            <span class="text-xs font-medium bg-slate-100 text-slate-500 px-2.5 py-1 rounded-full">${countMap.get(String(t.id)) ?? 0} matches</span>
           </div>
-          <div style="margin-top:0.4rem;color:var(--text-muted);font-size:0.9rem">
-            Keywords: ${t.keywords.map((k) => `<code>${escHtml(k)}</code>`).join(', ')}
+          <div class="mt-2 text-sm text-slate-500">
+            Keywords: ${t.keywords.map((k) => `<code class="bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded text-xs font-medium">${escHtml(k)}</code>`).join(' ')}
           </div>
-          <div style="margin-top:0.4rem;font-size:0.8rem;display:flex;gap:1rem">
-            <a href="/rss/${t.feed_token}" target="_blank">RSS Feed</a>
-            <form method="POST" action="/tracks/${t.id}/delete" style="display:inline">
-              <button type="submit" class="btn-ghost" style="color:var(--text-danger);font-size:0.8rem" onclick="return confirm('Delete this track?')">Delete</button>
+          <div class="mt-3 flex items-center gap-4 text-xs">
+            <a href="/rss/${t.feed_token}" target="_blank" class="text-blue-500 hover:text-blue-700 transition-colors">RSS Feed</a>
+            <form method="POST" action="/tracks/${t.id}/delete" class="inline">
+              <button type="submit" class="text-red-400 hover:text-red-600 transition-colors cursor-pointer" onclick="return confirm('Delete this track?')">Delete</button>
             </form>
           </div>
         </div>
@@ -166,16 +178,19 @@ app.get('/tracks/:id', async (c) => {
   const matches = await getMatchesByTrackId(track.id, 50, before);
 
   return c.html(renderPage(track.name, user?.handle ?? '', `
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+    <div class="flex justify-between items-center mb-6">
       <div>
-        <a href="/" style="font-size:0.9rem">← Back</a>
-        <h2 style="margin:0.3rem 0 0">${escHtml(track.name)}</h2>
-        <div style="color:var(--text-muted);font-size:0.9rem">Keywords: ${track.keywords.map((k) => `<code>${escHtml(k)}</code>`).join(', ')}</div>
+        <a href="/" class="text-sm text-blue-500 hover:text-blue-700 transition-colors">← Back</a>
+        <h2 class="text-xl font-semibold text-slate-800 mt-1">${escHtml(track.name)}</h2>
+        <div class="text-sm text-slate-500 mt-1">
+          Keywords: ${track.keywords.map((k) => `<code class="bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded text-xs font-medium">${escHtml(k)}</code>`).join(' ')}
+        </div>
       </div>
-      <a href="/rss/${track.feed_token}" class="btn btn-ghost" target="_blank">RSS</a>
+      <a href="/rss/${track.feed_token}" target="_blank"
+        class="px-3 py-1.5 border border-slate-200 text-slate-500 text-sm rounded-lg hover:border-blue-500 hover:text-blue-500 transition-colors no-underline">RSS</a>
     </div>
     ${renderMatches(matches)}
-    ${matches.length === 50 ? `<a href="/tracks/${track.id}?before=${matches[matches.length - 1].matched_at.toISOString()}" class="btn btn-ghost" style="width:100%;text-align:center;margin-top:1rem">Load more</a>` : ''}
+    ${matches.length === 50 ? `<a href="/tracks/${track.id}?before=${matches[matches.length - 1].matched_at.toISOString()}" class="block text-center mt-4 py-2.5 border border-slate-200 text-slate-500 text-sm rounded-lg hover:border-blue-500 hover:text-blue-500 transition-colors no-underline">Load more</a>` : ''}
   `));
 });
 
@@ -186,9 +201,9 @@ app.get('/feed', async (c) => {
   const matches = await getMatchesByUserId(userId, 50, before);
 
   return c.html(renderPage('All Matches', user?.handle ?? '', `
-    <h2>All Matches</h2>
+    <h2 class="text-xl font-semibold text-slate-800 mb-6">All Matches</h2>
     ${renderMatches(matches)}
-    ${matches.length === 50 ? `<a href="/feed?before=${matches[matches.length - 1].matched_at.toISOString()}" class="btn btn-ghost" style="width:100%;text-align:center;margin-top:1rem">Load more</a>` : ''}
+    ${matches.length === 50 ? `<a href="/feed?before=${matches[matches.length - 1].matched_at.toISOString()}" class="block text-center mt-4 py-2.5 border border-slate-200 text-slate-500 text-sm rounded-lg hover:border-blue-500 hover:text-blue-500 transition-colors no-underline">Load more</a>` : ''}
   `));
 });
 
@@ -207,18 +222,18 @@ interface MatchRow {
 }
 
 function renderMatches(matches: MatchRow[]): string {
-  if (matches.length === 0) return '<p style="color:var(--text-muted)">No matches yet.</p>';
-  return `<div class="match-list">${matches.map((m) => {
+  if (matches.length === 0) return '<p class="text-slate-400 text-sm">No matches yet.</p>';
+  return `<div class="space-y-2">${matches.map((m) => {
     const bskyUrl = m.post_uri.replace('at://', 'https://bsky.app/profile/').replace('/app.bsky.feed.post/', '/post/');
     const ago = timeAgo(m.matched_at);
     return `
-      <div class="match-card">
-        <div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:0.3rem">
-          ${m.track_name ? `<span class="badge-sm">${escHtml(m.track_name)}</span> · ` : ''}
-          <a href="https://bsky.app/profile/${m.post_did}" target="_blank" style="color:var(--text-muted)">${m.post_did.slice(0, 20)}…</a> · ${ago}
+      <div class="bg-white border border-slate-200 rounded-xl p-4 hover:shadow-sm transition-shadow">
+        <div class="text-xs text-slate-400 mb-1.5">
+          ${m.track_name ? `<span class="bg-gradient-to-r from-blue-500 to-emerald-500 text-white text-[10px] font-medium px-1.5 py-0.5 rounded-full">${escHtml(m.track_name)}</span> · ` : ''}
+          <a href="https://bsky.app/profile/${m.post_did}" target="_blank" class="text-slate-400 hover:text-blue-500 transition-colors">${m.post_did.slice(0, 24)}…</a> · ${ago}
         </div>
-        <div style="font-size:0.95rem;line-height:1.4">${escHtml(m.post_text)}</div>
-        <a href="${bskyUrl}" target="_blank" style="font-size:0.8rem;margin-top:0.3rem;display:inline-block">View on Bluesky →</a>
+        <div class="text-sm text-slate-700 leading-relaxed">${escHtml(m.post_text)}</div>
+        <a href="${bskyUrl}" target="_blank" class="text-xs text-blue-500 hover:text-blue-700 mt-2 inline-block transition-colors">View on Bluesky →</a>
       </div>`;
   }).join('')}</div>`;
 }
@@ -256,54 +271,34 @@ function buildRss(title: string, matches: MatchRow[]): string {
 
 function renderPage(title: string, handle: string, content: string): string {
   return `<!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${escHtml(title)} — Track</title>
+  <link rel="icon" type="image/png" href="/favicon.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-  <style>
-    :root {
-      --bg: #0f0f13; --surface: #1a1a23; --surface-2: #23232f;
-      --text: #e4e4ed; --text-muted: #8888a0;
-      --text-danger: #ff6b6b;
-      --primary: #6366f1; --primary-hover: #818cf8;
-      --border: #2a2a3a; --radius: 8px;
-    }
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); max-width: 720px; margin: 0 auto; padding: 0 1rem 2rem; }
-    a { color: var(--primary); }
-    a:hover { color: var(--primary-hover); }
-    code { background: var(--surface-2); padding: 2px 6px; border-radius: 4px; font-size: 0.85em; }
-    nav { display: flex; justify-content: space-between; align-items: center; padding: 1rem 0; border-bottom: 1px solid var(--border); margin-bottom: 1.5rem; }
-    nav a { text-decoration: none; }
-    .btn { display: inline-block; padding: 0.5rem 1rem; background: var(--primary); color: #fff; border: none; border-radius: var(--radius); cursor: pointer; text-decoration: none; font-size: 0.9rem; }
-    .btn:hover { background: var(--primary-hover); }
-    .btn-primary { background: var(--primary); }
-    .btn-ghost { background: transparent; border: 1px solid var(--border); color: var(--text-muted); }
-    .btn-ghost:hover { border-color: var(--primary); color: var(--primary); }
-    input, select { background: var(--surface); color: var(--text); border: 1px solid var(--border); padding: 0.5rem; border-radius: var(--radius); font-size: 0.9rem; }
-    input:focus { outline: 1px solid var(--primary); border-color: var(--primary); }
-    label { display: block; font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.3rem; }
-    .track-list { display: flex; flex-direction: column; gap: 0.75rem; }
-    .track-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem; }
-    .match-list { display: flex; flex-direction: column; gap: 0.5rem; }
-    .match-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 0.75rem 1rem; }
-    .badge { background: var(--surface-2); color: var(--text-muted); font-size: 0.8rem; padding: 2px 8px; border-radius: 12px; }
-    .badge-sm { background: var(--primary); color: #fff; font-size: 0.75rem; padding: 1px 6px; border-radius: 8px; }
-  </style>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com/4"></script>
 </head>
-<body>
-  <nav>
-    <a href="/" style="font-weight:600;font-size:1.1rem">📡 Track</a>
-    <div style="display:flex;gap:1rem;align-items:center">
-      <a href="/feed">All Matches</a>
-      <span style="color:var(--text-muted);font-size:0.85rem">@${escHtml(handle)}</span>
-      <form method="POST" action="/oauth/logout" style="display:inline"><button type="submit" class="btn-ghost" style="font-size:0.8rem;padding:0.3rem 0.6rem">Logout</button></form>
+<body class="bg-slate-50 font-[Inter] text-slate-800 min-h-screen">
+  <nav class="bg-white border-b border-slate-200 sticky top-0 z-10">
+    <div class="max-w-3xl mx-auto px-4 flex justify-between items-center h-14">
+      <a href="/" class="flex items-center gap-2 no-underline">
+        <img src="/logo.png" alt="Track" class="h-7">
+      </a>
+      <div class="flex items-center gap-4">
+        <a href="/feed" class="text-sm text-slate-500 hover:text-blue-500 transition-colors no-underline">All Matches</a>
+        <span class="text-xs text-slate-400">@${escHtml(handle)}</span>
+        <form method="POST" action="/oauth/logout" class="inline">
+          <button type="submit" class="text-xs text-slate-400 hover:text-red-500 transition-colors cursor-pointer">Logout</button>
+        </form>
+      </div>
     </div>
   </nav>
-  ${content}
+  <main class="max-w-3xl mx-auto px-4 py-8">
+    ${content}
+  </main>
 </body>
 </html>`;
 }

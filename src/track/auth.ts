@@ -143,35 +143,32 @@ trackAuthRouter.get('/client-metadata.json', (c) => {
 // Login page
 trackAuthRouter.get('/login', (c) => {
   return c.html(`<!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Login — Track</title>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-  <style>
-    :root { --bg: #0f0f13; --surface: #1a1a23; --text: #e4e4ed; --text-muted: #8888a0; --primary: #6366f1; --primary-hover: #818cf8; --border: #2a2a3a; --radius: 8px; }
-    * { margin:0; padding:0; box-sizing:border-box; }
-    body { font-family:'Inter',sans-serif; background:var(--bg); color:var(--text); display:flex; justify-content:center; align-items:center; min-height:100vh; }
-    .card { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:2rem; width:360px; }
-    h1 { font-size:1.4rem; margin-bottom:0.3rem; }
-    p { color:var(--text-muted); font-size:0.9rem; margin-bottom:1.5rem; }
-    label { display:block; font-size:0.85rem; color:var(--text-muted); margin-bottom:0.3rem; }
-    input { width:100%; background:var(--bg); color:var(--text); border:1px solid var(--border); padding:0.6rem; border-radius:var(--radius); font-size:0.95rem; margin-bottom:1rem; }
-    input:focus { outline:1px solid var(--primary); border-color:var(--primary); }
-    button { width:100%; padding:0.6rem; background:var(--primary); color:#fff; border:none; border-radius:var(--radius); cursor:pointer; font-size:0.95rem; }
-    button:hover { background:var(--primary-hover); }
-  </style>
+  <title>Track — Monitor Bluesky by Keyword</title>
+  <link rel="icon" type="image/png" href="/favicon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com/4"></script>
 </head>
-<body>
-  <div class="card">
-    <h1>📡 Track</h1>
-    <p>Monitor Bluesky posts by keyword. Sign in with your Bluesky account.</p>
-    <form action="/oauth/login" method="GET">
-      <label>Bluesky Handle</label>
-      <input type="text" name="handle" placeholder="yourname.bsky.social" required autofocus>
-      <button type="submit">Sign in with Bluesky</button>
+<body class="bg-white font-[Inter] text-slate-800 min-h-screen flex flex-col items-center justify-center px-4">
+  <div class="w-full max-w-sm flex flex-col items-center">
+    <img src="/home-logo.png" alt="Track" class="h-20 mb-8">
+    <p class="text-slate-500 text-sm mb-8 text-center">Monitor Bluesky posts by keyword.<br>Sign in with your Bluesky account to get started.</p>
+    <form action="/oauth/login" method="GET" class="w-full space-y-4">
+      <div>
+        <label class="block text-xs font-medium text-slate-500 mb-1">Bluesky Handle</label>
+        <input type="text" name="handle" placeholder="yourname.bsky.social" required autofocus
+          class="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 placeholder:text-slate-300">
+      </div>
+      <button type="submit"
+        class="w-full py-2.5 bg-gradient-to-r from-blue-500 to-emerald-500 text-white font-medium rounded-lg text-sm hover:from-blue-600 hover:to-emerald-600 transition-all shadow-sm cursor-pointer">
+        Sign in with Bluesky
+      </button>
     </form>
+    <p class="text-xs text-slate-400 mt-8">track.social &middot; Powered by the AT Protocol</p>
   </div>
 </body>
 </html>`);
