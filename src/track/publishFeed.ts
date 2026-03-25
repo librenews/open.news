@@ -51,31 +51,24 @@ async function main() {
     record.avatar = avatarRef;
   }
 
+  // Delete existing if present (allows re-running to update)
   try {
-    await agent.api.app.bsky.feed.generator.create(
+    await agent.api.app.bsky.feed.generator.delete(
       { repo: agent.session!.did, rkey: RECORD_NAME },
-      record as any,
     );
-    console.log(`\n✅ Feed published!`);
-    console.log(`Feed URI: at://${agent.session!.did}/app.bsky.feed.generator/${RECORD_NAME}`);
-    console.log(`\nUsers can find it by searching "Track Matches" in Bluesky,`);
-    console.log(`or you can share the link directly.`);
-  } catch (err: any) {
-    if (err?.message?.includes('duplicate')) {
-      // Update existing record
-      await agent.api.app.bsky.feed.generator.delete(
-        { repo: agent.session!.did, rkey: RECORD_NAME },
-      );
-      await agent.api.app.bsky.feed.generator.create(
-        { repo: agent.session!.did, rkey: RECORD_NAME },
-        record as any,
-      );
-      console.log(`\n✅ Feed updated!`);
-      console.log(`Feed URI: at://${agent.session!.did}/app.bsky.feed.generator/${RECORD_NAME}`);
-    } else {
-      throw err;
-    }
+    console.log('Deleted existing feed record');
+  } catch {
+    // Not found — first publish
   }
+
+  await agent.api.app.bsky.feed.generator.create(
+    { repo: agent.session!.did, rkey: RECORD_NAME },
+    record as any,
+  );
+  console.log(`\n✅ Feed published!`);
+  console.log(`Feed URI: at://${agent.session!.did}/app.bsky.feed.generator/${RECORD_NAME}`);
+  console.log(`\nUsers can find it by searching "Track" in Bluesky,`);
+  console.log(`or you can share the link directly.`);
 }
 
 main().catch((err) => {
