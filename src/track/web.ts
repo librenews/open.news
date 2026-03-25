@@ -20,8 +20,10 @@ const SESSION_SECRET = process.env.SESSION_SECRET ?? 'dev-secret';
 type Env = { Variables: { userId: bigint } };
 const app = new Hono<Env>();
 
-// ─── Static files ───────────────────────────────────────────────────────────
-app.use('/*', serveStatic({ root: './src/track/public' }));
+// ─── Static files (only serve actual file requests) ─────────────────────────
+app.use('/favicon.png', serveStatic({ root: './src/track/public', path: 'favicon.png' }));
+app.use('/logo.png', serveStatic({ root: './src/track/public', path: 'logo.png' }));
+app.use('/home-logo.png', serveStatic({ root: './src/track/public', path: 'home-logo.png' }));
 
 // ─── Track session middleware ───────────────────────────────────────────────
 
