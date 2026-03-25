@@ -79,21 +79,24 @@ app.get('/rss/:token', async (c) => {
 
 // ─── Bluesky Feed Generator XRPC ───────────────────────────────────────────
 
-const FEED_URI = `at://did:web:track.social/app.bsky.feed.generator/track-matches`;
+const FEED_RKEY = 'track-matches';
 const FEED_EXPLAINER_URI = process.env.TRACK_FEED_EXPLAINER_URI ?? '';
 
 app.get('/xrpc/app.bsky.feed.describeFeedGenerator', (c) => {
   return c.json({
     did: 'did:web:track.social',
     feeds: [
-      { uri: FEED_URI },
+      { uri: `at://did:web:track.social/app.bsky.feed.generator/${FEED_RKEY}` },
     ],
   });
 });
 
 app.get('/xrpc/app.bsky.feed.getFeedSkeleton', async (c) => {
-  const feedParam = c.req.query('feed');
-  if (feedParam !== FEED_URI) {
+  const feedParam = c.req.query('feed') ?? '';
+
+  // Match on rkey — Bluesky sends the publisher's DID, not the generator's
+  if (!feedParam.endsWith(`/app.bsky.feed.generator/${FEED_RKEY}`)) {
+    logger.warn({ feed: feedParam }, 'Unknown feed requested');
     return c.json({ error: 'UnknownFeed', message: 'Unknown feed' }, 400);
   }
 
