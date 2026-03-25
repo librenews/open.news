@@ -96,13 +96,20 @@ app.get('/', async (c) => {
     <form id="new-track-form" method="POST" action="/tracks" class="hidden mb-6 p-5 bg-slate-50 border border-slate-200 rounded-xl space-y-4">
       <div>
         <label class="block text-xs font-medium text-slate-500 mb-1">Name</label>
-        <input type="text" name="name" placeholder="e.g. PHP news" required
+        <input type="text" name="name" placeholder="e.g. AI Research" required
           class="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
       </div>
       <div>
-        <label class="block text-xs font-medium text-slate-500 mb-1">Keywords (comma-separated)</label>
-        <input type="text" name="keywords" placeholder="PHP, Laravel, Symfony" required
+        <label class="block text-xs font-medium text-slate-500 mb-1">Search Query</label>
+        <input type="text" name="query" placeholder="e.g. artificial intelligence breakthroughs and their impact on society" required
           class="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+        <p class="text-xs text-slate-400 mt-1">Describe what you want to find in natural language. Uses semantic AI matching.</p>
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-slate-500 mb-1">Boost Keywords <span class="text-slate-400">(optional, comma-separated)</span></label>
+        <input type="text" name="keywords" placeholder="GPT, LLM, neural network"
+          class="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+        <p class="text-xs text-slate-400 mt-1">Exact keyword matches boost ranking alongside semantic search.</p>
       </div>
       <button type="submit"
         class="px-5 py-2.5 bg-gradient-to-r from-blue-500 to-emerald-500 text-white text-sm font-medium rounded-lg hover:from-blue-600 hover:to-emerald-600 transition-all cursor-pointer">
@@ -120,7 +127,8 @@ app.get('/', async (c) => {
             <span class="text-xs font-medium bg-slate-100 text-slate-500 px-2.5 py-1 rounded-full">${countMap.get(String(t.id)) ?? 0} matches</span>
           </div>
           <div class="mt-2 text-sm text-slate-500">
-            Keywords: ${t.keywords.map((k) => `<code class="bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded text-xs font-medium">${escHtml(k)}</code>`).join(' ')}
+            ${t.query ? `<span class="italic">&ldquo;${escHtml(t.query)}&rdquo;</span>` : ''}
+            ${t.keywords.length > 0 ? `<span class="${t.query ? 'ml-2' : ''}">Keywords: ${t.keywords.map((k) => `<code class="bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded text-xs font-medium">${escHtml(k)}</code>`).join(' ')}</span>` : ''}
           </div>
           <div class="mt-3 flex items-center gap-4 text-xs">
             <a href="/rss/${t.feed_token}" target="_blank" class="text-blue-500 hover:text-blue-700 transition-colors">RSS Feed</a>
@@ -140,15 +148,15 @@ app.post('/tracks', async (c) => {
   const userId = c.get('userId');
   const body = await c.req.parseBody();
   const name = String(body.name ?? '').trim();
+  const query = String(body.query ?? '').trim();
   const keywordsRaw = String(body.keywords ?? '').trim();
 
-  if (!name || !keywordsRaw) return c.redirect('/');
+  if (!name || !query) return c.redirect('/');
 
-  const keywords = keywordsRaw.split(',').map((k) => k.trim()).filter(Boolean);
-  if (keywords.length === 0) return c.redirect('/');
+  const keywords = keywordsRaw ? keywordsRaw.split(',').map((k) => k.trim()).filter(Boolean) : [];
 
-  const track = await createTrack(userId, name, keywords, '');
-  const osQueryId = await upsertTrackQuery(track.id, keywords);
+  const track = await createTrack(userId, name, keywords, '', query);
+  const osQueryId = await upsertTrackQuery(track.id, keywords, query);
   await updateTrackKeywords(track.id, keywords, osQueryId);
 
   return c.redirect('/');

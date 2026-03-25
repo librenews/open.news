@@ -21,12 +21,13 @@ export async function createTrack(
   userId: bigint | number,
   name: string,
   keywords: string[],
-  osQueryId: string
+  osQueryId: string,
+  query?: string
 ): Promise<Track> {
   const { rows } = await db.query<Track>(
-    `INSERT INTO tracks (user_id, name, keywords, os_query_id)
-     VALUES ($1, $2, $3, $4) RETURNING *`,
-    [userId, name, keywords, osQueryId]
+    `INSERT INTO tracks (user_id, name, keywords, os_query_id, query)
+     VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+    [userId, name, keywords, osQueryId, query ?? null]
   );
   return rows[0];
 }
