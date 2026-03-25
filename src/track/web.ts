@@ -14,6 +14,7 @@ import { upsertTrackQuery, deleteTrackQuery } from './opensearch.js';
 import { embedText } from './embedClient.js';
 import { trackAuthRouter, getTrackUserById, getTrackUserByDid } from './auth.js';
 import { createMiddleware } from 'hono/factory';
+import { Redis } from 'ioredis';
 
 const TRACK_PORT = Number(process.env.TRACK_PORT ?? 4200);
 const SESSION_SECRET = process.env.SESSION_SECRET ?? 'dev-secret';
@@ -144,6 +145,50 @@ app.get('/xrpc/app.bsky.feed.getFeedSkeleton', async (c) => {
 
 // ─── Auth wall ──────────────────────────────────────────────────────────────
 app.use('/*', trackSessionRequired as never);
+
+// ─── Observability ──────────────────────────────────────────────────────────
+
+app.get('/stats', async (c) => {
+  const redis = new Redis(process.env.REDIS_URL ?? 'redis://localhost:6379');
+  try {
+    // Worker stats from Redis hash
+    const stats = await redis.hgetall('track:stats');
+
+    // Stream info — length tells us total unconsumed messages
+    let streamLength = 0;
+    try {
+      streamLength = await redis.xlen('track:posts');
+    } catch { /* stream may not exist yet */ }
+
+    await redis.quit();
+
+    return c.json({
+      stream: {
+        length: streamLength,
+        lag: stats.stream_lag ? Number(stats.stream_lag) : null,
+        pending: stats.stream_pending ? Number(stats.stream_pending) : null,
+        lagCheckedAt: stats.lag_checked_at ?? null,
+      },
+      processing: {
+        postsProcessed: Number(stats.posts_processed ?? 0),
+        matchesFound: Number(stats.matches_found ?? 0),
+        batches: Number(stats.batches ?? 0),
+        avgPostsPerBatch: stats.batches && Number(stats.batches) > 0
+          ? Math.round(Number(stats.posts_processed ?? 0) / Number(stats.batches))
+          : 0,
+      },
+      lastBatch: {
+        size: Number(stats.last_batch_size ?? 0),
+        embedMs: Number(stats.last_embed_ms ?? 0),
+        at: stats.last_batch_at ?? null,
+      },
+    });
+  } catch (err) {
+    await redis.quit();
+    logger.error({ err }, 'Stats query failed');
+    return c.json({ error: 'Failed to fetch stats' }, 500);
+  }
+});
 
 // ─── Dashboard ──────────────────────────────────────────────────────────────
 
