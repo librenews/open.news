@@ -143,9 +143,6 @@ app.get('/xrpc/app.bsky.feed.getFeedSkeleton', async (c) => {
   return c.json({ feed: [] });
 });
 
-// ─── Auth wall ──────────────────────────────────────────────────────────────
-app.use('/*', trackSessionRequired as never);
-
 // ─── Observability ──────────────────────────────────────────────────────────
 
 app.get('/stats', async (c) => {
@@ -189,6 +186,9 @@ app.get('/stats', async (c) => {
     return c.json({ error: 'Failed to fetch stats' }, 500);
   }
 });
+
+// ─── Auth wall ──────────────────────────────────────────────────────────────
+app.use('/*', trackSessionRequired as never);
 
 // ─── Dashboard ──────────────────────────────────────────────────────────────
 
