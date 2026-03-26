@@ -13,7 +13,7 @@ import {
 } from '../db/queries/tracks.js';
 import { upsertTrackQuery, deleteTrackQuery } from './opensearch.js';
 import { embedText } from './embedClient.js';
-import { trackAuthRouter, getTrackUserById, getTrackUserByDid } from './auth.js';
+import { trackAuthRouter, getTrackUserById, getTrackUserByDid, getTrackUserByFeedToken } from './auth.js';
 import { createMiddleware } from 'hono/factory';
 import { Redis } from 'ioredis';
 
@@ -75,6 +75,16 @@ app.get('/rss/:token', async (c) => {
 
   const matches = await getMatchesByTrackId(track.id, 100);
   return c.body(buildRss(track.name, matches), 200, {
+    'Content-Type': 'application/rss+xml; charset=utf-8',
+  });
+});
+
+app.get('/rss/user/:token', async (c) => {
+  const user = await getTrackUserByFeedToken(c.req.param('token'));
+  if (!user) return c.text('Not found', 404);
+
+  const matches = await getMatchesByUserId(user.id, 100);
+  return c.body(buildRss('All Matches', matches), 200, {
     'Content-Type': 'application/rss+xml; charset=utf-8',
   });
 });
@@ -295,15 +305,19 @@ app.get('/', async (c) => {
             ${t.query ? `<span class="italic">&ldquo;${escHtml(t.query)}&rdquo;</span>` : ''}
             ${t.keywords.length > 0 ? `<span class="${t.query ? 'ml-2' : ''}">Keywords: ${t.keywords.map((k) => `<code class="bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded text-xs font-medium">${escHtml(k)}</code>`).join(' ')}</span>` : ''}
           </div>
-          <div class="mt-3 flex items-center gap-4 text-xs">
-            <a href="/rss/${t.feed_token}" target="_blank" class="text-blue-500 hover:text-blue-700 transition-colors">RSS Feed</a>
-            <a href="/tracks/${t.id}/edit" class="text-slate-500 hover:text-blue-600 transition-colors">Edit</a>
-            <form method="POST" action="/tracks/${t.id}/toggle" class="inline">
-              <button type="submit" class="${t.is_active ? 'text-amber-500 hover:text-amber-700' : 'text-emerald-500 hover:text-emerald-700'} transition-colors cursor-pointer">${t.is_active ? 'Pause' : 'Resume'}</button>
-            </form>
-            <form method="POST" action="/tracks/${t.id}/delete" class="inline">
-              <button type="submit" class="text-red-400 hover:text-red-600 transition-colors cursor-pointer" onclick="return confirm('Delete this track?')">Delete</button>
-            </form>
+          <div class="mt-3 flex items-center justify-between text-xs">
+            <div class="flex items-center gap-4">
+              <a href="/tracks/${t.id}/edit" class="text-slate-500 hover:text-blue-600 transition-colors">Edit</a>
+              <form method="POST" action="/tracks/${t.id}/toggle" class="inline">
+                <button type="submit" class="${t.is_active ? 'text-amber-500 hover:text-amber-700' : 'text-emerald-500 hover:text-emerald-700'} transition-colors cursor-pointer">${t.is_active ? 'Pause' : 'Resume'}</button>
+              </form>
+              <form method="POST" action="/tracks/${t.id}/delete" class="inline">
+                <button type="submit" class="text-red-400 hover:text-red-600 transition-colors cursor-pointer" onclick="return confirm('Delete this track?')">Delete</button>
+              </form>
+            </div>
+            <a href="/rss/${t.feed_token}" target="_blank" class="text-orange-400 hover:text-orange-600 transition-colors" title="RSS Feed">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="6.18" cy="17.82" r="2.18"/><path d="M4 4.44v2.83c7.03 0 12.73 5.7 12.73 12.73h2.83c0-8.59-6.97-15.56-15.56-15.56zm0 5.66v2.83c3.9 0 7.07 3.17 7.07 7.07h2.83c0-5.47-4.43-9.9-9.9-9.9z"/></svg>
+            </a>
           </div>
         </div>
       `).join('')}
@@ -527,7 +541,12 @@ app.get('/feed', async (c) => {
   const matches = await getMatchesByUserId(userId, 50, before);
 
   return c.html(renderPage('All Matches', user?.handle ?? '', `
-    <h2 class="text-xl font-semibold text-slate-800 mb-6">All Matches</h2>
+    <div class="flex items-center gap-3 mb-6">
+      <h2 class="text-xl font-semibold text-slate-800">All Matches</h2>
+      <a href="/rss/user/${user?.feed_token ?? ''}" target="_blank" class="text-orange-400 hover:text-orange-600 transition-colors" title="RSS Feed — All Matches">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="6.18" cy="17.82" r="2.18"/><path d="M4 4.44v2.83c7.03 0 12.73 5.7 12.73 12.73h2.83c0-8.59-6.97-15.56-15.56-15.56zm0 5.66v2.83c3.9 0 7.07 3.17 7.07 7.07h2.83c0-5.47-4.43-9.9-9.9-9.9z"/></svg>
+      </a>
+    </div>
     ${renderMatches(matches)}
     ${matches.length === 50 ? `<a href="/feed?before=${matches[matches.length - 1].matched_at.toISOString()}" class="block text-center mt-4 py-2.5 border border-slate-200 text-slate-500 text-sm rounded-lg hover:border-blue-500 hover:text-blue-500 transition-colors no-underline">Load more</a>` : ''}
   `));

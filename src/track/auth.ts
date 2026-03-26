@@ -22,6 +22,7 @@ export interface TrackUser {
   handle: string;
   display_name: string | null;
   avatar_url: string | null;
+  feed_token: string;
   created_at: Date;
   updated_at: Date;
 }
@@ -126,6 +127,13 @@ export async function getTrackUserById(id: bigint | number): Promise<TrackUser |
 export async function getTrackUserByDid(did: string): Promise<TrackUser | null> {
   const { rows } = await pool.query<TrackUser>(
     'SELECT * FROM track_users WHERE did = $1', [did]
+  );
+  return rows[0] ?? null;
+}
+
+export async function getTrackUserByFeedToken(token: string): Promise<TrackUser | null> {
+  const { rows } = await pool.query<TrackUser>(
+    'SELECT * FROM track_users WHERE feed_token = $1', [token]
   );
   return rows[0] ?? null;
 }
