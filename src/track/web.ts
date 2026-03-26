@@ -526,8 +526,9 @@ app.get('/tracks/:uuid', async (c) => {
           Keywords: ${track.keywords.map((k) => `<code class="bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded text-xs font-medium">${escHtml(k)}</code>`).join(' ')}
         </div>
       </div>
-      <a href="/rss/${track.feed_token}" target="_blank"
-        class="px-3 py-1.5 border border-slate-200 text-slate-500 text-sm rounded-lg hover:border-blue-500 hover:text-blue-500 transition-colors no-underline">RSS</a>
+      <a href="/rss/${track.feed_token}" target="_blank" class="text-orange-400 hover:text-orange-600 transition-colors no-underline" title="RSS Feed">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="6.18" cy="17.82" r="2.18"/><path d="M4 4.44v2.83c7.03 0 12.73 5.7 12.73 12.73h2.83c0-8.59-6.97-15.56-15.56-15.56zm0 5.66v2.83c3.9 0 7.07 3.17 7.07 7.07h2.83c0-5.47-4.43-9.9-9.9-9.9z"/></svg>
+      </a>
     </div>
     ${renderMatches(matches)}
     ${matches.length === 50 ? `<a href="/tracks/${track.uuid}?before=${matches[matches.length - 1].matched_at.toISOString()}" class="block text-center mt-4 py-2.5 border border-slate-200 text-slate-500 text-sm rounded-lg hover:border-blue-500 hover:text-blue-500 transition-colors no-underline">Load more</a>` : ''}
