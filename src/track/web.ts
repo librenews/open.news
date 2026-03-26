@@ -307,7 +307,7 @@ app.get('/', async (c) => {
           </div>
           <div class="mt-3 flex items-center justify-between text-xs">
             <div class="flex items-center gap-4">
-              <a href="/tracks/${t.uuid}/edit" class="text-slate-500 hover:text-blue-600 transition-colors">Edit</a>
+              <a href="/tracks/${t.uuid}/edit" class="text-blue-500 hover:text-blue-700 transition-colors">Edit</a>
               <form method="POST" action="/tracks/${t.uuid}/toggle" class="inline">
                 <button type="submit" class="${t.is_active ? 'text-amber-500 hover:text-amber-700' : 'text-emerald-500 hover:text-emerald-700'} transition-colors cursor-pointer">${t.is_active ? 'Pause' : 'Resume'}</button>
               </form>
