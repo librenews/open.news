@@ -7,6 +7,7 @@ import { logger } from '../lib/logger.js';
 import {
   createTrack, getTracksByUserId, getTrackById, getTrackByFeedToken,
   deleteTrack as dbDeleteTrack, updateTrackKeywords, updateTrackQueryEmbedding, toggleTrackActive,
+  updateTrack,
   getMatchesByTrackId, getMatchesByUserId, getMatchCountByTrack,
   getFeedSkeletonMatches,
 } from '../db/queries/tracks.js';
@@ -265,6 +266,12 @@ app.get('/', async (c) => {
         });
       })();
       </script>
+      <div>
+        <label class="block text-xs font-medium text-slate-500 mb-1">Squelch <span class="text-slate-400" id="squelch-val">(0.70)</span></label>
+        <input type="range" name="threshold" min="0" max="1" step="0.01" value="0.70"
+          class="w-full accent-blue-500" oninput="document.getElementById('squelch-val').textContent='('+parseFloat(this.value).toFixed(2)+')'">
+        <p class="text-xs text-slate-400 mt-1">Lower = more matches, higher = stricter semantic relevance.</p>
+      </div>
       <button type="submit"
         class="px-5 py-2.5 bg-gradient-to-r from-blue-500 to-emerald-500 text-white text-sm font-medium rounded-lg hover:from-blue-600 hover:to-emerald-600 transition-all cursor-pointer">
         Create Track
@@ -289,6 +296,7 @@ app.get('/', async (c) => {
           </div>
           <div class="mt-3 flex items-center gap-4 text-xs">
             <a href="/rss/${t.feed_token}" target="_blank" class="text-blue-500 hover:text-blue-700 transition-colors">RSS Feed</a>
+            <a href="/tracks/${t.id}/edit" class="text-slate-500 hover:text-blue-600 transition-colors">Edit</a>
             <form method="POST" action="/tracks/${t.id}/toggle" class="inline">
               <button type="submit" class="${t.is_active ? 'text-amber-500 hover:text-amber-700' : 'text-emerald-500 hover:text-emerald-700'} transition-colors cursor-pointer">${t.is_active ? 'Pause' : 'Resume'}</button>
             </form>
@@ -314,8 +322,9 @@ app.post('/tracks', async (c) => {
   if (!name || !query) return c.redirect('/');
 
   const keywords = keywordsRaw ? keywordsRaw.split(',').map((k) => k.trim()).filter(Boolean) : [];
+  const threshold = parseFloat(String(body.threshold ?? '0.7'));
 
-  const track = await createTrack(userId, name, keywords, '', query);
+  const track = await createTrack(userId, name, keywords, '', query, isNaN(threshold) ? 0.7 : threshold);
   const osQueryId = await upsertTrackQuery(track.id, keywords);
   await updateTrackKeywords(track.id, keywords, osQueryId);
 
@@ -337,6 +346,126 @@ app.post('/tracks/:id/toggle', async (c) => {
   if (!track || String(track.user_id) !== String(userId)) return c.text('Not found', 404);
 
   await toggleTrackActive(trackId);
+  return c.redirect('/');
+});
+
+// ─── Track Edit ─────────────────────────────────────────────────────────────
+
+app.get('/tracks/:id/edit', async (c) => {
+  const userId = c.get('userId');
+  const trackId = parseInt(c.req.param('id'), 10);
+  const track = await getTrackById(trackId);
+  if (!track || String(track.user_id) !== String(userId)) return c.text('Not found', 404);
+  const user = await getTrackUserById(userId);
+
+  return c.html(renderPage('Edit Track', user?.handle ?? '', `
+    <div class="mb-6">
+      <a href="/" class="text-sm text-blue-500 hover:text-blue-700 transition-colors no-underline">&larr; Back to Dashboard</a>
+    </div>
+    <h2 class="text-xl font-semibold text-slate-800 mb-6">Edit: ${escHtml(track.name)}</h2>
+    <form method="POST" action="/tracks/${track.id}/edit" class="space-y-4 bg-slate-50 border border-slate-200 rounded-xl p-5">
+      <div>
+        <label class="block text-xs font-medium text-slate-500 mb-1">Name</label>
+        <input type="text" name="name" value="${escHtml(track.name)}" required
+          class="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-slate-500 mb-1">Search Query</label>
+        <input type="text" name="query" value="${escHtml(track.query ?? '')}" required
+          class="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+        <p class="text-xs text-slate-400 mt-1">Describe what you want to find in natural language.</p>
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-slate-500 mb-1">Boost Keywords <span class="text-slate-400">(optional)</span></label>
+        <input type="hidden" name="keywords" id="edit-kw-value" value="${track.keywords.map(k => escHtml(k)).join(',')}">
+        <div id="edit-kw-wrap" class="flex flex-wrap gap-1.5 p-2 border border-slate-200 rounded-lg min-h-[42px] cursor-text focus-within:ring-2 focus-within:ring-blue-500 bg-white" onclick="document.getElementById('edit-kw-input').focus()">
+          <input type="text" id="edit-kw-input" placeholder="Type and press Enter"
+            class="flex-1 min-w-[140px] border-none outline-none text-sm bg-transparent p-0.5">
+        </div>
+        <p class="text-xs text-slate-400 mt-1">Exact keyword matches boost ranking alongside semantic search.</p>
+      </div>
+      <script>
+      (function(){
+        const wrap = document.getElementById('edit-kw-wrap');
+        const input = document.getElementById('edit-kw-input');
+        const hidden = document.getElementById('edit-kw-value');
+        const tags = hidden.value ? hidden.value.split(',').filter(Boolean) : [];
+        function render() {
+          wrap.querySelectorAll('.kw-pill').forEach(el => el.remove());
+          tags.forEach((tag, i) => {
+            const pill = document.createElement('span');
+            pill.className = 'kw-pill inline-flex items-center gap-1 bg-blue-50 text-blue-700 text-xs font-medium px-2.5 py-1 rounded-full';
+            pill.innerHTML = tag + '<button type="button" class="ml-0.5 text-blue-400 hover:text-blue-700 cursor-pointer" data-i="' + i + '">&times;</button>';
+            wrap.insertBefore(pill, input);
+          });
+          hidden.value = tags.join(',');
+        }
+        function add(val) {
+          const v = val.trim();
+          if (v && !tags.includes(v)) { tags.push(v); render(); }
+          input.value = '';
+        }
+        input.addEventListener('keydown', function(e) {
+          if ((e.key === 'Enter' || e.key === ',' || e.key === 'Tab') && input.value.trim()) {
+            e.preventDefault();
+            add(input.value);
+          }
+          if (e.key === 'Backspace' && !input.value && tags.length) {
+            tags.pop(); render();
+          }
+        });
+        input.addEventListener('blur', function() { if (input.value.trim()) add(input.value); });
+        wrap.addEventListener('click', function(e) {
+          if (e.target.dataset.i !== undefined) { tags.splice(Number(e.target.dataset.i), 1); render(); }
+        });
+        render();
+      })();
+      </script>
+      <div>
+        <label class="block text-xs font-medium text-slate-500 mb-1">Squelch <span class="text-slate-400" id="edit-squelch-val">(${track.threshold.toFixed(2)})</span></label>
+        <input type="range" name="threshold" min="0" max="1" step="0.01" value="${track.threshold.toFixed(2)}"
+          class="w-full accent-blue-500" oninput="document.getElementById('edit-squelch-val').textContent='('+parseFloat(this.value).toFixed(2)+')'">
+        <p class="text-xs text-slate-400 mt-1">Lower = more matches, higher = stricter semantic relevance.</p>
+      </div>
+      <button type="submit"
+        class="px-5 py-2.5 bg-gradient-to-r from-blue-500 to-emerald-500 text-white text-sm font-medium rounded-lg hover:from-blue-600 hover:to-emerald-600 transition-all cursor-pointer">
+        Save Changes
+      </button>
+    </form>
+  `));
+});
+
+app.post('/tracks/:id/edit', async (c) => {
+  const userId = c.get('userId');
+  const trackId = parseInt(c.req.param('id'), 10);
+  const track = await getTrackById(trackId);
+  if (!track || String(track.user_id) !== String(userId)) return c.text('Not found', 404);
+
+  const body = await c.req.parseBody();
+  const name = String(body.name ?? '').trim();
+  const query = String(body.query ?? '').trim();
+  const keywordsRaw = String(body.keywords ?? '').trim();
+  const threshold = parseFloat(String(body.threshold ?? '0.7'));
+  const keywords = keywordsRaw ? keywordsRaw.split(',').map((k) => k.trim()).filter(Boolean) : [];
+
+  if (!name || !query) return c.redirect(`/tracks/${trackId}/edit`);
+
+  await updateTrack(trackId, { name, query, keywords, threshold: isNaN(threshold) ? 0.7 : threshold });
+
+  // Re-upsert OpenSearch percolate query
+  const osQueryId = await upsertTrackQuery(trackId, keywords);
+  await updateTrackKeywords(trackId, keywords, osQueryId);
+
+  // Re-embed the query if it changed
+  if (query !== track.query) {
+    try {
+      const queryEmbedding = await embedText(query);
+      await updateTrackQueryEmbedding(trackId, queryEmbedding);
+    } catch (err) {
+      logger.error({ err }, 'Failed to re-embed query');
+    }
+  }
+
   return c.redirect('/');
 });
 

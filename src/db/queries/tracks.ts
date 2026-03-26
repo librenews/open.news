@@ -22,12 +22,33 @@ export async function createTrack(
   name: string,
   keywords: string[],
   osQueryId: string,
-  query?: string
+  query?: string,
+  threshold = 0.7
 ): Promise<Track> {
   const { rows } = await db.query<Track>(
-    `INSERT INTO tracks (user_id, name, keywords, os_query_id, query)
-     VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-    [userId, name, keywords, osQueryId, query ?? null]
+    `INSERT INTO tracks (user_id, name, keywords, os_query_id, query, threshold)
+     VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+    [userId, name, keywords, osQueryId, query ?? null, threshold]
+  );
+  return rows[0];
+}
+
+export async function updateTrack(
+  id: bigint | number,
+  fields: { name?: string; query?: string; keywords?: string[]; threshold?: number }
+): Promise<Track> {
+  const sets: string[] = [];
+  const params: unknown[] = [];
+  let i = 1;
+  if (fields.name !== undefined) { sets.push(`name = $${i++}`); params.push(fields.name); }
+  if (fields.query !== undefined) { sets.push(`query = $${i++}`); params.push(fields.query); }
+  if (fields.keywords !== undefined) { sets.push(`keywords = $${i++}`); params.push(fields.keywords); }
+  if (fields.threshold !== undefined) { sets.push(`threshold = $${i++}`); params.push(fields.threshold); }
+  sets.push(`updated_at = NOW()`);
+  params.push(id);
+  const { rows } = await db.query<Track>(
+    `UPDATE tracks SET ${sets.join(', ')} WHERE id = $${i} RETURNING *`,
+    params
   );
   return rows[0];
 }
