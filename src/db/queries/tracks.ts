@@ -105,14 +105,14 @@ export async function updateTrackQueryEmbedding(
 export interface TrackWithEmbedding {
   id: number;
   threshold: number;
-  query_embedding: number[];
+  query_embedding: number[] | null;
 }
 
-/** Get all active tracks that have a semantic query embedding. */
+/** Get all active tracks (with or without embeddings). */
 export async function getTracksWithEmbeddings(): Promise<TrackWithEmbedding[]> {
   const { rows } = await db.query<TrackWithEmbedding>(
     `SELECT id, threshold, query_embedding FROM tracks
-     WHERE is_active = TRUE AND query_embedding IS NOT NULL`
+     WHERE is_active = TRUE`
   );
   return rows;
 }
