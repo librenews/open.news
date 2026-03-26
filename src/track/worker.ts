@@ -180,7 +180,9 @@ async function processMessages(redis: Redis): Promise<void> {
     }
   }
 
-  logger.info({ posts: posts.length, matches: totalMatches, embedMs }, 'Batch processed');
+  if (totalMatches > 0) {
+    logger.info({ posts: posts.length, matches: totalMatches, embedMs }, 'Batch processed');
+  }
 
   // 4. Bulk ACK
   await redis.xack(STREAM_KEY, GROUP_NAME, ...posts.map((p) => p.messageId), ...ackIds);
