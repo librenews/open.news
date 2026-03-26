@@ -58,13 +58,17 @@ async function matchPost(
   const activeIds = new Set(tracks.map((t) => t.id));
   const trackById = new Map(tracks.map((t) => [t.id, t]));
 
-  // Phase 1: Keyword percolate — still checked against squelch threshold
+  // Phase 1: Keyword percolate
   try {
     const keywordMatches = await percolatePost(text, did, uri);
     for (const id of keywordMatches) {
       if (!activeIds.has(id)) continue;
       const track = trackById.get(id);
-      if (track) {
+      if (!track || !track.query_embedding) {
+        // No semantic query — pure keyword boolean match
+        matchedIds.add(id);
+      } else {
+        // Has semantic query — check against squelch threshold
         const similarity = cosineSimilarity(postEmbedding, track.query_embedding);
         if (similarity >= track.threshold) matchedIds.add(id);
       }
@@ -73,8 +77,9 @@ async function matchPost(
     logger.error({ err, uri }, 'Keyword percolate failed');
   }
 
-  // Phase 2: Semantic similarity
+  // Phase 2: Semantic similarity (only for tracks with embeddings)
   for (const track of tracks) {
+    if (!track.query_embedding) continue;
     const similarity = cosineSimilarity(postEmbedding, track.query_embedding);
     if (similarity >= track.threshold) {
       matchedIds.add(track.id);

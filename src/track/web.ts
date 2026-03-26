@@ -216,13 +216,14 @@ app.get('/', async (c) => {
           class="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
       </div>
       <div>
-        <label class="block text-xs font-medium text-slate-500 mb-1">Search Query</label>
-        <input type="text" name="query" placeholder="e.g. artificial intelligence breakthroughs and their impact on society" required
-          class="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-        <p class="text-xs text-slate-400 mt-1">Describe what you want to find in natural language. Uses semantic AI matching.</p>
+        <label class="block text-xs font-medium text-slate-500 mb-1">Search Query <span class="text-slate-400">(optional)</span></label>
+        <input type="text" name="query" id="query-input" placeholder="e.g. artificial intelligence breakthroughs and their impact on society"
+          class="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          oninput="document.getElementById('squelch-section').style.display = this.value.trim() ? 'block' : 'none'">
+        <p class="text-xs text-slate-400 mt-1">Describe what you want to find in natural language. Leave blank for keyword-only matching.</p>
       </div>
       <div>
-        <label class="block text-xs font-medium text-slate-500 mb-1">Boost Keywords <span class="text-slate-400">(optional)</span></label>
+        <label class="block text-xs font-medium text-slate-500 mb-1">Keywords <span class="text-slate-400">(optional)</span></label>
         <input type="hidden" name="keywords" id="keywords-value">
         <div id="keywords-wrap" class="flex flex-wrap gap-1.5 p-2 border border-slate-200 rounded-lg min-h-[42px] cursor-text focus-within:ring-2 focus-within:ring-blue-500" onclick="document.getElementById('kw-input').focus()">
           <input type="text" id="kw-input" placeholder="Type a keyword and press Enter"
@@ -266,7 +267,7 @@ app.get('/', async (c) => {
         });
       })();
       </script>
-      <div>
+      <div id="squelch-section">
         <label class="block text-xs font-medium text-slate-500 mb-1">Squelch <span class="text-slate-400" id="squelch-val">(0.75)</span></label>
         <input type="range" name="threshold" min="0" max="1" step="0.01" value="0.75"
           class="w-full accent-blue-500" oninput="document.getElementById('squelch-val').textContent='('+parseFloat(this.value).toFixed(2)+')'">
@@ -318,22 +319,23 @@ app.post('/tracks', async (c) => {
   const name = String(body.name ?? '').trim();
   const query = String(body.query ?? '').trim();
   const keywordsRaw = String(body.keywords ?? '').trim();
-
-  if (!name || !query) return c.redirect('/');
-
   const keywords = keywordsRaw ? keywordsRaw.split(',').map((k) => k.trim()).filter(Boolean) : [];
   const threshold = parseFloat(String(body.threshold ?? '0.75'));
 
-  const track = await createTrack(userId, name, keywords, '', query, isNaN(threshold) ? 0.7 : threshold);
+  if (!name || (!query && keywords.length === 0)) return c.redirect('/');
+
+  const track = await createTrack(userId, name, keywords, '', query || undefined, isNaN(threshold) ? 0.75 : threshold);
   const osQueryId = await upsertTrackQuery(track.id, keywords);
   await updateTrackKeywords(track.id, keywords, osQueryId);
 
-  // Embed the semantic query and store for worker matching
-  try {
-    const queryEmbedding = await embedText(query);
-    await updateTrackQueryEmbedding(track.id, queryEmbedding);
-  } catch (err) {
-    logger.error({ err }, 'Failed to embed query — track created without semantic matching');
+  // Embed the semantic query if provided
+  if (query) {
+    try {
+      const queryEmbedding = await embedText(query);
+      await updateTrackQueryEmbedding(track.id, queryEmbedding);
+    } catch (err) {
+      logger.error({ err }, 'Failed to embed query — track created without semantic matching');
+    }
   }
 
   return c.redirect('/');
@@ -370,13 +372,14 @@ app.get('/tracks/:id/edit', async (c) => {
           class="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
       </div>
       <div>
-        <label class="block text-xs font-medium text-slate-500 mb-1">Search Query</label>
-        <input type="text" name="query" value="${escHtml(track.query ?? '')}" required
-          class="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-        <p class="text-xs text-slate-400 mt-1">Describe what you want to find in natural language.</p>
+        <label class="block text-xs font-medium text-slate-500 mb-1">Search Query <span class="text-slate-400">(optional)</span></label>
+        <input type="text" name="query" value="${escHtml(track.query ?? '')}"
+          class="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          oninput="document.getElementById('edit-squelch-section').style.display = this.value.trim() ? 'block' : 'none'">
+        <p class="text-xs text-slate-400 mt-1">Describe what you want to find in natural language. Leave blank for keyword-only matching.</p>
       </div>
       <div>
-        <label class="block text-xs font-medium text-slate-500 mb-1">Boost Keywords <span class="text-slate-400">(optional)</span></label>
+        <label class="block text-xs font-medium text-slate-500 mb-1">Keywords <span class="text-slate-400">(optional)</span></label>
         <input type="hidden" name="keywords" id="edit-kw-value" value="${track.keywords.map(k => escHtml(k)).join(',')}">
         <div id="edit-kw-wrap" class="flex flex-wrap gap-1.5 p-2 border border-slate-200 rounded-lg min-h-[42px] cursor-text focus-within:ring-2 focus-within:ring-blue-500 bg-white" onclick="document.getElementById('edit-kw-input').focus()">
           <input type="text" id="edit-kw-input" placeholder="Type and press Enter"
@@ -421,7 +424,7 @@ app.get('/tracks/:id/edit', async (c) => {
         render();
       })();
       </script>
-      <div>
+      <div id="edit-squelch-section" style="${track.query ? '' : 'display:none'}">
         <label class="block text-xs font-medium text-slate-500 mb-1">Squelch <span class="text-slate-400" id="edit-squelch-val">(${track.threshold.toFixed(2)})</span></label>
         <input type="range" name="threshold" min="0" max="1" step="0.01" value="${track.threshold.toFixed(2)}"
           class="w-full accent-blue-500" oninput="document.getElementById('edit-squelch-val').textContent='('+parseFloat(this.value).toFixed(2)+')'">
@@ -448,22 +451,30 @@ app.post('/tracks/:id/edit', async (c) => {
   const threshold = parseFloat(String(body.threshold ?? '0.75'));
   const keywords = keywordsRaw ? keywordsRaw.split(',').map((k) => k.trim()).filter(Boolean) : [];
 
-  if (!name || !query) return c.redirect(`/tracks/${trackId}/edit`);
+  if (!name || (!query && keywords.length === 0)) return c.redirect(`/tracks/${trackId}/edit`);
 
-  await updateTrack(trackId, { name, query, keywords, threshold: isNaN(threshold) ? 0.7 : threshold });
+  await updateTrack(trackId, {
+    name,
+    query: query || null as any,
+    keywords,
+    threshold: isNaN(threshold) ? 0.75 : threshold,
+  });
 
   // Re-upsert OpenSearch percolate query
   const osQueryId = await upsertTrackQuery(trackId, keywords);
   await updateTrackKeywords(trackId, keywords, osQueryId);
 
-  // Re-embed the query if it changed
-  if (query !== track.query) {
+  // Re-embed the query if it changed (or clear if removed)
+  if (query && query !== track.query) {
     try {
       const queryEmbedding = await embedText(query);
       await updateTrackQueryEmbedding(trackId, queryEmbedding);
     } catch (err) {
       logger.error({ err }, 'Failed to re-embed query');
     }
+  } else if (!query && track.query) {
+    // Query was removed — clear embedding
+    await updateTrackQueryEmbedding(trackId, null as any);
   }
 
   return c.redirect('/');
