@@ -33,11 +33,11 @@ app.use('*', sessionMiddleware);
 app.use('/static/*', serveStatic({ root: './public' }));
 
 // Routes
+app.route('/', healthRouter);
+app.route('/', adminRouter);
 app.route('/', authRouter);
 app.route('/', articlesRouter);
 app.route('/', sourcesRouter);
-app.route('/', healthRouter);
-app.route('/', adminRouter);
 app.route('/api/conversations', conversationsRouter);
 
 // ─── SSE Stream ──────────────────────────────────────────────────────────────
