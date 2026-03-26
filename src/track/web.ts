@@ -265,7 +265,7 @@ app.get('/', async (c) => {
         }
         function add(val) {
           const v = val.trim();
-          if (v && !tags.includes(v)) { tags.push(v); render(); }
+          if (v && !tags.includes(v) && tags.length < 5) { tags.push(v); render(); }
           input.value = '';
         }
         input.addEventListener('keydown', function(e) {
@@ -333,7 +333,7 @@ app.post('/tracks', async (c) => {
   const name = String(body.name ?? '').trim().slice(0, 75);
   const query = String(body.query ?? '').trim();
   const keywordsRaw = String(body.keywords ?? '').trim();
-  const keywords = keywordsRaw ? keywordsRaw.split(',').map((k) => k.trim()).filter(Boolean) : [];
+  const keywords = keywordsRaw ? keywordsRaw.split(',').map((k) => k.trim()).filter(Boolean).slice(0, 5) : [];
   const threshold = parseFloat(String(body.threshold ?? '0.75'));
 
   if (!name || (!query && keywords.length === 0)) return c.redirect('/');
@@ -425,7 +425,7 @@ app.get('/tracks/:uuid/edit', async (c) => {
         }
         function add(val) {
           const v = val.trim();
-          if (v && !tags.includes(v)) { tags.push(v); render(); }
+          if (v && !tags.includes(v) && tags.length < 5) { tags.push(v); render(); }
           input.value = '';
         }
         input.addEventListener('keydown', function(e) {
@@ -463,7 +463,7 @@ app.post('/tracks/:uuid/edit', async (c) => {
   const query = String(body.query ?? '').trim();
   const keywordsRaw = String(body.keywords ?? '').trim();
   const threshold = parseFloat(String(body.threshold ?? '0.75'));
-  const keywords = keywordsRaw ? keywordsRaw.split(',').map((k) => k.trim()).filter(Boolean) : [];
+  const keywords = keywordsRaw ? keywordsRaw.split(',').map((k) => k.trim()).filter(Boolean).slice(0, 5) : [];
 
   if (!name || (!query && keywords.length === 0)) return c.redirect(`/tracks/${track.uuid}/edit`);
 
