@@ -568,19 +568,67 @@ interface MatchRow {
 
 function renderMatches(matches: MatchRow[]): string {
   if (matches.length === 0) return '<p class="text-slate-400 text-sm">No matches yet.</p>';
-  return `<div class="space-y-2">${matches.map((m) => {
+  return `<div class="space-y-4">${matches.map((m) => {
     const bskyUrl = m.post_uri.replace('at://', 'https://bsky.app/profile/').replace('/app.bsky.feed.post/', '/post/');
     const ago = timeAgo(m.matched_at);
     return `
       <div class="bg-white border border-slate-200 rounded-xl p-4 hover:shadow-sm transition-shadow">
-        <div class="text-xs text-slate-400 mb-1.5">
-          ${m.track_name ? `<span class="bg-gradient-to-r from-blue-500 to-emerald-500 text-white text-[10px] font-medium px-1.5 py-0.5 rounded-full">${escHtml(m.track_name)}</span> · ` : ''}
-          <a href="https://bsky.app/profile/${m.post_did}" target="_blank" class="text-slate-400 hover:text-blue-500 transition-colors">${m.post_did.slice(0, 24)}…</a> · ${ago}
+        <div class="flex items-center gap-2 mb-3 author-profile" data-did="${m.post_did}">
+          <a href="https://bsky.app/profile/${m.post_did}" target="_blank" class="flex items-center gap-2 text-slate-800 hover:text-blue-600 transition-colors no-underline group">
+            <div class="w-6 h-6 rounded-full bg-slate-200 overflow-hidden flex items-center justify-center shrink-0 author-avatar">
+              <svg class="w-4 h-4 text-slate-400" fill="currentColor" viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+            </div>
+            <span class="text-sm font-semibold author-name">${m.post_did.slice(0, 16)}…</span>
+            <span class="text-xs text-slate-400 font-normal author-handle hidden group-hover:text-blue-400"></span>
+          </a>
+          <span class="text-xs text-slate-400">· ${ago}</span>
+          ${m.track_name ? ` · <span class="bg-gradient-to-r from-blue-500 to-emerald-500 text-white text-[10px] font-medium px-1.5 py-0.5 rounded-full">${escHtml(m.track_name)}</span>` : ''}
         </div>
         <div class="text-sm text-slate-700 leading-relaxed">${escHtml(m.post_text)}</div>
-        <a href="${bskyUrl}" target="_blank" class="text-xs text-blue-500 hover:text-blue-700 mt-2 inline-block transition-colors">View on Bluesky →</a>
+        <a href="${bskyUrl}" target="_blank" class="text-xs text-blue-500 hover:text-blue-700 mt-3 inline-block transition-colors no-underline">View on Bluesky →</a>
       </div>`;
-  }).join('')}</div>`;
+  }).join('')}</div>
+  <script>
+  (async function() {
+    const elements = document.querySelectorAll('.author-profile');
+    const dids = new Set();
+    elements.forEach(el => dids.add(el.dataset.did));
+    if (dids.size === 0) return;
+    
+    // Batch into chunks of 25 (AppView limit)
+    const didArray = Array.from(dids);
+    for (let i = 0; i < didArray.length; i += 25) {
+      const chunk = didArray.slice(i, i + 25);
+      const params = chunk.map(d => 'actors=' + encodeURIComponent(d)).join('&');
+      try {
+        const res = await fetch('https://public.api.bsky.app/xrpc/app.bsky.actor.getProfiles?' + params);
+        if (!res.ok) continue;
+        const data = await res.json();
+        if (data.profiles) {
+          data.profiles.forEach(p => {
+            document.querySelectorAll('.author-profile[data-did="' + p.did + '"]').forEach(el => {
+              if (p.avatar) {
+                const av = el.querySelector('.author-avatar');
+                if (av) av.innerHTML = '<img src="' + p.avatar + '" class="w-full h-full object-cover">';
+              }
+              const nameEl = el.querySelector('.author-name');
+              const handleEl = el.querySelector('.author-handle');
+              if (p.displayName && nameEl && handleEl) {
+                nameEl.textContent = p.displayName;
+                handleEl.textContent = '@' + p.handle;
+                handleEl.classList.remove('hidden');
+              } else if (nameEl) {
+                nameEl.textContent = '@' + p.handle;
+              }
+            });
+          });
+        }
+      } catch (e) {
+        console.error('Failed to hydrate profiles', e);
+      }
+    }
+  })();
+  </script>`;
 }
 
 function timeAgo(date: Date): string {
