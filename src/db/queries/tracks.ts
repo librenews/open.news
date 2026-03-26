@@ -155,12 +155,11 @@ export async function insertTrackMatch(
   postText: string,
   facetsRaw = ''
 ): Promise<void> {
-  const facetsJson = facetsRaw ? JSON.parse(facetsRaw) : null;
   await db.query(
     `INSERT INTO track_matches (track_id, post_uri, post_did, post_text, facets)
-     VALUES ($1, $2, $3, $4, $5)
+     VALUES ($1, $2, $3, $4, $5::jsonb)
      ON CONFLICT (track_id, post_uri) DO NOTHING`,
-    [trackId, postUri, postDid, postText, facetsJson]
+    [trackId, postUri, postDid, postText, facetsRaw ? facetsRaw : null]
   );
 }
 
