@@ -13,7 +13,7 @@ import {
 } from '../db/queries/tracks.js';
 import { upsertTrackQuery, deleteTrackQuery } from './opensearch.js';
 import { embedText } from './embedClient.js';
-import { trackAuthRouter, getTrackUserById, getTrackUserByDid, getTrackUserByFeedToken } from './auth.js';
+import { trackAuthRouter, getTrackUserById, getTrackUserByDid, getTrackUserByFeedToken, type TrackUser } from './auth.js';
 import { createMiddleware } from 'hono/factory';
 import { Redis } from 'ioredis';
 
@@ -210,7 +210,7 @@ app.get('/', async (c) => {
   const counts = await getMatchCountByTrack(userId);
   const countMap = new Map(counts.map((r) => [r.track_id, parseInt(r.count, 10)]));
 
-  return c.html(renderPage('Dashboard', user?.handle ?? '', `
+  return c.html(renderPage('Dashboard', user, `
     <div class="flex justify-between items-center mb-6">
       <h2 class="text-xl font-semibold text-slate-800">Your Tracks</h2>
       <button onclick="document.getElementById('new-track-form').classList.toggle('hidden')"
@@ -374,7 +374,7 @@ app.get('/tracks/:id/edit', async (c) => {
   if (!track || String(track.user_id) !== String(userId)) return c.text('Not found', 404);
   const user = await getTrackUserById(userId);
 
-  return c.html(renderPage('Edit Track', user?.handle ?? '', `
+  return c.html(renderPage('Edit Track', user, `
     <div class="mb-6">
       <a href="/" class="text-sm text-blue-500 hover:text-blue-700 transition-colors no-underline">&larr; Back to Dashboard</a>
     </div>
@@ -517,7 +517,7 @@ app.get('/tracks/:id', async (c) => {
   const before = c.req.query('before');
   const matches = await getMatchesByTrackId(track.id, 50, before);
 
-  return c.html(renderPage(track.name, user?.handle ?? '', `
+  return c.html(renderPage(track.name, user, `
     <div class="flex justify-between items-center mb-6">
       <div>
         <a href="/" class="text-sm text-blue-500 hover:text-blue-700 transition-colors">← Back</a>
@@ -540,7 +540,7 @@ app.get('/feed', async (c) => {
   const before = c.req.query('before');
   const matches = await getMatchesByUserId(userId, 50, before);
 
-  return c.html(renderPage('All Matches', user?.handle ?? '', `
+  return c.html(renderPage('All Matches', user, `
     <div class="flex items-center gap-3 mb-6">
       <h2 class="text-xl font-semibold text-slate-800">All Matches</h2>
       <a href="/rss/user/${user?.feed_token ?? ''}" target="_blank" class="text-orange-400 hover:text-orange-600 transition-colors" title="RSS Feed — All Matches">
@@ -614,7 +614,7 @@ function buildRss(title: string, matches: MatchRow[]): string {
 </rss>`;
 }
 
-function renderPage(title: string, handle: string, content: string): string {
+function renderPage(title: string, user: TrackUser | null, content: string): string {
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -633,11 +633,24 @@ function renderPage(title: string, handle: string, content: string): string {
         <img src="/logo.png" alt="Track" class="h-7">
       </a>
       <div class="flex items-center gap-4">
-        <a href="/feed" class="text-sm text-slate-500 hover:text-blue-500 transition-colors no-underline">All Matches</a>
-        <span class="text-xs text-slate-400">@${escHtml(handle)}</span>
-        <form method="POST" action="/oauth/logout" class="inline">
-          <button type="submit" class="text-xs text-slate-400 hover:text-red-500 transition-colors cursor-pointer">Logout</button>
-        </form>
+        <a href="/feed" class="text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors no-underline">All Matches</a>
+        
+        ${user ? `
+        <div class="relative group">
+          <button class="flex items-center justify-center w-8 h-8 rounded-full bg-slate-100 overflow-hidden ring-2 ring-transparent group-hover:ring-blue-500 transition-all focus:outline-none">
+            ${user.avatar_url ? `<img src="${escHtml(user.avatar_url)}" alt="${escHtml(user.handle)}" class="w-full h-full object-cover">` : `<span class="text-xs font-semibold text-slate-500">${escHtml(user.handle.slice(0, 2).toUpperCase())}</span>`}
+          </button>
+          <div class="absolute right-0 mt-2 w-48 bg-white border border-slate-200 rounded-lg shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-20 overflow-hidden">
+            <div class="px-4 py-3 border-b border-slate-100 bg-slate-50">
+              <p class="text-sm font-medium text-slate-900 truncate">${escHtml(user.display_name ?? user.handle)}</p>
+              <p class="text-xs text-slate-500 truncate">@${escHtml(user.handle)}</p>
+            </div>
+            <form method="POST" action="/oauth/logout" class="block w-full">
+              <button type="submit" class="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-slate-50 transition-colors cursor-pointer focus:outline-none">Sign out</button>
+            </form>
+          </div>
+        </div>
+        ` : ''}
       </div>
     </div>
   </nav>
