@@ -222,7 +222,7 @@ app.get('/', async (c) => {
     <form id="new-track-form" method="POST" action="/tracks" class="hidden mb-6 p-5 bg-slate-50 border border-slate-200 rounded-xl space-y-4">
       <div>
         <label class="block text-xs font-medium text-slate-500 mb-1">Name</label>
-        <input type="text" name="name" placeholder="e.g. AI Research" required
+        <input type="text" name="name" placeholder="e.g. AI Research" required maxlength="75"
           class="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
       </div>
       <div>
@@ -330,7 +330,7 @@ app.get('/', async (c) => {
 app.post('/tracks', async (c) => {
   const userId = c.get('userId');
   const body = await c.req.parseBody();
-  const name = String(body.name ?? '').trim();
+  const name = String(body.name ?? '').trim().slice(0, 75);
   const query = String(body.query ?? '').trim();
   const keywordsRaw = String(body.keywords ?? '').trim();
   const keywords = keywordsRaw ? keywordsRaw.split(',').map((k) => k.trim()).filter(Boolean) : [];
@@ -382,7 +382,7 @@ app.get('/tracks/:uuid/edit', async (c) => {
     <form method="POST" action="/tracks/${track.uuid}/edit" class="space-y-4 bg-slate-50 border border-slate-200 rounded-xl p-5">
       <div>
         <label class="block text-xs font-medium text-slate-500 mb-1">Name</label>
-        <input type="text" name="name" value="${escHtml(track.name)}" required
+        <input type="text" name="name" value="${escHtml(track.name)}" required maxlength="75"
           class="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
       </div>
       <div>
@@ -459,7 +459,7 @@ app.post('/tracks/:uuid/edit', async (c) => {
   if (!track || String(track.user_id) !== String(userId)) return c.text('Not found', 404);
 
   const body = await c.req.parseBody();
-  const name = String(body.name ?? '').trim();
+  const name = String(body.name ?? '').trim().slice(0, 75);
   const query = String(body.query ?? '').trim();
   const keywordsRaw = String(body.keywords ?? '').trim();
   const threshold = parseFloat(String(body.threshold ?? '0.75'));
