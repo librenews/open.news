@@ -733,6 +733,7 @@ interface MatchRow {
   post_text: string;
   matched_at: Date;
   track_name?: string;
+  track_uuid?: string;
   facets?: string | null;
 }
 
@@ -752,7 +753,7 @@ function renderMatches(matches: MatchRow[]): string {
             <span class="text-xs text-slate-400 font-normal author-handle hidden group-hover:text-blue-400"></span>
           </a>
           <span class="text-xs text-slate-400">· <a href="${bskyUrl}" target="_blank" class="text-slate-400 hover:underline">${ago}</a></span>
-          ${m.track_name ? ` · <span class="bg-gradient-to-r from-blue-500 to-emerald-500 text-white text-[10px] font-medium px-1.5 py-0.5 rounded-full">${escHtml(m.track_name)}</span>` : ''}
+          ${m.track_name && m.track_uuid ? ` · <a href="/tracks/${m.track_uuid}" class="bg-gradient-to-r from-blue-500 to-emerald-500 text-white text-[10px] font-medium px-1.5 py-0.5 rounded-full hover:opacity-80 transition-opacity no-underline">${escHtml(m.track_name)}</a>` : ''}
         </div>
         <div class="text-sm text-slate-700 leading-relaxed break-words">${renderRichText(m.post_text, m.facets)}</div>
         <a href="${bskyUrl}" target="_blank" class="text-xs text-blue-500 hover:text-blue-700 mt-3 inline-block transition-colors no-underline">View on Bluesky →</a>

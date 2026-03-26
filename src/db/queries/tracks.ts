@@ -184,10 +184,10 @@ export async function getMatchesByUserId(
   userId: bigint | number,
   limit = 50,
   before?: string
-): Promise<(TrackMatch & { track_name: string })[]> {
+): Promise<(TrackMatch & { track_name: string; track_uuid: string })[]> {
   const params: (bigint | number | string)[] = [userId, limit];
   let sql = `
-    SELECT tm.*, t.name AS track_name
+    SELECT tm.*, t.name AS track_name, t.uuid AS track_uuid
     FROM track_matches tm
     JOIN tracks t ON t.id = tm.track_id
     WHERE t.user_id = $1`;
@@ -196,7 +196,7 @@ export async function getMatchesByUserId(
     params.push(before);
   }
   sql += ` ORDER BY tm.matched_at DESC LIMIT $2`;
-  const { rows } = await db.query<TrackMatch & { track_name: string }>(sql, params);
+  const { rows } = await db.query<TrackMatch & { track_name: string; track_uuid: string }>(sql, params);
   return rows;
 }
 
