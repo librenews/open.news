@@ -30,8 +30,14 @@ async function getTrackEmbeddings(): Promise<TrackWithEmbedding[]> {
   return cachedTracks;
 }
 
+/** Reset track cache (exported for testing). */
+export function resetTrackCache(): void {
+  cachedTracks = [];
+  cacheAge = 0;
+}
+
 /** Cosine similarity between two normalized vectors. */
-function cosineSimilarity(a: number[], b: number[]): number {
+export function cosineSimilarity(a: number[], b: number[]): number {
   let dot = 0;
   for (let i = 0; i < a.length; i++) {
     dot += a[i] * b[i];
@@ -45,7 +51,7 @@ function cosineSimilarity(a: number[], b: number[]): number {
  * 2. Semantic matching via cosine similarity against track query embeddings
  * Returns deduplicated set of matching track IDs.
  */
-async function matchPost(
+export async function matchPost(
   text: string,
   did: string,
   uri: string,
@@ -88,7 +94,7 @@ async function matchPost(
     if (!track.query_embedding) continue;
     const similarity = cosineSimilarity(postEmbedding, track.query_embedding);
     if (similarity >= track.threshold) {
-      matchedIds.add(track.id);
+      matchedIds.add(Number(track.id));
     }
   }
 
