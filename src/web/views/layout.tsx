@@ -103,6 +103,11 @@ export const Layout = ({
         </nav>
         {children}
       </main>
+      <footer class="container" style="text-align: center; margin-top: 2rem; padding: 1rem 0; font-size: 0.85rem; color: var(--pico-muted-color);">
+        <p>
+          <a href="/privacy" style="color: inherit; text-decoration: underline;">Privacy Policy</a> | <a href="/tos" style="color: inherit; text-decoration: underline;">Terms of Service</a> | Contact: <a href="mailto:app@track.social" style="color: inherit; text-decoration: underline;">app@track.social</a>
+        </p>
+      </footer>
     </body>
   </html>
 );

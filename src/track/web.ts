@@ -214,7 +214,10 @@ app.get('/', async (c) => {
 
   return c.html(renderPage('Dashboard', user, `
     <div class="flex justify-between items-center mb-6">
-      <h2 class="text-xl font-semibold text-slate-800">Your Tracks</h2>
+      <div class="flex items-baseline gap-3">
+        <h2 class="text-xl font-semibold text-slate-800">Your Tracks</h2>
+        <a href="/feed" class="text-sm font-medium text-blue-500 hover:text-blue-700 transition-colors no-underline">(view all matches)</a>
+      </div>
       ${tracks.length >= 5 
         ? `<span class="text-sm font-medium text-amber-600 bg-amber-50 px-3 py-1.5 rounded-lg border border-amber-200">Limit Reached (5/5)</span>`
         : `<button onclick="document.getElementById('new-track-form').classList.toggle('hidden')"
@@ -690,8 +693,6 @@ function renderPage(title: string, user: TrackUser | null, content: string): str
         <img src="/logo.png" alt="Track" class="h-7">
       </a>
       <div class="flex items-center gap-4">
-        <a href="/feed" class="text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors no-underline">All Matches</a>
-        
         ${user ? `
         <div class="relative group">
           <button class="flex items-center justify-center w-8 h-8 rounded-full bg-slate-100 overflow-hidden ring-2 ring-transparent group-hover:ring-blue-500 transition-all focus:outline-none">

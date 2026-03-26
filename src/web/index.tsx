@@ -22,6 +22,8 @@ import { LoginPage } from './views/login.js';
 import { FeedPage } from './views/feed.js';
 import { ChatPage } from './views/chat.js';
 import { Layout } from './views/layout.js';
+import { PrivacyPage } from './views/privacy.js';
+import { TosPage } from './views/tos.js';
 
 const app = new Hono();
 
@@ -123,6 +125,26 @@ app.get('/feed', sessionRequired, async (c) => {
   return c.html(
     (<FeedPage articles={serialized as never} user={user} nextCursor={nextCursor} notice={notice} />) as unknown as string
   );
+});
+
+// GET /privacy
+app.get('/privacy', async (c) => {
+  const userId = c.get('userId' as never) as bigint | undefined;
+  let user = null;
+  if (userId) {
+    user = await getUserById(userId);
+  }
+  return c.html((<PrivacyPage user={user} />) as unknown as string);
+});
+
+// GET /tos
+app.get('/tos', async (c) => {
+  const userId = c.get('userId' as never) as bigint | undefined;
+  let user = null;
+  if (userId) {
+    user = await getUserById(userId);
+  }
+  return c.html((<TosPage user={user} />) as unknown as string);
 });
 
 // POST /logout
