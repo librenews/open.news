@@ -200,6 +200,162 @@ app.get('/stats', async (c) => {
   }
 });
 
+// ─── Legal Pages ────────────────────────────────────────────────────────────
+
+const privacyHtml = `
+<div class="prose prose-slate max-w-none text-slate-800">
+  <h2 class="text-2xl font-semibold mb-2">Privacy Policy</h2>
+  <p class="text-sm text-slate-500 mb-8"><strong>Last updated:</strong> March 2026</p>
+
+  <h3 class="text-lg font-medium mt-6 mb-2">1. Overview</h3>
+  <p class="mb-4">This service provides a feed of relevant content by processing publicly available data from the Bluesky network and matching it against user-defined queries.</p>
+  <p class="mb-4">We are committed to collecting as little personal data as possible.</p>
+
+  <hr class="my-6 border-slate-200" />
+
+  <h3 class="text-lg font-medium mt-6 mb-2">2. Information We Collect</h3>
+  <p class="mb-2">We may collect:</p>
+  <ul class="list-disc pl-5 mb-4 space-y-1 text-slate-700">
+    <li><strong>Account information</strong> (if applicable): email, username</li>
+    <li><strong>User queries and preferences</strong> used to generate feeds</li>
+    <li><strong>Basic technical data</strong> such as IP address, browser type, and request logs</li>
+  </ul>
+  <p class="mb-4">User queries may be stored to improve relevance and system performance.</p>
+
+  <hr class="my-6 border-slate-200" />
+
+  <h3 class="text-lg font-medium mt-6 mb-2">3. How We Use Information</h3>
+  <p class="mb-2">We use collected information to:</p>
+  <ul class="list-disc pl-5 mb-4 space-y-1 text-slate-700">
+    <li>Provide and improve the service</li>
+    <li>Match user queries against incoming content</li>
+    <li>Maintain system performance and prevent abuse</li>
+  </ul>
+
+  <hr class="my-6 border-slate-200" />
+
+  <h3 class="text-lg font-medium mt-6 mb-2">4. Data Sources</h3>
+  <p class="mb-4">We index and process <strong>publicly available content</strong> from the Bluesky network, but we do not own it. This content may be removed or changed at the source.</p>
+
+  <hr class="my-6 border-slate-200" />
+
+  <h3 class="text-lg font-medium mt-6 mb-2">5. AI and Data Processing</h3>
+  <p class="mb-2">We use <strong>locally hosted machine learning models</strong> to generate embeddings and perform semantic search.</p>
+  <ul class="list-disc pl-5 mb-4 space-y-1 text-slate-700">
+    <li>We do <strong>not send user data to third-party AI services</strong></li>
+    <li>All processing is performed on our own infrastructure</li>
+  </ul>
+
+  <hr class="my-6 border-slate-200" />
+
+  <h3 class="text-lg font-medium mt-6 mb-2">6. Data Sharing</h3>
+  <p class="mb-2">We do <strong>not sell or share personal data</strong> with third parties.</p>
+  <p class="mb-2">We only collect basic app performance analytics. We do <strong>not use third-party marketing or tracking analytics</strong> (like Google Analytics).</p>
+  <p class="mb-4">We may use infrastructure providers (e.g., hosting) that process data on our behalf, but they do not have independent rights to use your data.</p>
+
+  <hr class="my-6 border-slate-200" />
+
+  <h3 class="text-lg font-medium mt-6 mb-2">7. Data Retention</h3>
+  <p class="mb-2">We retain data only as long as necessary to operate the service.</p>
+  <p class="mb-4">Users may request deletion of their data where applicable.</p>
+
+  <hr class="my-6 border-slate-200" />
+
+  <h3 class="text-lg font-medium mt-6 mb-2">8. Security</h3>
+  <p class="mb-4">We take reasonable measures to protect data, but no system is completely secure.</p>
+
+  <hr class="my-6 border-slate-200" />
+
+  <h3 class="text-lg font-medium mt-6 mb-2">9. Your Rights</h3>
+  <p class="mb-2">Depending on your location, you may have rights to:</p>
+  <ul class="list-disc pl-5 mb-4 space-y-1 text-slate-700">
+    <li>Access your data</li>
+    <li>Request deletion</li>
+    <li>Object to certain processing</li>
+  </ul>
+  <p class="mb-4">To make a request, contact us at: <a href="mailto:app@track.social" class="text-blue-600 hover:underline">app@track.social</a></p>
+
+  <hr class="my-6 border-slate-200" />
+
+  <h3 class="text-lg font-medium mt-6 mb-2">10. Changes</h3>
+  <p class="mb-4">We may update this policy. Continued use of the service constitutes acceptance of the updated policy.</p>
+</div>
+`;
+
+const tosHtml = `
+<div class="prose prose-slate max-w-none text-slate-800">
+  <h2 class="text-2xl font-semibold mb-2">Terms of Service</h2>
+  <p class="text-sm text-slate-500 mb-8"><strong>Last updated:</strong> March 2026</p>
+
+  <h3 class="text-lg font-medium mt-6 mb-2">1. Use of Service</h3>
+  <p class="mb-2">This service provides content discovery based on user-defined queries and publicly available data.</p>
+  <p class="mb-4">You agree to use the service only for lawful purposes.</p>
+
+  <hr class="my-6 border-slate-200" />
+
+  <h3 class="text-lg font-medium mt-6 mb-2">2. Content Disclaimer</h3>
+  <p class="mb-2">Content surfaced by the service:</p>
+  <ul class="list-disc pl-5 mb-4 space-y-1 text-slate-700">
+    <li>Is sourced from third parties (e.g., Bluesky)</li>
+    <li>We index and process publicly available content but do not own it</li>
+    <li>May be incomplete, inaccurate, or outdated</li>
+  </ul>
+  <p class="mb-4">We do not guarantee the accuracy or reliability of any content.</p>
+
+  <hr class="my-6 border-slate-200" />
+
+  <h3 class="text-lg font-medium mt-6 mb-2">3. No Warranty</h3>
+  <p class="mb-4">The service is provided <strong>"as is"</strong> and <strong>"as available"</strong> without warranties of any kind.</p>
+
+  <hr class="my-6 border-slate-200" />
+
+  <h3 class="text-lg font-medium mt-6 mb-2">4. Limitation of Liability</h3>
+  <p class="mb-2">To the fullest extent permitted by law, we are not liable for:</p>
+  <ul class="list-disc pl-5 mb-4 space-y-1 text-slate-700">
+    <li>Any damages resulting from use of the service</li>
+    <li>Loss of data, profits, or business opportunities</li>
+  </ul>
+
+  <hr class="my-6 border-slate-200" />
+
+  <h3 class="text-lg font-medium mt-6 mb-2">5. Accounts (if applicable)</h3>
+  <p class="mb-2">You are responsible for maintaining the security of your account.</p>
+  <p class="mb-4">We reserve the right to suspend or terminate accounts for abuse.</p>
+
+  <hr class="my-6 border-slate-200" />
+
+  <h3 class="text-lg font-medium mt-6 mb-2">6. Acceptable Use</h3>
+  <p class="mb-2">You agree not to:</p>
+  <ul class="list-disc pl-5 mb-4 space-y-1 text-slate-700">
+    <li>Abuse, scrape, or overload the service</li>
+    <li>Attempt to reverse engineer or disrupt the system</li>
+    <li>Use the service for illegal activities</li>
+  </ul>
+
+  <hr class="my-6 border-slate-200" />
+
+  <h3 class="text-lg font-medium mt-6 mb-2">7. Termination</h3>
+  <p class="mb-4">We may suspend or terminate access at any time.</p>
+
+  <hr class="my-6 border-slate-200" />
+
+  <h3 class="text-lg font-medium mt-6 mb-2">8. Changes</h3>
+  <p class="mb-4">We may update these terms at any time. Continued use constitutes acceptance.</p>
+</div>
+`;
+
+app.get('/privacy', async (c) => {
+  const userId = c.get('userId');
+  const user = userId ? await getTrackUserById(userId) : null;
+  return c.html(renderPage('Privacy Policy', user, privacyHtml));
+});
+
+app.get('/tos', async (c) => {
+  const userId = c.get('userId');
+  const user = userId ? await getTrackUserById(userId) : null;
+  return c.html(renderPage('Terms of Service', user, tosHtml));
+});
+
 // ─── Auth wall ──────────────────────────────────────────────────────────────
 app.use('/*', trackSessionRequired as never);
 
@@ -712,9 +868,16 @@ function renderPage(title: string, user: TrackUser | null, content: string): str
       </div>
     </div>
   </nav>
-  <main class="max-w-3xl mx-auto px-4 py-8">
+  <main class="max-w-3xl mx-auto px-4 py-8 min-h-[calc(100vh-8rem)]">
     ${content}
   </main>
+  <footer class="max-w-3xl mx-auto px-4 py-6 text-center text-sm text-slate-500 border-t border-slate-200 mt-auto">
+    <p>
+      <a href="/privacy" class="hover:text-slate-800 transition-colors no-underline">Privacy Policy</a> | 
+      <a href="/tos" class="hover:text-slate-800 transition-colors no-underline">Terms of Service</a> | 
+      Contact: <a href="mailto:app@track.social" class="hover:text-slate-800 transition-colors no-underline">app@track.social</a>
+    </p>
+  </footer>
 </body>
 </html>`;
 }
