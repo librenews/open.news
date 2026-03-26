@@ -96,6 +96,13 @@ export async function getTracksWithEmbeddings(): Promise<TrackWithEmbedding[]> {
   return rows;
 }
 
+export async function toggleTrackActive(id: bigint | number): Promise<void> {
+  await db.query(
+    'UPDATE tracks SET is_active = NOT is_active, updated_at = NOW() WHERE id = $1',
+    [id]
+  );
+}
+
 export async function deleteTrack(id: bigint | number): Promise<void> {
   await db.query('DELETE FROM tracks WHERE id = $1', [id]);
 }

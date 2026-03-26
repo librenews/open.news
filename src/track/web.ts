@@ -6,7 +6,7 @@ import { createHmac } from 'crypto';
 import { logger } from '../lib/logger.js';
 import {
   createTrack, getTracksByUserId, getTrackById, getTrackByFeedToken,
-  deleteTrack as dbDeleteTrack, updateTrackKeywords, updateTrackQueryEmbedding,
+  deleteTrack as dbDeleteTrack, updateTrackKeywords, updateTrackQueryEmbedding, toggleTrackActive,
   getMatchesByTrackId, getMatchesByUserId, getMatchCountByTrack,
   getFeedSkeletonMatches,
 } from '../db/queries/tracks.js';
@@ -238,7 +238,10 @@ app.get('/', async (c) => {
       ${tracks.map((t) => `
         <div class="bg-white border border-slate-200 rounded-xl p-4 hover:shadow-sm transition-shadow">
           <div class="flex justify-between items-center">
-            <a href="/tracks/${t.id}" class="font-semibold text-slate-800 hover:text-blue-600 transition-colors no-underline">${escHtml(t.name)}</a>
+            <div class="flex items-center gap-2">
+              <a href="/tracks/${t.id}" class="font-semibold text-slate-800 hover:text-blue-600 transition-colors no-underline">${escHtml(t.name)}</a>
+              ${t.is_active ? '<span class="text-xs bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded-full">Active</span>' : '<span class="text-xs bg-amber-50 text-amber-600 px-2 py-0.5 rounded-full">Paused</span>'}
+            </div>
             <span class="text-xs font-medium bg-slate-100 text-slate-500 px-2.5 py-1 rounded-full">${countMap.get(String(t.id)) ?? 0} matches</span>
           </div>
           <div class="mt-2 text-sm text-slate-500">
@@ -247,6 +250,9 @@ app.get('/', async (c) => {
           </div>
           <div class="mt-3 flex items-center gap-4 text-xs">
             <a href="/rss/${t.feed_token}" target="_blank" class="text-blue-500 hover:text-blue-700 transition-colors">RSS Feed</a>
+            <form method="POST" action="/tracks/${t.id}/toggle" class="inline">
+              <button type="submit" class="${t.is_active ? 'text-amber-500 hover:text-amber-700' : 'text-emerald-500 hover:text-emerald-700'} transition-colors cursor-pointer">${t.is_active ? 'Pause' : 'Resume'}</button>
+            </form>
             <form method="POST" action="/tracks/${t.id}/delete" class="inline">
               <button type="submit" class="text-red-400 hover:text-red-600 transition-colors cursor-pointer" onclick="return confirm('Delete this track?')">Delete</button>
             </form>
@@ -282,6 +288,16 @@ app.post('/tracks', async (c) => {
     logger.error({ err }, 'Failed to embed query — track created without semantic matching');
   }
 
+  return c.redirect('/');
+});
+
+app.post('/tracks/:id/toggle', async (c) => {
+  const userId = c.get('userId');
+  const trackId = parseInt(c.req.param('id'), 10);
+  const track = await getTrackById(trackId);
+  if (!track || String(track.user_id) !== String(userId)) return c.text('Not found', 404);
+
+  await toggleTrackActive(trackId);
   return c.redirect('/');
 });
 
