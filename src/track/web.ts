@@ -150,7 +150,7 @@ app.get('/xrpc/app.bsky.feed.getFeedSkeleton', async (c) => {
   }
 
   // No matches or unauthenticated — return explainer post if configured
-  if (FEED_EXPLAINER_URI) {
+  if (FEED_EXPLAINER_URI && !cursor) {
     return c.json({ feed: [{ post: FEED_EXPLAINER_URI }] });
   }
 
