@@ -299,7 +299,7 @@ app.get('/', async (c) => {
               <a href="/tracks/${t.uuid}" class="font-semibold text-slate-800 hover:text-blue-600 transition-colors no-underline">${escHtml(t.name)}</a>
               ${t.is_active ? '<span class="text-xs bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded-full">Active</span>' : '<span class="text-xs bg-amber-50 text-amber-600 px-2 py-0.5 rounded-full">Paused</span>'}
             </div>
-            <span class="text-xs font-medium bg-slate-100 text-slate-500 px-2.5 py-1 rounded-full">${countMap.get(String(t.id)) ?? 0} matches</span>
+            <a href="/tracks/${t.uuid}" class="text-xs font-medium bg-slate-100 text-slate-500 hover:bg-blue-50 hover:text-blue-600 transition-colors px-2.5 py-1 rounded-full no-underline">${countMap.get(String(t.id)) ?? 0} matches</a>
           </div>
           <div class="mt-2 text-sm text-slate-500">
             ${t.query ? `<div class="italic">&ldquo;${escHtml(t.query)}&rdquo;</div>` : ''}
