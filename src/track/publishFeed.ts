@@ -29,7 +29,17 @@ async function main() {
   await agent.login({ identifier: HANDLE!, password: PASSWORD! });
   console.log(`Logged in as ${agent.session?.did}`);
 
-  // Upload avatar if we have the logo
+  // Delete existing if present (allows re-running to update)
+  try {
+    await agent.api.app.bsky.feed.generator.delete(
+      { repo: agent.session!.did, rkey: RECORD_NAME },
+    );
+    console.log('Deleted existing feed record');
+  } catch {
+    // Not found — first publish
+  }
+
+  // Upload avatar after delete (blobs get GC'd with the record)
   let avatarRef: BlobRef | undefined;
   const logoPath = path.join(import.meta.dirname, 'public', 'favicon.png');
   if (fs.existsSync(logoPath)) {
@@ -49,16 +59,6 @@ async function main() {
 
   if (avatarRef) {
     record.avatar = avatarRef;
-  }
-
-  // Delete existing if present (allows re-running to update)
-  try {
-    await agent.api.app.bsky.feed.generator.delete(
-      { repo: agent.session!.did, rkey: RECORD_NAME },
-    );
-    console.log('Deleted existing feed record');
-  } catch {
-    // Not found — first publish
   }
 
   await agent.api.app.bsky.feed.generator.create(
