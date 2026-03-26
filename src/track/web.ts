@@ -11,6 +11,7 @@ import {
   getMatchesByTrackId, getMatchesByUserId, getMatchCountByTrack,
   getFeedSkeletonMatches, getTrackByUuid,
 } from '../db/queries/tracks.js';
+import { RichText } from '@atproto/api';
 import { upsertTrackQuery, deleteTrackQuery } from './opensearch.js';
 import { embedText } from './embedClient.js';
 import { trackAuthRouter, getTrackUserById, getTrackUserByDid, getTrackUserByFeedToken, type TrackUser } from './auth.js';
@@ -806,55 +807,32 @@ function renderMatches(matches: MatchRow[]): string {
 }
 
 function renderRichText(text: string, facetsRaw: any): string {
-  if (!facetsRaw) return escHtml(text).replace(/\n/g, '<br>');
   let facets;
-  try {
-    facets = typeof facetsRaw === 'string' ? JSON.parse(facetsRaw) : facetsRaw;
-  } catch {
-    return escHtml(text).replace(/\n/g, '<br>');
-  }
-  if (!Array.isArray(facets) || facets.length === 0) return escHtml(text).replace(/\n/g, '<br>');
-
-  const encoder = new TextEncoder();
-  const decoder = new TextDecoder();
-  const bytes = encoder.encode(text);
-  
-  let out = '';
-  let lastByte = 0;
-
-  const sorted = [...facets].sort((a, b) => (a.index?.byteStart ?? 0) - (b.index?.byteStart ?? 0));
-
-  for (const f of sorted) {
-    if (!f.index) continue;
-    const start = f.index.byteStart ?? 0;
-    const end = f.index.byteEnd ?? 0;
-    
-    if (start < lastByte || end > bytes.length || start > end) continue;
-
-    if (start > lastByte) {
-      out += escHtml(decoder.decode(bytes.subarray(lastByte, start)));
+  if (facetsRaw) {
+    try {
+      facets = typeof facetsRaw === 'string' ? JSON.parse(facetsRaw) : facetsRaw;
+    } catch {
+      facets = [];
     }
-    const segment = decoder.decode(bytes.subarray(start, end));
-    const escSegment = escHtml(segment);
-    
-    const feature = f.features?.[0];
-    if (feature) {
-      if (feature.$type === 'app.bsky.richtext.facet#link' && feature.uri) {
-        out += `<a href="${escHtml(feature.uri)}" target="_blank" class="text-blue-500 hover:underline break-all">${escSegment}</a>`;
-      } else if (feature.$type === 'app.bsky.richtext.facet#mention' && feature.did) {
-        out += `<a href="https://bsky.app/profile/${escHtml(feature.did)}" target="_blank" class="text-blue-500 hover:underline">${escSegment}</a>`;
-      } else if (feature.$type === 'app.bsky.richtext.facet#tag' && feature.tag) {
-        out += `<a href="https://bsky.app/hashtag/${escHtml(feature.tag)}" target="_blank" class="text-blue-500 hover:underline">${escSegment}</a>`;
-      } else {
-        out += escSegment;
-      }
+  }
+
+  const rt = new RichText({ text, facets: Array.isArray(facets) ? facets : undefined });
+  if (!rt.facets || rt.facets.length === 0) {
+    rt.detectFacetsWithoutResolution();
+  }
+
+  let out = '';
+  for (const segment of rt.segments()) {
+    const escSegment = escHtml(segment.text);
+    if (segment.isLink()) {
+      out += `<a href="${escHtml(segment.link?.uri || '')}" target="_blank" class="text-blue-500 hover:underline break-all">${escSegment}</a>`;
+    } else if (segment.isMention()) {
+      out += `<a href="https://bsky.app/profile/${escHtml(segment.mention?.did || '')}" target="_blank" class="text-blue-500 hover:underline">${escSegment}</a>`;
+    } else if (segment.isTag()) {
+      out += `<a href="https://bsky.app/hashtag/${escHtml(segment.tag?.tag || '')}" target="_blank" class="text-blue-500 hover:underline">${escSegment}</a>`;
     } else {
       out += escSegment;
     }
-    lastByte = end;
-  }
-  if (lastByte < bytes.length) {
-    out += escHtml(decoder.decode(bytes.subarray(lastByte)));
   }
   
   return out.replace(/\n/g, '<br>');
