@@ -267,8 +267,8 @@ app.get('/', async (c) => {
       })();
       </script>
       <div>
-        <label class="block text-xs font-medium text-slate-500 mb-1">Squelch <span class="text-slate-400" id="squelch-val">(0.70)</span></label>
-        <input type="range" name="threshold" min="0" max="1" step="0.01" value="0.70"
+        <label class="block text-xs font-medium text-slate-500 mb-1">Squelch <span class="text-slate-400" id="squelch-val">(0.75)</span></label>
+        <input type="range" name="threshold" min="0" max="1" step="0.01" value="0.75"
           class="w-full accent-blue-500" oninput="document.getElementById('squelch-val').textContent='('+parseFloat(this.value).toFixed(2)+')'">
         <p class="text-xs text-slate-400 mt-1">Lower = more matches, higher = stricter semantic relevance.</p>
       </div>
@@ -322,7 +322,7 @@ app.post('/tracks', async (c) => {
   if (!name || !query) return c.redirect('/');
 
   const keywords = keywordsRaw ? keywordsRaw.split(',').map((k) => k.trim()).filter(Boolean) : [];
-  const threshold = parseFloat(String(body.threshold ?? '0.7'));
+  const threshold = parseFloat(String(body.threshold ?? '0.75'));
 
   const track = await createTrack(userId, name, keywords, '', query, isNaN(threshold) ? 0.7 : threshold);
   const osQueryId = await upsertTrackQuery(track.id, keywords);
@@ -445,7 +445,7 @@ app.post('/tracks/:id/edit', async (c) => {
   const name = String(body.name ?? '').trim();
   const query = String(body.query ?? '').trim();
   const keywordsRaw = String(body.keywords ?? '').trim();
-  const threshold = parseFloat(String(body.threshold ?? '0.7'));
+  const threshold = parseFloat(String(body.threshold ?? '0.75'));
   const keywords = keywordsRaw ? keywordsRaw.split(',').map((k) => k.trim()).filter(Boolean) : [];
 
   if (!name || !query) return c.redirect(`/tracks/${trackId}/edit`);

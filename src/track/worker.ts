@@ -56,12 +56,18 @@ async function matchPost(
   // Get active tracks (cached, refreshes every 30s)
   const tracks = await getTrackEmbeddings();
   const activeIds = new Set(tracks.map((t) => t.id));
+  const trackById = new Map(tracks.map((t) => [t.id, t]));
 
-  // Phase 1: Keyword percolate (filtered to active tracks only)
+  // Phase 1: Keyword percolate — still checked against squelch threshold
   try {
     const keywordMatches = await percolatePost(text, did, uri);
     for (const id of keywordMatches) {
-      if (activeIds.has(id)) matchedIds.add(id);
+      if (!activeIds.has(id)) continue;
+      const track = trackById.get(id);
+      if (track) {
+        const similarity = cosineSimilarity(postEmbedding, track.query_embedding);
+        if (similarity >= track.threshold) matchedIds.add(id);
+      }
     }
   } catch (err) {
     logger.error({ err, uri }, 'Keyword percolate failed');

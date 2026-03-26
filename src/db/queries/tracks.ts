@@ -23,7 +23,7 @@ export async function createTrack(
   keywords: string[],
   osQueryId: string,
   query?: string,
-  threshold = 0.7
+  threshold = 0.75
 ): Promise<Track> {
   const { rows } = await db.query<Track>(
     `INSERT INTO tracks (user_id, name, keywords, os_query_id, query, threshold)
