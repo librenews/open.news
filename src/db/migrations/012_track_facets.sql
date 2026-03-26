@@ -1,0 +1,1 @@
+ALTER TABLE track_matches ADD COLUMN IF NOT EXISTS facets JSONB;

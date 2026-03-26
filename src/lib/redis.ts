@@ -20,8 +20,8 @@ export function getRedis(): Redis {
  * Fire-and-forget push to Redis stream.
  * Errors are logged but never thrown — the firehose must not block.
  */
-export function xaddPost(did: string, text: string, uri: string, timeUs: string, langs: string): void {
+export function xaddPost(did: string, text: string, uri: string, timeUs: string, langs: string, facets = ''): void {
   const r = getRedis();
-  r.xadd('track:posts', '*', 'did', did, 'text', text, 'uri', uri, 'ts', timeUs, 'langs', langs)
+  r.xadd('track:posts', '*', 'did', did, 'text', text, 'uri', uri, 'ts', timeUs, 'langs', langs, 'facets', facets)
     .catch((err: Error) => logger.warn({ err }, 'Redis XADD failed'));
 }

@@ -733,6 +733,7 @@ interface MatchRow {
   post_text: string;
   matched_at: Date;
   track_name?: string;
+  facets?: string | null;
 }
 
 function renderMatches(matches: MatchRow[]): string {
@@ -750,10 +751,10 @@ function renderMatches(matches: MatchRow[]): string {
             <span class="text-sm font-semibold author-name">${m.post_did.slice(0, 16)}…</span>
             <span class="text-xs text-slate-400 font-normal author-handle hidden group-hover:text-blue-400"></span>
           </a>
-          <span class="text-xs text-slate-400">· ${ago}</span>
+          <span class="text-xs text-slate-400">· <a href="${bskyUrl}" target="_blank" class="text-slate-400 hover:underline">${ago}</a></span>
           ${m.track_name ? ` · <span class="bg-gradient-to-r from-blue-500 to-emerald-500 text-white text-[10px] font-medium px-1.5 py-0.5 rounded-full">${escHtml(m.track_name)}</span>` : ''}
         </div>
-        <div class="text-sm text-slate-700 leading-relaxed">${escHtml(m.post_text)}</div>
+        <div class="text-sm text-slate-700 leading-relaxed break-words">${renderRichText(m.post_text, m.facets)}</div>
         <a href="${bskyUrl}" target="_blank" class="text-xs text-blue-500 hover:text-blue-700 mt-3 inline-block transition-colors no-underline">View on Bluesky →</a>
       </div>`;
   }).join('')}</div>
@@ -798,6 +799,61 @@ function renderMatches(matches: MatchRow[]): string {
     }
   })();
   </script>`;
+}
+
+function renderRichText(text: string, facetsRaw: any): string {
+  if (!facetsRaw) return escHtml(text).replace(/\n/g, '<br>');
+  let facets;
+  try {
+    facets = typeof facetsRaw === 'string' ? JSON.parse(facetsRaw) : facetsRaw;
+  } catch {
+    return escHtml(text).replace(/\n/g, '<br>');
+  }
+  if (!Array.isArray(facets) || facets.length === 0) return escHtml(text).replace(/\n/g, '<br>');
+
+  const encoder = new TextEncoder();
+  const decoder = new TextDecoder();
+  const bytes = encoder.encode(text);
+  
+  let out = '';
+  let lastByte = 0;
+
+  const sorted = [...facets].sort((a, b) => (a.index?.byteStart ?? 0) - (b.index?.byteStart ?? 0));
+
+  for (const f of sorted) {
+    if (!f.index) continue;
+    const start = f.index.byteStart ?? 0;
+    const end = f.index.byteEnd ?? 0;
+    
+    if (start < lastByte || end > bytes.length || start > end) continue;
+
+    if (start > lastByte) {
+      out += escHtml(decoder.decode(bytes.subarray(lastByte, start)));
+    }
+    const segment = decoder.decode(bytes.subarray(start, end));
+    const escSegment = escHtml(segment);
+    
+    const feature = f.features?.[0];
+    if (feature) {
+      if (feature.$type === 'app.bsky.richtext.facet#link' && feature.uri) {
+        out += `<a href="${escHtml(feature.uri)}" target="_blank" class="text-blue-500 hover:underline break-all">${escSegment}</a>`;
+      } else if (feature.$type === 'app.bsky.richtext.facet#mention' && feature.did) {
+        out += `<a href="https://bsky.app/profile/${escHtml(feature.did)}" target="_blank" class="text-blue-500 hover:underline">${escSegment}</a>`;
+      } else if (feature.$type === 'app.bsky.richtext.facet#tag' && feature.tag) {
+        out += `<a href="https://bsky.app/hashtag/${escHtml(feature.tag)}" target="_blank" class="text-blue-500 hover:underline">${escSegment}</a>`;
+      } else {
+        out += escSegment;
+      }
+    } else {
+      out += escSegment;
+    }
+    lastByte = end;
+  }
+  if (lastByte < bytes.length) {
+    out += escHtml(decoder.decode(bytes.subarray(lastByte)));
+  }
+  
+  return out.replace(/\n/g, '<br>');
 }
 
 function timeAgo(date: Date): string {
