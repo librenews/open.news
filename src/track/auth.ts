@@ -154,7 +154,7 @@ trackAuthRouter.get('/login', (c) => {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Track — Monitor Bluesky by Keyword</title>
+  <title>Track — AI-Powered Bluesky Monitoring</title>
   <link rel="icon" type="image/png" href="/favicon.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -163,7 +163,7 @@ trackAuthRouter.get('/login', (c) => {
 <body class="bg-white font-[Inter] text-slate-800 min-h-screen flex flex-col items-center justify-center px-4">
   <div class="w-full max-w-sm flex flex-col items-center">
     <img src="/home-logo.png" alt="Track" class="h-20 mb-8">
-    <p class="text-slate-500 text-sm mb-8 text-center">Monitor Bluesky posts by keyword.<br>Sign in with your Bluesky account to get started.</p>
+    <p class="text-slate-500 text-sm mb-8 text-center">AI-powered semantic search on the Bluesky firehose.<br>Sign in with your Bluesky account to start tracking.</p>
     <form action="/oauth/login" method="GET" class="w-full space-y-4">
       <div>
         <label class="block text-xs font-medium text-slate-500 mb-1">Bluesky Handle</label>
