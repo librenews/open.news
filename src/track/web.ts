@@ -67,6 +67,8 @@ const trackSessionRequired = createMiddleware<{
 app.use('*', trackSessionOptional as never);
 app.route('/', trackAuthRouter);
 
+app.get('/health', (c) => c.json({ status: 'ok', uptime: Math.floor(process.uptime()) }));
+
 // ─── Public: RSS feeds ──────────────────────────────────────────────────────
 
 app.get('/rss/:token', async (c) => {
