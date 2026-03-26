@@ -215,10 +215,12 @@ app.get('/', async (c) => {
   return c.html(renderPage('Dashboard', user, `
     <div class="flex justify-between items-center mb-6">
       <h2 class="text-xl font-semibold text-slate-800">Your Tracks</h2>
-      <button onclick="document.getElementById('new-track-form').classList.toggle('hidden')"
-        class="px-4 py-2 bg-gradient-to-r from-blue-500 to-emerald-500 text-white text-sm font-medium rounded-lg hover:from-blue-600 hover:to-emerald-600 transition-all shadow-sm cursor-pointer">
-        + New Track
-      </button>
+      ${tracks.length >= 5 
+        ? `<span class="text-sm font-medium text-amber-600 bg-amber-50 px-3 py-1.5 rounded-lg border border-amber-200">Limit Reached (5/5)</span>`
+        : `<button onclick="document.getElementById('new-track-form').classList.toggle('hidden')"
+            class="px-4 py-2 bg-gradient-to-r from-blue-500 to-emerald-500 text-white text-sm font-medium rounded-lg hover:from-blue-600 hover:to-emerald-600 transition-all shadow-sm cursor-pointer">
+            + New Track
+          </button>`}
     </div>
 
     <form id="new-track-form" method="POST" action="/tracks" class="hidden mb-6 p-5 bg-slate-50 border border-slate-200 rounded-xl space-y-4">
@@ -331,6 +333,10 @@ app.get('/', async (c) => {
 
 app.post('/tracks', async (c) => {
   const userId = c.get('userId');
+  
+  const tracks = await getTracksByUserId(userId);
+  if (tracks.length >= 5) return c.redirect('/?error=limit_reached');
+
   const body = await c.req.parseBody();
   const name = String(body.name ?? '').trim().slice(0, 75);
   const query = String(body.query ?? '').trim().slice(0, 600);

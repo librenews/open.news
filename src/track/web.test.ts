@@ -120,4 +120,16 @@ describe('API Abuse Protection', () => {
     expect(dbName).toBe(name);
     expect(dbQuery).toBe(query);
   });
+
+  it('enforces a maximum of 5 tracks per user', async () => {
+    // Mock getTracksByUserId to return 5 items
+    const { getTracksByUserId } = await import('../db/queries/tracks.js');
+    vi.mocked(getTracksByUserId).mockResolvedValueOnce(Array(5).fill({}) as any);
+
+    const res = await postForm('/tracks', { name: 'Too Many' });
+
+    expect(res.status).toBe(302);
+    expect(res.headers.get('Location')).toBe('/?error=limit_reached');
+    expect(mockCreateTrack).not.toHaveBeenCalled();
+  });
 });
