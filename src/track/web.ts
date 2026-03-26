@@ -222,6 +222,12 @@ app.get('/', async (c) => {
           oninput="document.getElementById('squelch-section').style.display = this.value.trim() ? 'block' : 'none'">
         <p class="text-xs text-slate-400 mt-1">Describe what you want to find in natural language. Leave blank for keyword-only matching.</p>
       </div>
+      <div id="squelch-section" style="display:none">
+        <label class="block text-xs font-medium text-slate-500 mb-1">Squelch <span class="text-slate-400" id="squelch-val">(0.75)</span></label>
+        <input type="range" name="threshold" min="0" max="1" step="0.01" value="0.75"
+          class="w-full accent-blue-500" oninput="document.getElementById('squelch-val').textContent='('+parseFloat(this.value).toFixed(2)+')'">
+        <p class="text-xs text-slate-400 mt-1">Lower = more matches, higher = stricter semantic relevance.</p>
+      </div>
       <div>
         <label class="block text-xs font-medium text-slate-500 mb-1">Keywords <span class="text-slate-400">(optional)</span></label>
         <input type="hidden" name="keywords" id="keywords-value">
@@ -267,12 +273,6 @@ app.get('/', async (c) => {
         });
       })();
       </script>
-      <div id="squelch-section">
-        <label class="block text-xs font-medium text-slate-500 mb-1">Squelch <span class="text-slate-400" id="squelch-val">(0.75)</span></label>
-        <input type="range" name="threshold" min="0" max="1" step="0.01" value="0.75"
-          class="w-full accent-blue-500" oninput="document.getElementById('squelch-val').textContent='('+parseFloat(this.value).toFixed(2)+')'">
-        <p class="text-xs text-slate-400 mt-1">Lower = more matches, higher = stricter semantic relevance.</p>
-      </div>
       <button type="submit"
         class="px-5 py-2.5 bg-gradient-to-r from-blue-500 to-emerald-500 text-white text-sm font-medium rounded-lg hover:from-blue-600 hover:to-emerald-600 transition-all cursor-pointer">
         Create Track
@@ -378,6 +378,12 @@ app.get('/tracks/:id/edit', async (c) => {
           oninput="document.getElementById('edit-squelch-section').style.display = this.value.trim() ? 'block' : 'none'">
         <p class="text-xs text-slate-400 mt-1">Describe what you want to find in natural language. Leave blank for keyword-only matching.</p>
       </div>
+      <div id="edit-squelch-section" style="${track.query ? '' : 'display:none'}">
+        <label class="block text-xs font-medium text-slate-500 mb-1">Squelch <span class="text-slate-400" id="edit-squelch-val">(${track.threshold.toFixed(2)})</span></label>
+        <input type="range" name="threshold" min="0" max="1" step="0.01" value="${track.threshold.toFixed(2)}"
+          class="w-full accent-blue-500" oninput="document.getElementById('edit-squelch-val').textContent='('+parseFloat(this.value).toFixed(2)+')'">
+        <p class="text-xs text-slate-400 mt-1">Lower = more matches, higher = stricter semantic relevance.</p>
+      </div>
       <div>
         <label class="block text-xs font-medium text-slate-500 mb-1">Keywords <span class="text-slate-400">(optional)</span></label>
         <input type="hidden" name="keywords" id="edit-kw-value" value="${track.keywords.map(k => escHtml(k)).join(',')}">
@@ -424,12 +430,6 @@ app.get('/tracks/:id/edit', async (c) => {
         render();
       })();
       </script>
-      <div id="edit-squelch-section" style="${track.query ? '' : 'display:none'}">
-        <label class="block text-xs font-medium text-slate-500 mb-1">Squelch <span class="text-slate-400" id="edit-squelch-val">(${track.threshold.toFixed(2)})</span></label>
-        <input type="range" name="threshold" min="0" max="1" step="0.01" value="${track.threshold.toFixed(2)}"
-          class="w-full accent-blue-500" oninput="document.getElementById('edit-squelch-val').textContent='('+parseFloat(this.value).toFixed(2)+')'">
-        <p class="text-xs text-slate-400 mt-1">Lower = more matches, higher = stricter semantic relevance.</p>
-      </div>
       <button type="submit"
         class="px-5 py-2.5 bg-gradient-to-r from-blue-500 to-emerald-500 text-white text-sm font-medium rounded-lg hover:from-blue-600 hover:to-emerald-600 transition-all cursor-pointer">
         Save Changes
