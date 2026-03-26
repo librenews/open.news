@@ -227,9 +227,9 @@ app.get('/', async (c) => {
       </div>
       <div>
         <label class="block text-xs font-medium text-slate-500 mb-1">Search Query <span class="text-slate-400">(English only, optional)</span></label>
-        <input type="text" name="query" id="query-input" placeholder="e.g. artificial intelligence breakthroughs and their impact on society"
-          class="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          oninput="document.getElementById('squelch-section').style.display = this.value.trim() ? 'block' : 'none'">
+        <textarea name="query" id="query-input" placeholder="e.g. artificial intelligence breakthroughs and their impact on society" rows="3" maxlength="600"
+          class="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"
+          oninput="document.getElementById('squelch-section').style.display = this.value.trim() ? 'block' : 'none'"></textarea>
         <p class="text-xs text-slate-400 mt-1">Describe what you want to find in natural language. Leave blank for keyword-only matching.</p>
       </div>
       <div id="squelch-section" style="display:none">
@@ -331,7 +331,7 @@ app.post('/tracks', async (c) => {
   const userId = c.get('userId');
   const body = await c.req.parseBody();
   const name = String(body.name ?? '').trim().slice(0, 75);
-  const query = String(body.query ?? '').trim();
+  const query = String(body.query ?? '').trim().slice(0, 600);
   const keywordsRaw = String(body.keywords ?? '').trim();
   const keywords = keywordsRaw ? keywordsRaw.split(',').map((k) => k.trim()).filter(Boolean).slice(0, 5) : [];
   const threshold = parseFloat(String(body.threshold ?? '0.75'));
@@ -387,9 +387,9 @@ app.get('/tracks/:uuid/edit', async (c) => {
       </div>
       <div>
         <label class="block text-xs font-medium text-slate-500 mb-1">Search Query <span class="text-slate-400">(English only, optional)</span></label>
-        <input type="text" name="query" value="${escHtml(track.query ?? '')}"
-          class="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          oninput="document.getElementById('edit-squelch-section').style.display = this.value.trim() ? 'block' : 'none'">
+        <textarea name="query" maxlength="600" rows="3"
+          class="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"
+          oninput="document.getElementById('edit-squelch-section').style.display = this.value.trim() ? 'block' : 'none'">${escHtml(track.query ?? '')}</textarea>
         <p class="text-xs text-slate-400 mt-1">Describe what you want to find in natural language. Leave blank for keyword-only matching.</p>
       </div>
       <div id="edit-squelch-section" style="${track.query ? '' : 'display:none'}">
@@ -460,7 +460,7 @@ app.post('/tracks/:uuid/edit', async (c) => {
 
   const body = await c.req.parseBody();
   const name = String(body.name ?? '').trim().slice(0, 75);
-  const query = String(body.query ?? '').trim();
+  const query = String(body.query ?? '').trim().slice(0, 600);
   const keywordsRaw = String(body.keywords ?? '').trim();
   const threshold = parseFloat(String(body.threshold ?? '0.75'));
   const keywords = keywordsRaw ? keywordsRaw.split(',').map((k) => k.trim()).filter(Boolean).slice(0, 5) : [];
