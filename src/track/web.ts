@@ -21,7 +21,7 @@ const TRACK_PORT = Number(process.env.TRACK_PORT ?? 4200);
 const SESSION_SECRET = process.env.SESSION_SECRET ?? 'dev-secret';
 
 type Env = { Variables: { userId: bigint } };
-const app = new Hono<Env>();
+export const app = new Hono<Env>();
 
 // ─── Static files (only serve actual file requests) ─────────────────────────
 app.use('/favicon.png', serveStatic({ root: './src/track/public', path: 'favicon.png' }));
@@ -333,7 +333,7 @@ app.post('/tracks', async (c) => {
   const name = String(body.name ?? '').trim().slice(0, 75);
   const query = String(body.query ?? '').trim().slice(0, 600);
   const keywordsRaw = String(body.keywords ?? '').trim();
-  const keywords = keywordsRaw ? keywordsRaw.split(',').map((k) => k.trim()).filter(Boolean).slice(0, 5) : [];
+  const keywords = keywordsRaw ? keywordsRaw.split(',').map((k) => k.trim().slice(0, 100)).filter(Boolean).slice(0, 5) : [];
   const threshold = parseFloat(String(body.threshold ?? '0.75'));
 
   if (!name || (!query && keywords.length === 0)) return c.redirect('/');
@@ -463,7 +463,7 @@ app.post('/tracks/:uuid/edit', async (c) => {
   const query = String(body.query ?? '').trim().slice(0, 600);
   const keywordsRaw = String(body.keywords ?? '').trim();
   const threshold = parseFloat(String(body.threshold ?? '0.75'));
-  const keywords = keywordsRaw ? keywordsRaw.split(',').map((k) => k.trim()).filter(Boolean).slice(0, 5) : [];
+  const keywords = keywordsRaw ? keywordsRaw.split(',').map((k) => k.trim().slice(0, 100)).filter(Boolean).slice(0, 5) : [];
 
   if (!name || (!query && keywords.length === 0)) return c.redirect(`/tracks/${track.uuid}/edit`);
 

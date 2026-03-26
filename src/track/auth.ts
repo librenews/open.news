@@ -97,7 +97,7 @@ async function getOAuthClient(): Promise<NodeOAuthClient> {
   return _oauthClient;
 }
 
-async function upsertTrackUser(params: {
+export async function upsertTrackUser(params: {
   did: string;
   handle: string;
   display_name?: string | null;
