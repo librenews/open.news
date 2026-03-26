@@ -711,6 +711,7 @@ app.get('/feed', async (c) => {
   return c.html(renderPage('All Matches', user, `
     <div class="flex items-center gap-3 mb-6">
       <h2 class="text-xl font-semibold text-slate-800">All Matches</h2>
+      <a href="https://bsky.app/profile/track.social/feed/track-matches" target="_blank" class="text-xs font-medium text-blue-500 hover:text-blue-700 transition-colors bg-blue-50 px-2 py-1 rounded-md no-underline">Bluesky Feed</a>
       <a href="/rss/user/${user?.feed_token ?? ''}" target="_blank" class="text-orange-400 hover:text-orange-600 transition-colors" title="RSS Feed — All Matches">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="6.18" cy="17.82" r="2.18"/><path d="M4 4.44v2.83c7.03 0 12.73 5.7 12.73 12.73h2.83c0-8.59-6.97-15.56-15.56-15.56zm0 5.66v2.83c3.9 0 7.07 3.17 7.07 7.07h2.83c0-5.47-4.43-9.9-9.9-9.9z"/></svg>
       </a>
