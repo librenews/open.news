@@ -688,7 +688,10 @@ app.get('/tracks/:uuid', async (c) => {
     <div class="flex justify-between items-center mb-6">
       <div>
         <a href="/" class="text-sm text-blue-500 hover:text-blue-700 transition-colors">← Back</a>
-        <h2 class="text-xl font-semibold text-slate-800 mt-1">${escHtml(track.name)}</h2>
+        <div class="flex items-center gap-3 mt-1">
+          <h2 class="text-xl font-semibold text-slate-800">${escHtml(track.name)}</h2>
+          <a href="/tracks/${track.uuid}/edit" class="text-xs font-medium text-blue-500 hover:text-blue-700 transition-colors bg-blue-50 px-2 py-1 rounded-md no-underline">Edit Track</a>
+        </div>
         <div class="text-sm text-slate-500 mt-1">
           Keywords: ${track.keywords.map((k) => `<code class="bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded text-xs font-medium">${escHtml(k)}</code>`).join(' ')}
         </div>
