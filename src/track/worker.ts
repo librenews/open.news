@@ -62,11 +62,11 @@ async function matchPost(
   try {
     const keywordMatches = await percolatePost(text, did, uri);
     if (keywordMatches.length > 0) {
-      logger.debug({ keywordMatches, activeCount: activeIds.size, uri }, 'Percolate matches found');
+      logger.info({ keywordMatches, activeCount: activeIds.size, uri }, 'Percolate matches found');
     }
     for (const id of keywordMatches) {
       if (!activeIds.has(id)) {
-        logger.debug({ trackId: id }, 'Percolate match filtered — not in active set');
+        logger.info({ trackId: id, activeIds: Array.from(activeIds) }, 'Percolate match filtered — not in active set');
         continue;
       }
       const track = trackById.get(id);
@@ -180,9 +180,7 @@ async function processMessages(redis: Redis): Promise<void> {
     }
   }
 
-  if (totalMatches > 0) {
-    logger.info({ posts: posts.length, matches: totalMatches, embedMs }, 'Batch processed');
-  }
+  logger.info({ posts: posts.length, matches: totalMatches, embedMs }, 'Batch processed');
 
   // 4. Bulk ACK
   await redis.xack(STREAM_KEY, GROUP_NAME, ...posts.map((p) => p.messageId), ...ackIds);
