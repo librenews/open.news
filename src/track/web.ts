@@ -302,8 +302,8 @@ app.get('/', async (c) => {
             <span class="text-xs font-medium bg-slate-100 text-slate-500 px-2.5 py-1 rounded-full">${countMap.get(String(t.id)) ?? 0} matches</span>
           </div>
           <div class="mt-2 text-sm text-slate-500">
-            ${t.query ? `<span class="italic">&ldquo;${escHtml(t.query)}&rdquo;</span>` : ''}
-            ${t.keywords.length > 0 ? `<span class="${t.query ? 'ml-2' : ''}">Keywords: ${t.keywords.map((k) => `<code class="bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded text-xs font-medium">${escHtml(k)}</code>`).join(' ')}</span>` : ''}
+            ${t.query ? `<div class="italic">&ldquo;${escHtml(t.query)}&rdquo;</div>` : ''}
+            ${t.keywords.length > 0 ? `<div class="${t.query ? 'mt-1' : ''}">Keywords: ${t.keywords.map((k) => `<code class="bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded text-xs font-medium">${escHtml(k)}</code>`).join(' ')}</div>` : ''}
           </div>
           <div class="mt-3 flex items-center justify-between text-xs">
             <div class="flex items-center gap-4">
