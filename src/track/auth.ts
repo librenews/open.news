@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { NodeOAuthClient } from '@atproto/oauth-client-node';
 import { pool } from '../db/client.js';
 import { logger } from '../lib/logger.js';
+import { getSystemMetrics } from '../db/queries/tracks.js';
 
 const TRACK_BASE_URL = process.env.TRACK_BASE_URL ?? 'http://localhost:4200';
 const TRACK_OAUTH_CLIENT_ID = process.env.TRACK_OAUTH_CLIENT_ID ?? `${TRACK_BASE_URL}/client-metadata.json`;
@@ -156,7 +157,17 @@ trackAuthRouter.get('/client-metadata.json', (c) => {
 });
 
 // Login page
-trackAuthRouter.get('/login', (c) => {
+trackAuthRouter.get('/login', async (c) => {
+  let matchesText = '';
+  try {
+    const metrics = await getSystemMetrics();
+    const formattedMatches = new Intl.NumberFormat('en-US').format(parseInt(metrics.totalMatches, 10));
+    const formattedTracks = new Intl.NumberFormat('en-US').format(parseInt(metrics.activeTracks, 10));
+    matchesText = `<p class="text-[11px] text-slate-400 mt-2">${formattedMatches} matches across ${formattedTracks} successful tracks</p>`;
+  } catch (err) {
+    logger.error({ err }, 'Failed to fetch system metrics for login page');
+  }
+
   return c.html(`<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -183,7 +194,10 @@ trackAuthRouter.get('/login', (c) => {
         Sign in with Bluesky
       </button>
     </form>
-    <p class="text-xs text-slate-400 mt-8">track.social &middot; Powered by the AT Protocol</p>
+    <div class="mt-8 text-center flex flex-col items-center">
+      <p class="text-xs text-slate-400">track.social &middot; Powered by the AT Protocol</p>
+      ${matchesText}
+    </div>
   </div>
 </body>
 </html>`);

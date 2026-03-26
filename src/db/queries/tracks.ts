@@ -232,3 +232,17 @@ export async function getFeedSkeletonMatches(
   const { rows } = await db.query<{ post_uri: string; matched_at: string }>(sql, params);
   return rows;
 }
+
+// ─── System Metrics ─────────────────────────────────────────────────────────
+
+export async function getSystemMetrics(): Promise<{ totalMatches: string; activeTracks: string }> {
+  const { rows } = await db.query<{ matches: string; tracks: string }>(`
+    SELECT 
+      (SELECT COUNT(*) FROM track_matches) as matches,
+      (SELECT COUNT(*) FROM tracks WHERE is_active = TRUE) as tracks
+  `);
+  return {
+    totalMatches: rows[0].matches,
+    activeTracks: rows[0].tracks
+  };
+}
