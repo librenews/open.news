@@ -221,11 +221,50 @@ app.get('/', async (c) => {
         <p class="text-xs text-slate-400 mt-1">Describe what you want to find in natural language. Uses semantic AI matching.</p>
       </div>
       <div>
-        <label class="block text-xs font-medium text-slate-500 mb-1">Boost Keywords <span class="text-slate-400">(optional, comma-separated)</span></label>
-        <input type="text" name="keywords" placeholder="GPT, LLM, neural network"
-          class="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+        <label class="block text-xs font-medium text-slate-500 mb-1">Boost Keywords <span class="text-slate-400">(optional)</span></label>
+        <input type="hidden" name="keywords" id="keywords-value">
+        <div id="keywords-wrap" class="flex flex-wrap gap-1.5 p-2 border border-slate-200 rounded-lg min-h-[42px] cursor-text focus-within:ring-2 focus-within:ring-blue-500" onclick="document.getElementById('kw-input').focus()">
+          <input type="text" id="kw-input" placeholder="Type a keyword and press Enter"
+            class="flex-1 min-w-[140px] border-none outline-none text-sm bg-transparent p-0.5">
+        </div>
         <p class="text-xs text-slate-400 mt-1">Exact keyword matches boost ranking alongside semantic search.</p>
       </div>
+      <script>
+      (function(){
+        const wrap = document.getElementById('keywords-wrap');
+        const input = document.getElementById('kw-input');
+        const hidden = document.getElementById('keywords-value');
+        const tags = [];
+        function render() {
+          wrap.querySelectorAll('.kw-pill').forEach(el => el.remove());
+          tags.forEach((tag, i) => {
+            const pill = document.createElement('span');
+            pill.className = 'kw-pill inline-flex items-center gap-1 bg-blue-50 text-blue-700 text-xs font-medium px-2.5 py-1 rounded-full';
+            pill.innerHTML = tag + '<button type="button" class="ml-0.5 text-blue-400 hover:text-blue-700 cursor-pointer" data-i="' + i + '">&times;</button>';
+            wrap.insertBefore(pill, input);
+          });
+          hidden.value = tags.join(',');
+        }
+        function add(val) {
+          const v = val.trim();
+          if (v && !tags.includes(v)) { tags.push(v); render(); }
+          input.value = '';
+        }
+        input.addEventListener('keydown', function(e) {
+          if ((e.key === 'Enter' || e.key === ',' || e.key === 'Tab') && input.value.trim()) {
+            e.preventDefault();
+            add(input.value);
+          }
+          if (e.key === 'Backspace' && !input.value && tags.length) {
+            tags.pop(); render();
+          }
+        });
+        input.addEventListener('blur', function() { if (input.value.trim()) add(input.value); });
+        wrap.addEventListener('click', function(e) {
+          if (e.target.dataset.i !== undefined) { tags.splice(Number(e.target.dataset.i), 1); render(); }
+        });
+      })();
+      </script>
       <button type="submit"
         class="px-5 py-2.5 bg-gradient-to-r from-blue-500 to-emerald-500 text-white text-sm font-medium rounded-lg hover:from-blue-600 hover:to-emerald-600 transition-all cursor-pointer">
         Create Track
