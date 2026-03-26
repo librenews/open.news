@@ -56,6 +56,7 @@ export async function matchPost(
   did: string,
   uri: string,
   postEmbedding: number[],
+  isEnglish = true,
 ): Promise<number[]> {
   const matchedIds = new Set<number>();
 
@@ -77,24 +78,27 @@ export async function matchPost(
       }
       const track = trackById.get(id);
       if (!track || !track.query_embedding) {
-        // No semantic query — pure keyword boolean match
+        // No semantic query — pure keyword boolean match (any language)
         matchedIds.add(id);
-      } else {
-        // Has semantic query — check against squelch threshold
+      } else if (isEnglish) {
+        // Has semantic query — only check squelch for English posts
         const similarity = cosineSimilarity(postEmbedding, track.query_embedding);
         if (similarity >= track.threshold) matchedIds.add(id);
       }
+      // Non-English + has semantic query — skip (keyword alone isn't enough)
     }
   } catch (err) {
     logger.error({ err, uri }, 'Keyword percolate failed');
   }
 
-  // Phase 2: Semantic similarity (only for tracks with embeddings)
-  for (const track of tracks) {
-    if (!track.query_embedding) continue;
-    const similarity = cosineSimilarity(postEmbedding, track.query_embedding);
-    if (similarity >= track.threshold) {
-      matchedIds.add(Number(track.id));
+  // Phase 2: Semantic similarity (English posts only)
+  if (isEnglish) {
+    for (const track of tracks) {
+      if (!track.query_embedding) continue;
+      const similarity = cosineSimilarity(postEmbedding, track.query_embedding);
+      if (similarity >= track.threshold) {
+        matchedIds.add(Number(track.id));
+      }
     }
   }
 
@@ -116,6 +120,7 @@ interface Post {
   did: string;
   text: string;
   uri: string;
+  langs: string;
 }
 
 async function processMessages(redis: Redis): Promise<void> {
@@ -148,7 +153,7 @@ async function processMessages(redis: Redis): Promise<void> {
         continue;
       }
 
-      posts.push({ messageId, did: data.did, text: data.text, uri: data.uri });
+      posts.push({ messageId, did: data.did, text: data.text, uri: data.uri, langs: data.langs ?? '' });
     }
   }
 
@@ -176,7 +181,8 @@ async function processMessages(redis: Redis): Promise<void> {
   for (let i = 0; i < posts.length; i++) {
     const post = posts[i];
     try {
-      const matchedTrackIds = await matchPost(post.text, post.did, post.uri, embeddings[i]);
+      const isEnglish = !post.langs || post.langs.split(',').some((l) => l.startsWith('en'));
+      const matchedTrackIds = await matchPost(post.text, post.did, post.uri, embeddings[i], isEnglish);
       for (const trackId of matchedTrackIds) {
         await insertTrackMatch(trackId, post.uri, post.did, post.text);
       }

@@ -216,7 +216,7 @@ app.get('/', async (c) => {
           class="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
       </div>
       <div>
-        <label class="block text-xs font-medium text-slate-500 mb-1">Search Query <span class="text-slate-400">(optional)</span></label>
+        <label class="block text-xs font-medium text-slate-500 mb-1">Search Query <span class="text-slate-400">(English only, optional)</span></label>
         <input type="text" name="query" id="query-input" placeholder="e.g. artificial intelligence breakthroughs and their impact on society"
           class="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           oninput="document.getElementById('squelch-section').style.display = this.value.trim() ? 'block' : 'none'">
@@ -372,7 +372,7 @@ app.get('/tracks/:id/edit', async (c) => {
           class="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
       </div>
       <div>
-        <label class="block text-xs font-medium text-slate-500 mb-1">Search Query <span class="text-slate-400">(optional)</span></label>
+        <label class="block text-xs font-medium text-slate-500 mb-1">Search Query <span class="text-slate-400">(English only, optional)</span></label>
         <input type="text" name="query" value="${escHtml(track.query ?? '')}"
           class="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           oninput="document.getElementById('edit-squelch-section').style.display = this.value.trim() ? 'block' : 'none'">

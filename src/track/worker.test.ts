@@ -231,4 +231,37 @@ describe('matchPost', () => {
     const matches = await matchPost('test', 'did:test', 'at://test/post/1', fakeEmbedding);
     expect(matches).toContain(2); // semantic still works
   });
+
+  // ─── Language filtering ─────────────────────────────────────────────────
+
+  it('non-English post: semantic matching skipped', async () => {
+    mockGetTracksWithEmbeddings.mockResolvedValue([
+      { id: '2', threshold: 0.5, query_embedding: similarEmbedding },
+    ]);
+    mockPercolatePost.mockResolvedValue([]);
+
+    const matches = await matchPost('日本語テスト', 'did:test', 'at://test/post/1', fakeEmbedding, false);
+    expect(matches).toHaveLength(0);
+  });
+
+  it('non-English post: keyword-only tracks still match', async () => {
+    mockGetTracksWithEmbeddings.mockResolvedValue([
+      { id: '1', threshold: 0.75, query_embedding: null },
+    ]);
+    mockPercolatePost.mockResolvedValue([1]);
+
+    const matches = await matchPost('PHP について', 'did:test', 'at://test/post/1', fakeEmbedding, false);
+    expect(matches).toContain(1);
+  });
+
+  it('non-English post: hybrid track keyword match skipped (has semantic query)', async () => {
+    mockGetTracksWithEmbeddings.mockResolvedValue([
+      { id: '3', threshold: 0.5, query_embedding: similarEmbedding },
+    ]);
+    mockPercolatePost.mockResolvedValue([3]); // keyword matches
+
+    const matches = await matchPost('PHP關鍵字', 'did:test', 'at://test/post/1', fakeEmbedding, false);
+    // Non-English + has embedding → keyword match dropped
+    expect(matches).toHaveLength(0);
+  });
 });
