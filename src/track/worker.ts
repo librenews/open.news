@@ -61,8 +61,14 @@ async function matchPost(
   // Phase 1: Keyword percolate
   try {
     const keywordMatches = await percolatePost(text, did, uri);
+    if (keywordMatches.length > 0) {
+      logger.debug({ keywordMatches, activeCount: activeIds.size, uri }, 'Percolate matches found');
+    }
     for (const id of keywordMatches) {
-      if (!activeIds.has(id)) continue;
+      if (!activeIds.has(id)) {
+        logger.debug({ trackId: id }, 'Percolate match filtered — not in active set');
+        continue;
+      }
       const track = trackById.get(id);
       if (!track || !track.query_embedding) {
         // No semantic query — pure keyword boolean match
