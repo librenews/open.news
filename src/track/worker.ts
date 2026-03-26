@@ -53,16 +53,21 @@ async function matchPost(
 ): Promise<number[]> {
   const matchedIds = new Set<number>();
 
-  // Phase 1: Keyword percolate
+  // Get active tracks (cached, refreshes every 30s)
+  const tracks = await getTrackEmbeddings();
+  const activeIds = new Set(tracks.map((t) => t.id));
+
+  // Phase 1: Keyword percolate (filtered to active tracks only)
   try {
     const keywordMatches = await percolatePost(text, did, uri);
-    for (const id of keywordMatches) matchedIds.add(id);
+    for (const id of keywordMatches) {
+      if (activeIds.has(id)) matchedIds.add(id);
+    }
   } catch (err) {
     logger.error({ err, uri }, 'Keyword percolate failed');
   }
 
   // Phase 2: Semantic similarity
-  const tracks = await getTrackEmbeddings();
   for (const track of tracks) {
     const similarity = cosineSimilarity(postEmbedding, track.query_embedding);
     if (similarity >= track.threshold) {
