@@ -13,6 +13,7 @@ export interface Track {
   notify_via: string;
   os_query_id: string | null;
   feed_token: string;
+  uuid: string;
   created_at: Date;
   updated_at: Date;
 }
@@ -56,6 +57,13 @@ export async function updateTrack(
 export async function getTrackById(id: bigint | number): Promise<Track | null> {
   const { rows } = await db.query<Track>(
     'SELECT * FROM tracks WHERE id = $1', [id]
+  );
+  return rows[0] ?? null;
+}
+
+export async function getTrackByUuid(uuid: string): Promise<Track | null> {
+  const { rows } = await db.query<Track>(
+    'SELECT * FROM tracks WHERE uuid = $1', [uuid]
   );
   return rows[0] ?? null;
 }

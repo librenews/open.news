@@ -9,7 +9,7 @@ import {
   deleteTrack as dbDeleteTrack, updateTrackKeywords, updateTrackQueryEmbedding, toggleTrackActive,
   updateTrack,
   getMatchesByTrackId, getMatchesByUserId, getMatchCountByTrack,
-  getFeedSkeletonMatches,
+  getFeedSkeletonMatches, getTrackByUuid,
 } from '../db/queries/tracks.js';
 import { upsertTrackQuery, deleteTrackQuery } from './opensearch.js';
 import { embedText } from './embedClient.js';
@@ -296,7 +296,7 @@ app.get('/', async (c) => {
         <div class="bg-white border border-slate-200 rounded-xl p-4 hover:shadow-sm transition-shadow">
           <div class="flex justify-between items-center">
             <div class="flex items-center gap-2">
-              <a href="/tracks/${t.id}" class="font-semibold text-slate-800 hover:text-blue-600 transition-colors no-underline">${escHtml(t.name)}</a>
+              <a href="/tracks/${t.uuid}" class="font-semibold text-slate-800 hover:text-blue-600 transition-colors no-underline">${escHtml(t.name)}</a>
               ${t.is_active ? '<span class="text-xs bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded-full">Active</span>' : '<span class="text-xs bg-amber-50 text-amber-600 px-2 py-0.5 rounded-full">Paused</span>'}
             </div>
             <span class="text-xs font-medium bg-slate-100 text-slate-500 px-2.5 py-1 rounded-full">${countMap.get(String(t.id)) ?? 0} matches</span>
@@ -307,11 +307,11 @@ app.get('/', async (c) => {
           </div>
           <div class="mt-3 flex items-center justify-between text-xs">
             <div class="flex items-center gap-4">
-              <a href="/tracks/${t.id}/edit" class="text-slate-500 hover:text-blue-600 transition-colors">Edit</a>
-              <form method="POST" action="/tracks/${t.id}/toggle" class="inline">
+              <a href="/tracks/${t.uuid}/edit" class="text-slate-500 hover:text-blue-600 transition-colors">Edit</a>
+              <form method="POST" action="/tracks/${t.uuid}/toggle" class="inline">
                 <button type="submit" class="${t.is_active ? 'text-amber-500 hover:text-amber-700' : 'text-emerald-500 hover:text-emerald-700'} transition-colors cursor-pointer">${t.is_active ? 'Pause' : 'Resume'}</button>
               </form>
-              <form method="POST" action="/tracks/${t.id}/delete" class="inline">
+              <form method="POST" action="/tracks/${t.uuid}/delete" class="inline">
                 <button type="submit" class="text-red-400 hover:text-red-600 transition-colors cursor-pointer" onclick="return confirm('Delete this track?')">Delete</button>
               </form>
             </div>
@@ -355,22 +355,22 @@ app.post('/tracks', async (c) => {
   return c.redirect('/');
 });
 
-app.post('/tracks/:id/toggle', async (c) => {
+app.post('/tracks/:uuid/toggle', async (c) => {
   const userId = c.get('userId');
-  const trackId = parseInt(c.req.param('id'), 10);
-  const track = await getTrackById(trackId);
+  const uuid = c.req.param('uuid');
+  const track = await getTrackByUuid(uuid);
   if (!track || String(track.user_id) !== String(userId)) return c.text('Not found', 404);
 
-  await toggleTrackActive(trackId);
+  await toggleTrackActive(track.id);
   return c.redirect('/');
 });
 
 // ─── Track Edit ─────────────────────────────────────────────────────────────
 
-app.get('/tracks/:id/edit', async (c) => {
+app.get('/tracks/:uuid/edit', async (c) => {
   const userId = c.get('userId');
-  const trackId = parseInt(c.req.param('id'), 10);
-  const track = await getTrackById(trackId);
+  const uuid = c.req.param('uuid');
+  const track = await getTrackByUuid(uuid);
   if (!track || String(track.user_id) !== String(userId)) return c.text('Not found', 404);
   const user = await getTrackUserById(userId);
 
@@ -379,7 +379,7 @@ app.get('/tracks/:id/edit', async (c) => {
       <a href="/" class="text-sm text-blue-500 hover:text-blue-700 transition-colors no-underline">&larr; Back to Dashboard</a>
     </div>
     <h2 class="text-xl font-semibold text-slate-800 mb-6">Edit: ${escHtml(track.name)}</h2>
-    <form method="POST" action="/tracks/${track.id}/edit" class="space-y-4 bg-slate-50 border border-slate-200 rounded-xl p-5">
+    <form method="POST" action="/tracks/${track.uuid}/edit" class="space-y-4 bg-slate-50 border border-slate-200 rounded-xl p-5">
       <div>
         <label class="block text-xs font-medium text-slate-500 mb-1">Name</label>
         <input type="text" name="name" value="${escHtml(track.name)}" required
@@ -452,10 +452,10 @@ app.get('/tracks/:id/edit', async (c) => {
   `));
 });
 
-app.post('/tracks/:id/edit', async (c) => {
+app.post('/tracks/:uuid/edit', async (c) => {
   const userId = c.get('userId');
-  const trackId = parseInt(c.req.param('id'), 10);
-  const track = await getTrackById(trackId);
+  const uuid = c.req.param('uuid');
+  const track = await getTrackByUuid(uuid);
   if (!track || String(track.user_id) !== String(userId)) return c.text('Not found', 404);
 
   const body = await c.req.parseBody();
@@ -465,9 +465,9 @@ app.post('/tracks/:id/edit', async (c) => {
   const threshold = parseFloat(String(body.threshold ?? '0.75'));
   const keywords = keywordsRaw ? keywordsRaw.split(',').map((k) => k.trim()).filter(Boolean) : [];
 
-  if (!name || (!query && keywords.length === 0)) return c.redirect(`/tracks/${trackId}/edit`);
+  if (!name || (!query && keywords.length === 0)) return c.redirect(`/tracks/${track.uuid}/edit`);
 
-  await updateTrack(trackId, {
+  await updateTrack(track.id, {
     name,
     query: query || null as any,
     keywords,
@@ -475,29 +475,29 @@ app.post('/tracks/:id/edit', async (c) => {
   });
 
   // Re-upsert OpenSearch percolate query
-  const osQueryId = await upsertTrackQuery(trackId, keywords);
-  await updateTrackKeywords(trackId, keywords, osQueryId);
+  const osQueryId = await upsertTrackQuery(track.id, keywords);
+  await updateTrackKeywords(track.id, keywords, osQueryId);
 
   // Re-embed the query if it changed (or clear if removed)
   if (query && query !== track.query) {
     try {
       const queryEmbedding = await embedText(query);
-      await updateTrackQueryEmbedding(trackId, queryEmbedding);
+      await updateTrackQueryEmbedding(track.id, queryEmbedding);
     } catch (err) {
       logger.error({ err }, 'Failed to re-embed query');
     }
   } else if (!query && track.query) {
     // Query was removed — clear embedding
-    await updateTrackQueryEmbedding(trackId, null as any);
+    await updateTrackQueryEmbedding(track.id, null as any);
   }
 
   return c.redirect('/');
 });
 
-app.post('/tracks/:id/delete', async (c) => {
+app.post('/tracks/:uuid/delete', async (c) => {
   const userId = c.get('userId');
-  const trackId = parseInt(c.req.param('id'), 10);
-  const track = await getTrackById(trackId);
+  const uuid = c.req.param('uuid');
+  const track = await getTrackByUuid(uuid);
   if (!track || String(track.user_id) !== String(userId)) return c.text('Not found', 404);
 
   await deleteTrackQuery(track.id);
@@ -507,11 +507,11 @@ app.post('/tracks/:id/delete', async (c) => {
 
 // ─── Track Feed ─────────────────────────────────────────────────────────────
 
-app.get('/tracks/:id', async (c) => {
+app.get('/tracks/:uuid', async (c) => {
   const userId = c.get('userId');
-  const trackId = parseInt(c.req.param('id'), 10);
-  const track = await getTrackById(trackId);
-  if (!track || track.user_id !== userId) return c.text('Not found', 404);
+  const uuid = c.req.param('uuid');
+  const track = await getTrackByUuid(uuid);
+  if (!track || String(track.user_id) !== String(userId)) return c.text('Not found', 404);
 
   const user = await getTrackUserById(userId);
   const before = c.req.query('before');
@@ -530,7 +530,7 @@ app.get('/tracks/:id', async (c) => {
         class="px-3 py-1.5 border border-slate-200 text-slate-500 text-sm rounded-lg hover:border-blue-500 hover:text-blue-500 transition-colors no-underline">RSS</a>
     </div>
     ${renderMatches(matches)}
-    ${matches.length === 50 ? `<a href="/tracks/${track.id}?before=${matches[matches.length - 1].matched_at.toISOString()}" class="block text-center mt-4 py-2.5 border border-slate-200 text-slate-500 text-sm rounded-lg hover:border-blue-500 hover:text-blue-500 transition-colors no-underline">Load more</a>` : ''}
+    ${matches.length === 50 ? `<a href="/tracks/${track.uuid}?before=${matches[matches.length - 1].matched_at.toISOString()}" class="block text-center mt-4 py-2.5 border border-slate-200 text-slate-500 text-sm rounded-lg hover:border-blue-500 hover:text-blue-500 transition-colors no-underline">Load more</a>` : ''}
   `));
 });
 
