@@ -159,6 +159,101 @@ app.get('/xrpc/app.bsky.feed.getFeedSkeleton', async (c) => {
 
 // ─── Observability ──────────────────────────────────────────────────────────
 
+app.get('/health', async (c) => {
+  const userId = c.get('userId');
+  const user = userId ? await getTrackUserById(userId) : null;
+
+  const redis = new Redis(process.env.REDIS_URL ?? 'redis://localhost:6379');
+  let stats: Record<string, string> = {};
+  let streamLength = 0;
+  try {
+    stats = await redis.hgetall('track:stats');
+    try { streamLength = await redis.xlen('track:posts'); } catch {}
+  } finally {
+    await redis.quit();
+  }
+
+  const lag = stats.stream_lag ? Number(stats.stream_lag) : 0;
+  const isLagging = lag > 500;
+  
+  const lastBatchMs = stats.last_batch_at ? new Date(stats.last_batch_at).getTime() : 0;
+  const isGathering = (Date.now() - lastBatchMs) < 120000;
+
+  const firehoseStatus = isGathering
+    ? `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200"><div class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div> Active</span>`
+    : `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-red-50 text-red-700 border border-red-200"><div class="w-1.5 h-1.5 rounded-full bg-red-500"></div> Stalled</span>`;
+
+  const lagStatus = !isLagging
+    ? `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200"><svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg> Healthy</span>`
+    : `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200"><svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg> Lagging</span>`;
+
+  function timeAgo(dateStr?: string) {
+    if (!dateStr) return 'Never';
+    const diff = Math.max(0, Date.now() - new Date(dateStr).getTime());
+    if (diff < 60000) return 'Just now';
+    if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
+    if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
+    return `${Math.floor(diff / 86400000)}d ago`;
+  }
+
+  const html = `
+    <div class="max-w-3xl mx-auto">
+      <div class="mb-8">
+        <h2 class="text-2xl font-bold text-slate-800">System Health</h2>
+        <p class="text-slate-500 text-sm mt-1">Real-time metrics for the Track infrastructure</p>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+        <div class="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+          <div class="text-slate-500 text-xs font-medium uppercase tracking-wider mb-3">Firehose</div>
+          <div class="flex items-center justify-between">
+            <div class="text-2xl font-semibold text-slate-800">${timeAgo(stats.last_batch_at)}</div>
+            ${firehoseStatus}
+          </div>
+          <div class="text-xs text-slate-400 mt-2">Latest posts ingested</div>
+        </div>
+
+        <div class="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+          <div class="text-slate-500 text-xs font-medium uppercase tracking-wider mb-3">Stream Lag</div>
+          <div class="flex items-center justify-between">
+            <div class="text-2xl font-semibold text-slate-800">${lag.toLocaleString()}</div>
+            ${lagStatus}
+          </div>
+          <div class="text-xs text-slate-400 mt-2">Unprocessed queue backlog</div>
+        </div>
+
+        <div class="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+          <div class="text-slate-500 text-xs font-medium uppercase tracking-wider mb-3">Last Match</div>
+          <div class="text-2xl font-semibold text-slate-800">${timeAgo(stats.last_match_at)}</div>
+          <div class="text-xs text-slate-400 mt-2">Latest successful query matched</div>
+        </div>
+      </div>
+
+      <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="px-5 py-4 border-b border-slate-100 bg-slate-50/50">
+          <h3 class="text-sm font-semibold text-slate-800">Lifetime Worker Stats</h3>
+        </div>
+        <div class="divide-y divide-slate-100">
+          <div class="flex justify-between px-5 py-3 text-sm">
+            <span class="text-slate-500">Posts Processed</span>
+            <span class="font-medium text-slate-800">${Number(stats.posts_processed || 0).toLocaleString()}</span>
+          </div>
+          <div class="flex justify-between px-5 py-3 text-sm">
+            <span class="text-slate-500">Matches Found</span>
+            <span class="font-medium text-slate-800">${Number(stats.matches_found || 0).toLocaleString()}</span>
+          </div>
+          <div class="flex justify-between px-5 py-3 text-sm">
+            <span class="text-slate-500">Avg Batch Size</span>
+            <span class="font-medium text-slate-800">${Number(stats.batches || 0) > 0 ? Math.round(Number(stats.posts_processed || 0) / Number(stats.batches)).toLocaleString() : 0} posts</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  return c.html(renderPage('System Health', user, html));
+});
+
 app.get('/stats', async (c) => {
   const redis = new Redis(process.env.REDIS_URL ?? 'redis://localhost:6379');
   try {

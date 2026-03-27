@@ -209,6 +209,9 @@ async function processMessages(redis: Redis): Promise<void> {
     pipeline.hset(STATS_KEY, 'last_embed_ms', String(embedMs));
     pipeline.hset(STATS_KEY, 'last_batch_size', String(posts.length));
     pipeline.hset(STATS_KEY, 'last_batch_at', new Date().toISOString());
+    if (totalMatches > 0) {
+      pipeline.hset(STATS_KEY, 'last_match_at', new Date().toISOString());
+    }
     await pipeline.exec();
   } catch {
     // Non-critical — don't fail batch for stats
