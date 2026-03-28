@@ -468,6 +468,9 @@ app.get('/', async (c) => {
       <div class="flex items-baseline gap-3">
         <h2 class="text-xl font-semibold text-slate-800">Your Tracks</h2>
         <a href="/feed" class="text-sm font-medium text-blue-500 hover:text-blue-700 transition-colors no-underline">(view all matches)</a>
+        <a href="https://bsky.app/profile/track.social/feed/track-matches" target="_blank" rel="noopener noreferrer" class="text-sm font-medium text-sky-500 hover:text-sky-700 transition-colors no-underline flex items-baseline gap-1">
+          (bluesky feed &nearr;)
+        </a>
       </div>
       ${tracks.length >= 5 
         ? `<span class="text-sm font-medium text-amber-600 bg-amber-50 px-3 py-1.5 rounded-lg border border-amber-200">Limit Reached (5/5)</span>`
