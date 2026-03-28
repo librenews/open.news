@@ -20,6 +20,8 @@
     "@anthropic-ai/sdk": "^0.39.0",
     "@atproto/api": "^0.13.23",
     "@atproto/oauth-client-node": "^0.3.4",
+    "@aws-sdk/client-s3": "^3.1019.0",
+    "@dsnp/parquetjs": "^1.8.7",
     "@hono/node-server": "^1.13.7",
     "@mozilla/readability": "^0.5.0",
     "@opensearch-project/opensearch": "^3.5.1",

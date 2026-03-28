@@ -4,6 +4,7 @@ import { logger } from '../lib/logger.js';
 import { ensureIndex, percolatePost } from './opensearch.js';
 import { insertTrackMatch, getTracksWithEmbeddings, TrackWithEmbedding } from '../db/queries/tracks.js';
 import { embedTexts, checkEmbedHealth } from './embedClient.js';
+import { logEmbeddings } from './embedLogger.js';
 
 const STREAM_KEY = 'track:posts';
 const GROUP_NAME = 'track-workers';
@@ -176,6 +177,13 @@ async function processMessages(redis: Redis): Promise<void> {
     return;
   }
   const embedMs = Date.now() - embedStart;
+
+  // 2b. Log embeddings to local append-only JSONL for S3 archiving
+  try {
+    logEmbeddings(posts, embeddings);
+  } catch (err) {
+    logger.error({ err }, 'Failed to write embeddings to local buffer');
+  }
 
   // 3. Two-phase match each post and store matches
   let totalMatches = 0;
