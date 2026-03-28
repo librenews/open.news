@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { serve } from '@hono/node-server';
+import * as cheerio from 'cheerio';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { getCookie } from 'hono/cookie';
 import { createHmac } from 'crypto';
@@ -292,6 +293,67 @@ app.get('/stats', async (c) => {
     await redis.quit();
     logger.error({ err }, 'Stats query failed');
     return c.json({ error: 'Failed to fetch stats' }, 500);
+  }
+});
+
+// ─── API Routes ─────────────────────────────────────────────────────────────
+
+app.get('/api/unfurl', async (c) => {
+  const url = c.req.query('url');
+  if (!url) return c.json({ error: 'URL required' }, 400);
+
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return c.json({ error: 'Invalid URL scheme' }, 400);
+    }
+  } catch {
+    return c.json({ error: 'Invalid URL' }, 400);
+  }
+
+  const redis = new Redis(process.env.REDIS_URL ?? 'redis://localhost:6379');
+  const cacheKey = `track:unfurl:${url}`;
+
+  try {
+    const cached = await redis.get(cacheKey);
+    if (cached) {
+      await redis.quit();
+      return c.json(JSON.parse(cached));
+    }
+
+    const res = await fetch(url, {
+      headers: { 'User-Agent': 'TrackSocialBot/1.0 (+https://track.social)' },
+      signal: AbortSignal.timeout(3000),
+    });
+
+    if (!res.ok) throw new Error(`Fetch failed: ${res.status}`);
+
+    const html = await res.text();
+    const $ = cheerio.load(html);
+
+    const title = $('meta[property="og:title"]').attr('content') || $('title').text() || '';
+    const description = $('meta[property="og:description"]').attr('content') || $('meta[name="description"]').attr('content') || '';
+    let image = $('meta[property="og:image"]').attr('content') || '';
+    
+    if (image && !image.startsWith('http')) {
+      try {
+        image = new URL(image, url).toString();
+      } catch {}
+    }
+
+    const data = { title: title.trim(), description: description.trim(), image: image.trim(), url };
+    
+    // Cache successful fetch for 7 days
+    await redis.setex(cacheKey, 7 * 24 * 60 * 60, JSON.stringify(data));
+    await redis.quit();
+
+    return c.json(data);
+  } catch (err) {
+    await redis.quit();
+    logger.warn({ err, url }, 'Unfurl failed');
+    // Cache negative result for 1 hour to prevent hammering bad URLs
+    await redis.setex(cacheKey, 3600, JSON.stringify({ error: true, url }));
+    return c.json({ error: true, url }, 500);
   }
 });
 
@@ -856,7 +918,8 @@ function renderMatches(matches: MatchRow[]): string {
           <span class="text-xs text-slate-400">· <a href="${bskyUrl}" target="_blank" class="text-slate-400 hover:underline">${ago}</a></span>
           ${m.track_name && m.track_uuid ? ` · <a href="/tracks/${m.track_uuid}" class="bg-gradient-to-r from-blue-500 to-emerald-500 text-white text-[10px] font-medium px-1.5 py-0.5 rounded-full hover:opacity-80 transition-opacity no-underline">${escHtml(m.track_name)}</a>` : ''}
         </div>
-        <div class="text-sm text-slate-700 leading-relaxed break-words">${renderRichText(m.post_text, m.facets)}</div>
+        <div class="text-sm text-slate-700 leading-relaxed break-words post-body">${renderRichText(m.post_text, m.facets)}</div>
+        <div class="unfurled-cards mt-3 space-y-2 empty:hidden"></div>
         <a href="${bskyUrl}" target="_blank" class="text-xs text-blue-500 hover:text-blue-700 mt-3 inline-block transition-colors no-underline">View on Bluesky →</a>
       </div>`;
   }).join('')}</div>
@@ -900,6 +963,55 @@ function renderMatches(matches: MatchRow[]): string {
       }
     }
   })();
+
+  // ─── Link Unfurling ────────────────────────────────────────────────────────
+  (async function() {
+    const postBodies = document.querySelectorAll('.post-body');
+    postBodies.forEach(async (body) => {
+      // Find the first actual external link inside this post
+      const link = Array.from(body.querySelectorAll('.rt-link')).find(l => {
+        const u = l.href;
+        return u.startsWith('http') && !u.includes('bsky.app');
+      });
+      
+      if (!link) return;
+      const url = link.href;
+
+      const container = body.nextElementSibling;
+      if (!container || !container.classList.contains('unfurled-cards')) return;
+
+      try {
+        const res = await fetch('/api/unfurl?url=' + encodeURIComponent(url));
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.error || !data.title) return;
+
+        // Render sleek tailwind card
+        const card = document.createElement('a');
+        card.className = 'flex flex-row items-stretch border border-slate-200 rounded-lg overflow-hidden hover:bg-slate-50 transition-colors no-underline';
+        card.href = data.url || url;
+        card.target = '_blank';
+        
+        let imgHtml = '';
+        if (data.image) {
+          imgHtml = '<div class="w-1/3 sm:w-1/4 shrink-0 bg-slate-100 flex border-r border-slate-100"><img src="' + data.image.replace(/"/g, '&quot;') + '" class="w-full h-full object-cover"></div>';
+        }
+        
+        // Ensure hostname parsing is safe
+        let hostname = url;
+        try { hostname = new URL(data.url || url).hostname; } catch {}
+
+        card.innerHTML = imgHtml + 
+          '<div class="flex flex-col p-3 w-full min-w-0 justify-center gap-1">' +
+            '<div class="text-sm font-semibold text-slate-800 truncate" title="' + data.title.replace(/"/g, '&quot;') + '">' + data.title + '</div>' +
+            (data.description ? '<div class="text-xs text-slate-500 line-clamp-2">' + data.description + '</div>' : '') +
+            '<div class="text-[10px] text-slate-400 mt-1 truncate uppercase tracking-wide">' + hostname + '</div>' +
+          '</div>';
+
+        container.appendChild(card);
+      } catch (e) {}
+    });
+  })();
   </script>`;
 }
 
@@ -922,7 +1034,7 @@ function renderRichText(text: string, facetsRaw: any): string {
   for (const segment of rt.segments()) {
     const escSegment = escHtml(segment.text);
     if (segment.isLink()) {
-      out += `<a href="${escHtml(segment.link?.uri || '')}" target="_blank" class="text-blue-500 hover:underline break-all">${escSegment}</a>`;
+      out += `<a href="${escHtml(segment.link?.uri || '')}" target="_blank" class="text-blue-500 hover:underline break-all rt-link">${escSegment}</a>`;
     } else if (segment.isMention()) {
       out += `<a href="https://bsky.app/profile/${escHtml(segment.mention?.did || '')}" target="_blank" class="text-blue-500 hover:underline">${escSegment}</a>`;
     } else if (segment.isTag()) {
