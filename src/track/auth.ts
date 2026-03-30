@@ -42,7 +42,7 @@ export async function getOAuthClient(): Promise<NodeOAuthClient> {
       grant_types: ['authorization_code', 'refresh_token'],
       response_types: ['code'],
       token_endpoint_auth_method: 'none',
-      scope: 'atproto',
+      scope: 'atproto transition:generic repo:app.bsky.feed.generator?action=create',
       dpop_bound_access_tokens: true,
     },
     requestLock,
