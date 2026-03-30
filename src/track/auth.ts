@@ -203,7 +203,7 @@ trackAuthRouter.get('/oauth/login', async (c) => {
 
   try {
     const client = await getOAuthClient();
-    const url = await client.authorize(handle, { scope: 'atproto' });
+    const url = await client.authorize(handle, { scope: client.clientMetadata?.scope || 'atproto transition:generic repo:app.bsky.feed.generator?action=create' });
     return c.redirect(url.toString());
   } catch (err) {
     logger.error({ err, handle }, 'Track OAuth initiation failed');
