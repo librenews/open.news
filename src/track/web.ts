@@ -12,10 +12,10 @@ import {
   getMatchesByTrackId, getMatchesByUserId, getMatchCountByTrack,
   getFeedSkeletonMatches, getTrackByUuid,
 } from '../db/queries/tracks.js';
-import { RichText } from '@atproto/api';
+import { RichText, Agent } from '@atproto/api';
 import { upsertTrackQuery, deleteTrackQuery } from './opensearch.js';
 import { embedText } from './embedClient.js';
-import { trackAuthRouter, getTrackUserById, getTrackUserByDid, getTrackUserByFeedToken, type TrackUser } from './auth.js';
+import { trackAuthRouter, getTrackUserById, getTrackUserByDid, getTrackUserByFeedToken, getOAuthClient, type TrackUser } from './auth.js';
 import { createMiddleware } from 'hono/factory';
 import { Redis } from 'ioredis';
 
@@ -109,47 +109,58 @@ app.get('/xrpc/app.bsky.feed.describeFeedGenerator', (c) => {
 app.get('/xrpc/app.bsky.feed.getFeedSkeleton', async (c) => {
   const feedParam = c.req.query('feed') ?? '';
 
-  // Match on rkey — Bluesky sends the publisher's DID, not the generator's
-  if (!feedParam.endsWith(`/app.bsky.feed.generator/${FEED_RKEY}`)) {
+  const rkeyMatch = feedParam.match(/\/app\.bsky\.feed\.generator\/([^/]+)$/);
+  if (!rkeyMatch) {
     logger.warn({ feed: feedParam }, 'Unknown feed requested');
     return c.json({ error: 'UnknownFeed', message: 'Unknown feed' }, 400);
   }
-
+  const rkey = rkeyMatch[1];
   const limit = Math.min(parseInt(c.req.query('limit') ?? '30', 10), 100);
   const cursor = c.req.query('cursor') ?? undefined;
 
-  // Extract requesting user's DID from JWT (Authorization: Bearer <jwt>)
+  // 1. Dynamic Track custom feed
+  if (rkey !== FEED_RKEY) {
+    const track = await getTrackByUuid(rkey);
+    if (!track) return c.json({ error: 'UnknownFeed', message: 'Track not found' }, 404);
+
+    const matches = await getMatchesByTrackId(track.id, limit, cursor);
+    if (matches.length > 0) {
+      return c.json({
+        cursor: matches[matches.length - 1].matched_at.toISOString(),
+        feed: matches.map((m) => ({ post: m.post_uri })),
+      });
+    }
+    return c.json({ feed: [] });
+  }
+
+  // 2. Legacy / Root 'track-matches' feed
   const authHeader = c.req.header('Authorization');
   let requesterDid: string | undefined;
 
   if (authHeader?.startsWith('Bearer ')) {
     try {
-      // Decode JWT payload without verification (AppView already verified)
       const token = authHeader.slice(7);
       const payloadB64 = token.split('.')[1];
       const payload = JSON.parse(Buffer.from(payloadB64, 'base64url').toString());
       requesterDid = payload.iss;
     } catch {
-      // Ignore JWT parse errors — treat as unauthenticated
+      // Ignore JWT parse errors
     }
   }
 
-  // If we have a requester DID, look up their matches
   if (requesterDid) {
     const user = await getTrackUserByDid(requesterDid);
     if (user) {
       const matches = await getFeedSkeletonMatches(requesterDid, limit, cursor);
       if (matches.length > 0) {
-        const lastMatch = matches[matches.length - 1];
         return c.json({
-          cursor: lastMatch.matched_at,
+          cursor: new Date(matches[matches.length - 1].matched_at).toISOString(),
           feed: matches.map((m) => ({ post: m.post_uri })),
         });
       }
     }
   }
 
-  // No matches or unauthenticated — return explainer post if configured
   if (FEED_EXPLAINER_URI && !cursor) {
     return c.json({ feed: [{ post: FEED_EXPLAINER_URI }] });
   }
@@ -637,10 +648,18 @@ app.get('/', async (c) => {
               <form method="POST" action="/tracks/${t.uuid}/delete" class="inline">
                 <button type="submit" class="text-red-400 hover:text-red-600 transition-colors cursor-pointer" onclick="return confirm('Delete this track?')">Delete</button>
               </form>
+              <form method="POST" action="/tracks/${t.uuid}/feed" class="inline">
+                <button type="submit" class="text-violet-500 hover:text-violet-700 transition-colors cursor-pointer" title="Publish as a Custom Feed to your Bluesky profile">
+                  ${t.feed_published ? 'Sync Feed' : 'Publish Feed'}
+                </button>
+              </form>
             </div>
-            <a href="/rss/${t.feed_token}" target="_blank" class="text-orange-400 hover:text-orange-600 transition-colors" title="RSS Feed">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="6.18" cy="17.82" r="2.18"/><path d="M4 4.44v2.83c7.03 0 12.73 5.7 12.73 12.73h2.83c0-8.59-6.97-15.56-15.56-15.56zm0 5.66v2.83c3.9 0 7.07 3.17 7.07 7.07h2.83c0-5.47-4.43-9.9-9.9-9.9z"/></svg>
-            </a>
+            <div class="flex items-center gap-3">
+              ${t.feed_published ? '<a href="https://bsky.app/profile/' + (user?.handle || '') + '/feed/' + t.uuid + '" target="_blank" class="text-violet-500 hover:text-violet-700 font-medium no-underline transition-colors" title="View on Bluesky">bsky.app &nearr;</a>' : ''}
+              <a href="/rss/${t.feed_token}" target="_blank" class="text-orange-400 hover:text-orange-600 transition-colors" title="RSS Feed">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="6.18" cy="17.82" r="2.18"/><path d="M4 4.44v2.83c7.03 0 12.73 5.7 12.73 12.73h2.83c0-8.59-6.97-15.56-15.56-15.56zm0 5.66v2.83c3.9 0 7.07 3.17 7.07 7.07h2.83c0-5.47-4.43-9.9-9.9-9.9z"/></svg>
+              </a>
+            </div>
           </div>
         </div>
       `).join('')}
@@ -832,6 +851,38 @@ app.post('/tracks/:uuid/delete', async (c) => {
   return c.redirect('/');
 });
 
+app.post('/tracks/:uuid/feed', async (c) => {
+  const userId = c.get('userId');
+  const uuid = c.req.param('uuid');
+  const track = await getTrackByUuid(uuid);
+  const user = await getTrackUserById(userId);
+  if (!track || !user || String(track.user_id) !== String(userId)) return c.text('Not found', 404);
+
+  try {
+    const client = await getOAuthClient();
+    const oauthSession = await client.restore(user.did);
+    const agent = new Agent(oauthSession);
+
+    await agent.com.atproto.repo.putRecord({
+      repo: user.did,
+      collection: 'app.bsky.feed.generator',
+      rkey: track.uuid,
+      record: {
+        did: 'did:web:track.social',
+        displayName: track.name,
+        description: `Custom tracking feed for: ${track.name}\n\nPowered by track.social`,
+        createdAt: new Date().toISOString(),
+      }
+    });
+
+    await updateTrack(track.id, { feed_published: true });
+  } catch (err) {
+    logger.error({ err, uuid }, 'Failed to publish custom feed to PDS');
+  }
+  
+  return c.redirect('/');
+});
+
 // ─── Track Feed ─────────────────────────────────────────────────────────────
 
 app.get('/tracks/:uuid', async (c) => {
@@ -856,9 +907,17 @@ app.get('/tracks/:uuid', async (c) => {
           Keywords: ${track.keywords.map((k) => `<code class="bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded text-xs font-medium">${escHtml(k)}</code>`).join(' ')}
         </div>
       </div>
-      <a href="/rss/${track.feed_token}" target="_blank" class="text-orange-400 hover:text-orange-600 transition-colors no-underline" title="RSS Feed">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="6.18" cy="17.82" r="2.18"/><path d="M4 4.44v2.83c7.03 0 12.73 5.7 12.73 12.73h2.83c0-8.59-6.97-15.56-15.56-15.56zm0 5.66v2.83c3.9 0 7.07 3.17 7.07 7.07h2.83c0-5.47-4.43-9.9-9.9-9.9z"/></svg>
-      </a>
+      <div class="flex items-center gap-3">
+        <form method="POST" action="/tracks/${track.uuid}/feed" class="inline">
+          <button type="submit" class="text-xs font-medium bg-violet-50 text-violet-600 hover:bg-violet-100 hover:text-violet-700 transition-colors px-2 py-1 rounded-md cursor-pointer border-none" title="Publish as a Custom Feed to your Bluesky profile">
+            ${track.feed_published ? 'Sync Feed' : 'Publish Feed'}
+          </button>
+        </form>
+        ${track.feed_published ? '<a href="https://bsky.app/profile/' + (user?.handle || '') + '/feed/' + track.uuid + '" target="_blank" class="text-violet-500 hover:text-violet-600 font-medium no-underline transition-colors text-sm" title="View on Bluesky">bsky.app &nearr;</a>' : ''}
+        <a href="/rss/${track.feed_token}" target="_blank" class="text-orange-400 hover:text-orange-600 transition-colors no-underline" title="RSS Feed">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="6.18" cy="17.82" r="2.18"/><path d="M4 4.44v2.83c7.03 0 12.73 5.7 12.73 12.73h2.83c0-8.59-6.97-15.56-15.56-15.56zm0 5.66v2.83c3.9 0 7.07 3.17 7.07 7.07h2.83c0-5.47-4.43-9.9-9.9-9.9z"/></svg>
+        </a>
+      </div>
     </div>
     ${renderMatches(matches)}
     ${matches.length === 50 ? `<a href="/tracks/${track.uuid}?before=${matches[matches.length - 1].matched_at.toISOString()}" class="block text-center mt-4 py-2.5 border border-slate-200 text-slate-500 text-sm rounded-lg hover:border-blue-500 hover:text-blue-500 transition-colors no-underline">Load more</a>` : ''}

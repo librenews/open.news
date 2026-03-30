@@ -14,6 +14,7 @@ export interface Track {
   os_query_id: string | null;
   feed_token: string;
   uuid: string;
+  feed_published: boolean;
   created_at: Date;
   updated_at: Date;
 }
@@ -36,7 +37,7 @@ export async function createTrack(
 
 export async function updateTrack(
   id: bigint | number,
-  fields: { name?: string; query?: string; keywords?: string[]; threshold?: number }
+  fields: { name?: string; query?: string; keywords?: string[]; threshold?: number; feed_published?: boolean }
 ): Promise<Track> {
   const sets: string[] = [];
   const params: unknown[] = [];
@@ -45,6 +46,7 @@ export async function updateTrack(
   if (fields.query !== undefined) { sets.push(`query = $${i++}`); params.push(fields.query); }
   if (fields.keywords !== undefined) { sets.push(`keywords = $${i++}`); params.push(fields.keywords); }
   if (fields.threshold !== undefined) { sets.push(`threshold = $${i++}`); params.push(fields.threshold); }
+  if (fields.feed_published !== undefined) { sets.push(`feed_published = $${i++}`); params.push(fields.feed_published); }
   sets.push(`updated_at = NOW()`);
   params.push(id);
   const { rows } = await db.query<Track>(

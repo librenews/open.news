@@ -30,7 +30,7 @@ export interface TrackUser {
 
 let _oauthClient: NodeOAuthClient | null = null;
 
-async function getOAuthClient(): Promise<NodeOAuthClient> {
+export async function getOAuthClient(): Promise<NodeOAuthClient> {
   if (_oauthClient) return _oauthClient;
 
   _oauthClient = new NodeOAuthClient({
