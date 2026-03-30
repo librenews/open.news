@@ -17,6 +17,7 @@ import torch
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 from sentence_transformers import SentenceTransformer
+from transformers import pipeline
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("embed-service")
@@ -29,6 +30,16 @@ logger.info(f"Loading model {MODEL_NAME} on {DEVICE}...")
 model = SentenceTransformer(MODEL_NAME, device=DEVICE, trust_remote_code=True)
 logger.info(f"Model loaded. Embedding dimension: {model.get_sentence_embedding_dimension()}")
 
+logger.info(f"Loading toxicity classifier on {DEVICE}...")
+toxicity_classifier = pipeline(
+    "text-classification", 
+    model="martin-ha/toxic-comment-model", 
+    device=0 if DEVICE == "cuda" else -1,
+    truncation=True,
+    max_length=512
+)
+logger.info("Toxicity classifier loaded.")
+
 app = FastAPI(title="Track Embed Service", version="1.0.0")
 
 
@@ -38,6 +49,7 @@ class EmbedRequest(BaseModel):
 
 class EmbedResponse(BaseModel):
     embeddings: List[List[float]]
+    is_toxic: List[bool]
     model: str
     dimension: int
     elapsed_ms: float
@@ -68,10 +80,21 @@ async def embed(req: EmbedRequest):
         normalize_embeddings=True,
         show_progress_bar=False,
     )
+
+    # 2. Extract toxicity classifications gracefully
+    try:
+        tox_results = toxicity_classifier(req.texts)
+        # Model returns dicts like: {'label': 'toxic', 'score': 0.95}
+        is_toxic = [res['label'] == 'toxic' and res['score'] > 0.90 for res in tox_results]
+    except Exception as e:
+        logger.error(f"Toxicity classification failed: {e}")
+        is_toxic = [False] * len(req.texts)
+
     elapsed_ms = (time.perf_counter() - start) * 1000
 
     return EmbedResponse(
         embeddings=embeddings.tolist(),
+        is_toxic=is_toxic,
         model=MODEL_NAME,
         dimension=model.get_sentence_embedding_dimension(),
         elapsed_ms=round(elapsed_ms, 2),

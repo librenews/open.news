@@ -166,11 +166,14 @@ async function processMessages(redis: Redis): Promise<void> {
     return;
   }
 
-  // 2. Batch embed all texts
+  // 2. Batch embed all texts and extract toxicity masks
   let embeddings: number[][];
+  let isToxic: boolean[];
   const embedStart = Date.now();
   try {
-    embeddings = await embedTexts(posts.map((p) => p.text));
+    const res = await embedTexts(posts.map((p) => p.text));
+    embeddings = res.embeddings;
+    isToxic = res.isToxic;
   } catch (err) {
     logger.error({ err, count: posts.length }, 'Batch embedding failed');
     await redis.xack(STREAM_KEY, GROUP_NAME, ...posts.map((p) => p.messageId), ...ackIds);
@@ -178,20 +181,28 @@ async function processMessages(redis: Redis): Promise<void> {
   }
   const embedMs = Date.now() - embedStart;
 
+  // Pre-filter posts that were flagged as extremely toxic by the AI classifier
+  const safePosts = posts.filter((_, i) => !isToxic[i]);
+  const safeEmbeddings = embeddings.filter((_, i) => !isToxic[i]);
+
+  if (isToxic.some(t => t)) {
+    logger.info({ toxicCount: isToxic.filter(t => t).length }, 'Dropped extremely toxic posts from firehose before DB ingestion');
+  }
+
   // 2b. Log embeddings to local append-only JSONL for S3 archiving
   try {
-    logEmbeddings(posts, embeddings);
+    logEmbeddings(safePosts, safeEmbeddings);
   } catch (err) {
     logger.error({ err }, 'Failed to write embeddings to local buffer');
   }
 
   // 3. Two-phase match each post and store matches
   let totalMatches = 0;
-  for (let i = 0; i < posts.length; i++) {
-    const post = posts[i];
+  for (let i = 0; i < safePosts.length; i++) {
+    const post = safePosts[i];
     try {
       const isEnglish = !post.langs || post.langs.split(',').some((l) => l.startsWith('en'));
-      const matchedTrackIds = await matchPost(post.text, post.did, post.uri, embeddings[i], isEnglish);
+      const matchedTrackIds = await matchPost(post.text, post.did, post.uri, safeEmbeddings[i], isEnglish);
       for (const trackId of matchedTrackIds) {
         await insertTrackMatch(trackId, post.uri, post.did, post.text, post.facets);
       }

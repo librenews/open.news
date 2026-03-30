@@ -173,7 +173,7 @@ export async function getMatchesByTrackId(
   before?: string  // ISO timestamp cursor
 ): Promise<TrackMatch[]> {
   const params: (bigint | number | string)[] = [trackId, limit];
-  let sql = `SELECT * FROM track_matches WHERE track_id = $1`;
+  let sql = `SELECT * FROM track_matches WHERE track_id = $1 AND matched_at < NOW() - INTERVAL '5 minutes'`;
   if (before) {
     sql += ` AND matched_at < $3`;
     params.push(before);
@@ -193,7 +193,7 @@ export async function getMatchesByUserId(
     SELECT tm.*, t.name AS track_name, t.uuid AS track_uuid
     FROM track_matches tm
     JOIN tracks t ON t.id = tm.track_id
-    WHERE t.user_id = $1`;
+    WHERE t.user_id = $1 AND tm.matched_at < NOW() - INTERVAL '5 minutes'`;
   if (before) {
     sql += ` AND tm.matched_at < $3`;
     params.push(before);
@@ -229,7 +229,7 @@ export async function getFeedSkeletonMatches(
     FROM track_matches tm
     JOIN tracks t ON t.id = tm.track_id
     JOIN track_users tu ON tu.id = t.user_id
-    WHERE tu.did = $1`;
+    WHERE tu.did = $1 AND tm.matched_at < NOW() - INTERVAL '5 minutes'`;
   if (cursor) {
     sql += ` AND tm.matched_at < $3`;
     params.push(cursor);
