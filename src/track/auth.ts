@@ -142,18 +142,9 @@ export async function getTrackUserByFeedToken(token: string): Promise<TrackUser 
 export const trackAuthRouter = new Hono();
 
 // Client metadata endpoint
-trackAuthRouter.get('/client-metadata.json', (c) => {
-  return c.json({
-    client_id: TRACK_OAUTH_CLIENT_ID,
-    client_name: 'Track',
-    client_uri: TRACK_BASE_URL,
-    redirect_uris: [`${TRACK_BASE_URL}/oauth/callback`],
-    grant_types: ['authorization_code', 'refresh_token'],
-    response_types: ['code'],
-    token_endpoint_auth_method: 'none',
-    scope: 'atproto',
-    dpop_bound_access_tokens: true,
-  });
+trackAuthRouter.get('/client-metadata.json', async (c) => {
+  const client = await getOAuthClient();
+  return c.json(client.clientMetadata!);
 });
 
 // Login page
