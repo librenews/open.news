@@ -1,6 +1,7 @@
 import WebSocket from 'ws';
 import { db } from '../db/client.js';
 import { getAllSourceDids } from '../db/queries/sources.js';
+import { deleteTrackMatchByPostUri } from '../db/queries/tracks.js';
 import { normalizeArticleUrl, extractUrlsFromPost } from '../lib/urls.js';
 import { config } from '../lib/config.js';
 import { logger } from '../lib/logger.js';
@@ -151,13 +152,21 @@ interface JetstreamEvent {
 
 function handleEvent(event: JetstreamEvent): void {
   if (event.kind !== 'commit') return;
-  if (event.commit?.operation === 'delete') return;
 
   const { commit, did } = event;
   if (!commit) return;
 
   // Build AT URI from event components (Jetstream doesn't provide pre-built uri)
   const postUri = commit.rkey ? `at://${did}/${commit.collection}/${commit.rkey}` : '';
+
+  if (commit.operation === 'delete') {
+    if (commit.collection === 'app.bsky.feed.post' && postUri) {
+      deleteTrackMatchByPostUri(postUri).catch((err) => {
+        logger.error({ err, postUri }, 'Failed to delete moderated post from DB');
+      });
+    }
+    return;
+  }
 
   // ── Follow-as-signup ──────────────────────────────────────────────────────
   if (commit.collection === 'app.bsky.graph.follow') {

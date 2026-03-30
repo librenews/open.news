@@ -163,6 +163,10 @@ export async function insertTrackMatch(
   );
 }
 
+export async function deleteTrackMatchByPostUri(postUri: string): Promise<void> {
+  await db.query(`DELETE FROM track_matches WHERE post_uri = $1`, [postUri]);
+}
+
 export async function getMatchesByTrackId(
   trackId: bigint | number,
   limit = 50,
