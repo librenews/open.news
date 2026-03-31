@@ -7,6 +7,7 @@ import { config } from '../lib/config.js';
 import { logger } from '../lib/logger.js';
 import { enqueueJob } from '../web/jobEnqueue.js';
 import { xaddPost } from '../lib/redis.js';
+import { logModeration } from '../db/queries/moderation.js';
 
 const CURSOR_PERSIST_INTERVAL_MS = 30_000;
 const DID_REFRESH_INTERVAL_MS = 60_000;
@@ -161,7 +162,13 @@ function handleEvent(event: JetstreamEvent): void {
 
   if (commit.operation === 'delete') {
     if (commit.collection === 'app.bsky.feed.post' && postUri) {
-      deleteTrackMatchByPostUri(postUri).catch((err) => {
+      deleteTrackMatchByPostUri(postUri).then((deleted) => {
+        if (deleted) {
+          logModeration(did, postUri, 'bluesky_delete').catch(err => {
+            logger.error({ err, postUri }, 'Failed to log bluesky_delete event');
+          });
+        }
+      }).catch((err) => {
         logger.error({ err, postUri }, 'Failed to delete moderated post from DB');
       });
     }

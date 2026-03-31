@@ -5,6 +5,7 @@ import { ensureIndex, percolatePost } from './opensearch.js';
 import { insertTrackMatch, getTracksWithEmbeddings, TrackWithEmbedding } from '../db/queries/tracks.js';
 import { embedTexts, checkEmbedHealth } from './embedClient.js';
 import { logEmbeddings } from './embedLogger.js';
+import { logModeration } from '../db/queries/moderation.js';
 
 const STREAM_KEY = 'track:posts';
 const GROUP_NAME = 'track-workers';
@@ -181,19 +182,25 @@ async function processMessages(redis: Redis): Promise<void> {
   }
   const embedMs = Date.now() - embedStart;
 
+  // 2b. Log embeddings to local append-only JSONL for S3 archiving, BEFORE filtering toxicity
+  try {
+    logEmbeddings(posts, embeddings);
+  } catch (err) {
+    logger.error({ err }, 'Failed to write embeddings to local buffer');
+  }
+
   // Pre-filter posts that were flagged as extremely toxic by the AI classifier
   const safePosts = posts.filter((_, i) => !isToxic[i]);
   const safeEmbeddings = embeddings.filter((_, i) => !isToxic[i]);
 
   if (isToxic.some(t => t)) {
-    logger.info({ toxicCount: isToxic.filter(t => t).length }, 'Dropped extremely toxic posts from firehose before DB ingestion');
-  }
-
-  // 2b. Log embeddings to local append-only JSONL for S3 archiving
-  try {
-    logEmbeddings(safePosts, safeEmbeddings);
-  } catch (err) {
-    logger.error({ err }, 'Failed to write embeddings to local buffer');
+    const toxicPosts = posts.filter((_, i) => isToxic[i]);
+    logger.info({ toxicCount: toxicPosts.length }, 'Dropped extremely toxic posts from firehose before DB ingestion');
+    for (const p of toxicPosts) {
+      logModeration(p.did, p.uri, 'toxic-bert').catch((err: any) => {
+        logger.error({ err, uri: p.uri }, 'Failed to log toxic-bert moderation event');
+      });
+    }
   }
 
   // 3. Two-phase match each post and store matches

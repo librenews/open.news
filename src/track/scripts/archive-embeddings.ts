@@ -9,6 +9,8 @@ import 'dotenv/config';
 const DATA_DIR = 'data/embeddings';
 const CURRENT_FILE = path.join(DATA_DIR, 'current.jsonl');
 
+const setTimeoutPromise = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 const s3 = new S3Client({
   region: process.env.S3_REGION || 'auto',
   endpoint: process.env.S3_ENDPOINT,
@@ -48,7 +50,23 @@ async function main() {
   const processingParquet = path.join(DATA_DIR, `archive-${timestamp}.parquet`);
 
   fs.renameSync(CURRENT_FILE, processingJsonl);
-  logger.info({ size: stat.size, file: processingJsonl }, 'Rotated embeddings log buffer');
+  logger.info({ size: stat.size, file: processingJsonl }, 'Rotated embeddings log buffer. Sleeping for 5 minutes to allow Bluesky Trust & Safety deletes to arrive...');
+
+  await setTimeoutPromise(5 * 60 * 1000);
+
+  // Fetch deleted URIs from moderation_logs
+  const { pool } = await import('../../db/client.js');
+  const { rows } = await pool.query<{ uri: string }>(
+    "SELECT uri FROM moderation_logs WHERE reason = 'bluesky_delete' AND created_at >= NOW() - INTERVAL '24 hours'"
+  );
+  const deletedUris = new Set(rows.map((r: { uri: string }) => r.uri));
+  
+  // Prune the moderation ledger so it doesn't grow unbounded
+  try {
+    await pool.query("DELETE FROM moderation_logs WHERE reason = 'bluesky_delete' AND created_at < NOW() - INTERVAL '7 days'");
+  } catch (err) {
+    logger.error({ err }, 'Failed to prune moderation logs');
+  }
 
   // 2. Convert JSONL to Parquet
   let rowsWritten = 0;
@@ -61,6 +79,10 @@ async function main() {
     if (!line.trim()) continue;
     try {
       const row = JSON.parse(line);
+      // Skip posting to the archive if the Trust & Safety sweep caught it during our 5 min delay
+      if (deletedUris.has(row.uri)) {
+        continue;
+      }
       await writer.appendRow({
         uri: row.uri,
         did: row.did,
