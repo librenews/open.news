@@ -628,19 +628,21 @@ app.get('/', async (c) => {
 
     <div class="space-y-3">
       ${tracks.map((t) => `
-        <div class="bg-white border border-slate-200 rounded-xl p-4 hover:shadow-sm transition-shadow">
-          <div class="flex justify-between items-center">
-            <div class="flex items-center gap-2">
-              <a href="/tracks/${t.uuid}" class="font-semibold text-slate-800 hover:text-blue-600 transition-colors no-underline">${escHtml(t.name)}</a>
-              ${t.is_active ? '<span class="text-xs bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded-full">Active</span>' : '<span class="text-xs bg-amber-50 text-amber-600 px-2 py-0.5 rounded-full">Paused</span>'}
+        <div class="bg-white border border-slate-200 rounded-xl hover:shadow-sm transition-shadow flex flex-col">
+          <a href="/tracks/${t.uuid}" class="block p-4 pb-2 no-underline group">
+            <div class="flex justify-between items-center">
+              <div class="flex items-center gap-2">
+                <span class="font-semibold text-slate-800 group-hover:text-blue-600 transition-colors">${escHtml(t.name)}</span>
+                ${t.is_active ? '<span class="text-xs bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded-full">Active</span>' : '<span class="text-xs bg-amber-50 text-amber-600 px-2 py-0.5 rounded-full">Paused</span>'}
+              </div>
+              <span class="text-xs font-medium bg-slate-100 text-slate-500 group-hover:bg-blue-50 group-hover:text-blue-600 transition-colors px-2.5 py-1 rounded-full">${countMap.get(String(t.id)) ?? 0} matches</span>
             </div>
-            <a href="/tracks/${t.uuid}" class="text-xs font-medium bg-slate-100 text-slate-500 hover:bg-blue-50 hover:text-blue-600 transition-colors px-2.5 py-1 rounded-full no-underline">${countMap.get(String(t.id)) ?? 0} matches</a>
-          </div>
-          <div class="mt-2 text-sm text-slate-500">
-            ${t.query ? `<div class="italic">&ldquo;${escHtml(t.query)}&rdquo;</div>` : ''}
-            ${t.keywords.length > 0 ? `<div class="${t.query ? 'mt-1' : ''}">Keywords: ${t.keywords.map((k) => `<code class="bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded text-xs font-medium">${escHtml(k)}</code>`).join(' ')}</div>` : ''}
-          </div>
-          <div class="mt-3 flex items-center justify-between text-xs">
+            <div class="mt-2 text-sm text-slate-500">
+              ${t.query ? `<div class="italic">&ldquo;${escHtml(t.query)}&rdquo;</div>` : ''}
+              ${t.keywords.length > 0 ? `<div class="${t.query ? 'mt-1' : ''}">Keywords: ${t.keywords.map((k) => `<code class="bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded text-xs font-medium">${escHtml(k)}</code>`).join(' ')}</div>` : ''}
+            </div>
+          </a>
+          <div class="px-4 pb-4 pt-1 flex items-center justify-between text-xs">
             <div class="flex items-center gap-4">
               <a href="/tracks/${t.uuid}/edit" class="text-blue-500 hover:text-blue-700 transition-colors">Edit</a>
               <form method="POST" action="/tracks/${t.uuid}/toggle" class="inline">
@@ -1140,12 +1142,16 @@ function buildRss(title: string, matches: MatchRow[]): string {
 }
 
 function renderPage(title: string, user: TrackUser | null, content: string): string {
+  const adminHandles = (process.env.ADMIN_HANDLES ?? '').split(',').map(h => h.trim().toLowerCase()).filter(Boolean);
+  const isAdmin = user ? (adminHandles.length === 0 || adminHandles.includes(user.handle.toLowerCase())) : false;
+  const mainAppUrl = process.env.BASE_URL ?? 'https://open.news';
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>${escHtml(title)} — Track</title>
+  <title>\${escHtml(title)} — Track</title>
   <link rel="icon" type="image/png" href="/favicon.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -1158,22 +1164,29 @@ function renderPage(title: string, user: TrackUser | null, content: string): str
         <img src="/logo.png" alt="Track" class="h-7">
       </a>
       <div class="flex items-center gap-4">
-        ${user ? `
+        \${user ? \`
         <div class="relative group">
           <button class="flex items-center justify-center w-8 h-8 rounded-full bg-slate-100 overflow-hidden ring-2 ring-transparent group-hover:ring-blue-500 transition-all focus:outline-none">
-            ${user.avatar_url ? `<img src="${escHtml(user.avatar_url)}" alt="${escHtml(user.handle)}" class="w-full h-full object-cover">` : `<span class="text-xs font-semibold text-slate-500">${escHtml(user.handle.slice(0, 2).toUpperCase())}</span>`}
+            \${user.avatar_url ? \`<img src="\${escHtml(user.avatar_url)}" alt="\${escHtml(user.handle)}" class="w-full h-full object-cover">\` : \`<span class="text-xs font-semibold text-slate-500">\${escHtml(user.handle.slice(0, 2).toUpperCase())}</span>\`}
           </button>
           <div class="absolute right-0 mt-2 w-48 bg-white border border-slate-200 rounded-lg shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-20 overflow-hidden">
             <div class="px-4 py-3 border-b border-slate-100 bg-slate-50">
-              <p class="text-sm font-medium text-slate-900 truncate">${escHtml(user.display_name ?? user.handle)}</p>
-              <p class="text-xs text-slate-500 truncate">@${escHtml(user.handle)}</p>
+              <p class="text-sm font-medium text-slate-900 truncate">\${escHtml(user.display_name ?? user.handle)}</p>
+              <p class="text-xs text-slate-500 truncate">@\${escHtml(user.handle)}</p>
             </div>
+            \${isAdmin ? \`
+            <div class="border-b border-slate-100 py-1">
+              <a href="\${mainAppUrl}/admin" class="block w-full text-left px-4 py-1.5 text-sm text-slate-700 hover:bg-slate-50 hover:text-blue-600 transition-colors no-underline">Admin Dashboard</a>
+              <a href="\${mainAppUrl}/admin/product" class="block w-full text-left px-4 py-1.5 text-sm text-slate-700 hover:bg-slate-50 hover:text-blue-600 transition-colors no-underline">Product Feedback</a>
+              <a href="/health" class="block w-full text-left px-4 py-1.5 text-sm text-slate-700 hover:bg-slate-50 hover:text-blue-600 transition-colors no-underline">System Health</a>
+            </div>
+            \` : ''}
             <form method="POST" action="/oauth/logout" class="block w-full">
               <button type="submit" class="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-slate-50 transition-colors cursor-pointer focus:outline-none">Sign out</button>
             </form>
           </div>
         </div>
-        ` : ''}
+        \` : ''}
       </div>
     </div>
   </nav>
