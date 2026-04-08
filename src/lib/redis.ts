@@ -22,6 +22,7 @@ export function getRedis(): Redis {
  */
 export function xaddPost(did: string, text: string, uri: string, timeUs: string, langs: string, facets = ''): void {
   const r = getRedis();
-  r.xadd('track:posts', '*', 'did', did, 'text', text, 'uri', uri, 'ts', timeUs, 'langs', langs, 'facets', facets)
+  // Cap the stream at roughly 250,000 posts (~2-3 hours) to prevent infinite memory growth (OOM)
+  r.xadd('track:posts', 'MAXLEN', '~', 250000, '*', 'did', did, 'text', text, 'uri', uri, 'ts', timeUs, 'langs', langs, 'facets', facets)
     .catch((err: Error) => logger.warn({ err }, 'Redis XADD failed'));
 }

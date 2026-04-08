@@ -1151,7 +1151,7 @@ function renderPage(title: string, user: TrackUser | null, content: string): str
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>\${escHtml(title)} — Track</title>
+  <title>${escHtml(title)} — Track</title>
   <link rel="icon" type="image/png" href="/favicon.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -1164,29 +1164,29 @@ function renderPage(title: string, user: TrackUser | null, content: string): str
         <img src="/logo.png" alt="Track" class="h-7">
       </a>
       <div class="flex items-center gap-4">
-        \${user ? \`
+        ${user ? `
         <div class="relative group">
           <button class="flex items-center justify-center w-8 h-8 rounded-full bg-slate-100 overflow-hidden ring-2 ring-transparent group-hover:ring-blue-500 transition-all focus:outline-none">
-            \${user.avatar_url ? \`<img src="\${escHtml(user.avatar_url)}" alt="\${escHtml(user.handle)}" class="w-full h-full object-cover">\` : \`<span class="text-xs font-semibold text-slate-500">\${escHtml(user.handle.slice(0, 2).toUpperCase())}</span>\`}
+            ${user.avatar_url ? `<img src="${escHtml(user.avatar_url)}" alt="${escHtml(user.handle)}" class="w-full h-full object-cover">` : `<span class="text-xs font-semibold text-slate-500">${escHtml(user.handle.slice(0, 2).toUpperCase())}</span>`}
           </button>
           <div class="absolute right-0 mt-2 w-48 bg-white border border-slate-200 rounded-lg shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-20 overflow-hidden">
             <div class="px-4 py-3 border-b border-slate-100 bg-slate-50">
-              <p class="text-sm font-medium text-slate-900 truncate">\${escHtml(user.display_name ?? user.handle)}</p>
-              <p class="text-xs text-slate-500 truncate">@\${escHtml(user.handle)}</p>
+              <p class="text-sm font-medium text-slate-900 truncate">${escHtml(user.display_name ?? user.handle)}</p>
+              <p class="text-xs text-slate-500 truncate">@${escHtml(user.handle)}</p>
             </div>
-            \${isAdmin ? \`
+            ${isAdmin ? `
             <div class="border-b border-slate-100 py-1">
-              <a href="\${mainAppUrl}/admin" class="block w-full text-left px-4 py-1.5 text-sm text-slate-700 hover:bg-slate-50 hover:text-blue-600 transition-colors no-underline">Admin Dashboard</a>
-              <a href="\${mainAppUrl}/admin/product" class="block w-full text-left px-4 py-1.5 text-sm text-slate-700 hover:bg-slate-50 hover:text-blue-600 transition-colors no-underline">Product Feedback</a>
+              <a href="${mainAppUrl}/admin" class="block w-full text-left px-4 py-1.5 text-sm text-slate-700 hover:bg-slate-50 hover:text-blue-600 transition-colors no-underline">Admin Dashboard</a>
+              <a href="${mainAppUrl}/admin/product" class="block w-full text-left px-4 py-1.5 text-sm text-slate-700 hover:bg-slate-50 hover:text-blue-600 transition-colors no-underline">Product Feedback</a>
               <a href="/health" class="block w-full text-left px-4 py-1.5 text-sm text-slate-700 hover:bg-slate-50 hover:text-blue-600 transition-colors no-underline">System Health</a>
             </div>
-            \` : ''}
+            ` : ''}
             <form method="POST" action="/oauth/logout" class="block w-full">
               <button type="submit" class="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-slate-50 transition-colors cursor-pointer focus:outline-none">Sign out</button>
             </form>
           </div>
         </div>
-        \` : ''}
+        ` : ''}
       </div>
     </div>
   </nav>
