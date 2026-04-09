@@ -98,6 +98,13 @@ export async function getOAuthClient(): Promise<NodeOAuthClient> {
   return _oauthClient;
 }
 
+export async function getAgent(did: string) {
+  const client = await getOAuthClient();
+  const session = await client.restore(did);
+  const { Agent } = await import('@atproto/api');
+  return new Agent(session);
+}
+
 export async function upsertTrackUser(params: {
   did: string;
   handle: string;

@@ -368,6 +368,42 @@ app.get('/api/unfurl', async (c) => {
   }
 });
 
+app.post('/api/action/:type', async (c) => {
+  const userId = c.get('userId');
+  const user = await getTrackUserById(userId);
+  if (!user) return c.json({ error: 'Unauthorized' }, 401);
+
+  const type = c.req.param('type');
+  if (type !== 'like' && type !== 'repost') return c.json({ error: 'Invalid action' }, 400);
+
+  const body = await c.req.json().catch(() => ({}));
+  const { uri } = body;
+  if (!uri) return c.json({ error: 'Missing uri' }, 400);
+
+  try {
+    const { getAgent } = await import('./auth.js');
+    const agent = await getAgent(user.did);
+
+    const res = await agent.getPosts({ uris: [uri] });
+    const post = res.data.posts[0];
+    if (!post) {
+      return c.json({ error: 'Post not found on network' }, 404);
+    }
+    const cid = post.cid;
+
+    if (type === 'like') {
+      await agent.like(uri, cid);
+    } else {
+      await agent.repost(uri, cid);
+    }
+
+    return c.json({ success: true });
+  } catch (err: any) {
+    logger.error({ err, uri, type }, 'ATProto action failed');
+    return c.json({ error: err.message || 'Action failed' }, 500);
+  }
+});
+
 // ─── Legal Pages ────────────────────────────────────────────────────────────
 
 const privacyHtml = `
@@ -983,11 +1019,55 @@ function renderMatches(matches: MatchRow[]): string {
         </div>
         <div class="text-sm text-slate-700 leading-relaxed break-words post-body">${renderRichText(m.post_text, m.facets)}</div>
         <div class="unfurled-cards mt-3 space-y-2 empty:hidden"></div>
-        <a href="${bskyUrl}" target="_blank" class="text-xs text-blue-500 hover:text-blue-700 mt-3 inline-block transition-colors no-underline">View on Bluesky →</a>
+        <div class="mt-4 flex items-center justify-between">
+          <div class="flex items-center gap-4">
+            <button class="action-btn text-slate-400 hover:text-pink-500 transition-colors flex items-center gap-1.5 cursor-pointer" data-action="like" data-uri="${m.post_uri}" title="Like">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"></path></svg>
+            </button>
+            <button class="action-btn text-slate-400 hover:text-emerald-500 transition-colors flex items-center gap-1.5 cursor-pointer" data-action="repost" data-uri="${m.post_uri}" title="Repost">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+            </button>
+          </div>
+          <a href="${bskyUrl}" target="_blank" class="text-xs text-blue-500 hover:text-blue-700 transition-colors no-underline">View on Bluesky →</a>
+        </div>
       </div>`;
   }).join('')}</div>
   <script>
   (async function() {
+    // ─── Actions Engine ───
+    document.querySelectorAll('.action-btn').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        const action = btn.dataset.action;
+        const uri = btn.dataset.uri;
+        if (!uri) return;
+
+        // Optimistic UI toggle
+        const originalClass = btn.className;
+        const originalHtml = btn.innerHTML;
+        if (action === 'like') {
+          btn.className = 'action-btn text-pink-500 transition-colors flex items-center gap-1.5';
+          btn.innerHTML = btn.innerHTML.replace('fill="none"', 'fill="currentColor"');
+        }
+        if (action === 'repost') {
+          btn.className = 'action-btn text-emerald-500 transition-colors flex items-center gap-1.5';
+        }
+
+        try {
+          const res = await fetch('/api/action/' + action, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ uri })
+          });
+          if (!res.ok) throw new Error('Request failed');
+        } catch (err) {
+          btn.className = originalClass;
+          btn.innerHTML = originalHtml;
+          alert('Failed to ' + action + ' post. Please try again.');
+        }
+      });
+    });
+
+    // ─── Profile Resolution ───
     const elements = document.querySelectorAll('.author-profile');
     const dids = new Set();
     elements.forEach(el => dids.add(el.dataset.did));
