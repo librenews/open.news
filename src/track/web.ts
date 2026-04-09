@@ -997,6 +997,7 @@ interface MatchRow {
   track_name?: string;
   track_uuid?: string;
   facets?: string | null;
+  embed?: any | null;
 }
 
 function renderMatches(matches: MatchRow[]): string {
@@ -1004,6 +1005,57 @@ function renderMatches(matches: MatchRow[]): string {
   return `<div class="space-y-4">${matches.map((m) => {
     const bskyUrl = m.post_uri.replace('at://', 'https://bsky.app/profile/').replace('/app.bsky.feed.post/', '/post/');
     const ago = timeAgo(m.matched_at);
+    let nativeEmbedHtml = '';
+    if (m.embed) {
+      try {
+        const embed = typeof m.embed === 'string' ? JSON.parse(m.embed) : m.embed;
+        if (embed.$type === 'app.bsky.embed.external' && embed.external) {
+          const ext = embed.external;
+          let imgHtml = '';
+          if (ext.thumb && ext.thumb.ref && ext.thumb.ref.$link) {
+            const thumbUrl = `https://cdn.bsky.app/img/feed_thumbnail/plain/${m.post_did}/${ext.thumb.ref.$link}@jpeg`;
+            imgHtml = `<div class="w-1/3 sm:w-1/4 shrink-0 bg-slate-100 flex border-r border-slate-100"><img src="${escHtml(thumbUrl)}" class="w-full h-full object-cover"></div>`;
+          }
+          let hostname = ext.uri;
+          try { hostname = new URL(ext.uri).hostname; } catch {}
+          nativeEmbedHtml = `<div class="native-embed"><a href="${escHtml(ext.uri)}" target="_blank" class="flex flex-row items-stretch border border-slate-200 rounded-lg overflow-hidden hover:bg-slate-50 transition-colors no-underline mt-3">
+            ${imgHtml}
+            <div class="flex flex-col p-3 w-full min-w-0 justify-center gap-1">
+              <div class="text-sm font-semibold text-slate-800 truncate" title="${escHtml(ext.title || hostname)}">${escHtml(ext.title || hostname)}</div>
+              ${ext.description ? `<div class="text-xs text-slate-500 line-clamp-2">${escHtml(ext.description)}</div>` : ''}
+              <div class="text-[10px] text-slate-400 truncate mt-0.5 uppercase tracking-wide font-medium flex items-center gap-1.5">
+                <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/></svg>
+                ${escHtml(hostname)}
+              </div>
+            </div>
+          </a></div>`;
+        } else if (embed.$type === 'app.bsky.embed.images' && Array.isArray(embed.images)) {
+          const count = embed.images.length;
+          const gridClass = count === 1 ? 'grid-cols-1' : count === 2 ? 'grid-cols-2' : 'grid-cols-2';
+          const imgTags = embed.images.map((img: any) => {
+            if (img.image && img.image.ref && img.image.ref.$link) {
+               const thumbUrl = `https://cdn.bsky.app/img/feed_thumbnail/plain/${m.post_did}/${img.image.ref.$link}@jpeg`;
+               return `<a href="${thumbUrl.replace('feed_thumbnail', 'feed_fullsize')}" target="_blank" class="block aspect-video bg-slate-100 rounded-lg overflow-hidden border border-slate-200 hover:opacity-90 transition-opacity"><img src="${escHtml(thumbUrl)}" alt="${escHtml(img.alt || '')}" class="w-full h-full object-cover"></a>`;
+            }
+            return '';
+          }).join('');
+          nativeEmbedHtml = `<div class="native-embed grid ${gridClass} gap-2 mt-3">${imgTags}</div>`;
+        } else if (embed.$type === 'app.bsky.embed.record' && embed.record) {
+          const rec = embed.record;
+          const authorDid = rec.uri ? rec.uri.split('/')[2] : '';
+          const authorHandle = authorDid.slice(0, 16) + '…';
+          nativeEmbedHtml = `<div class="native-embed border border-slate-200 rounded-lg p-3 mt-3 bg-slate-50/50">
+            <div class="flex items-center gap-2 mb-1.5 author-profile" data-did="${escHtml(authorDid)}">
+              <div class="w-4 h-4 rounded-full bg-slate-200 overflow-hidden flex items-center justify-center shrink-0 author-avatar"></div>
+              <span class="text-xs font-semibold text-slate-700 author-name">${escHtml(authorHandle)}</span>
+              <span class="text-[10px] text-slate-400 font-normal author-handle hidden"></span>
+            </div>
+            <div class="text-sm text-slate-600 line-clamp-3">${rec.value && rec.value.text ? escHtml(rec.value.text) : 'Quote Post'}</div>
+          </div>`;
+        }
+      } catch (err) {}
+    }
+
     return `
       <div class="bg-white border border-slate-200 rounded-xl p-4 hover:shadow-sm transition-shadow">
         <div class="flex items-center gap-2 mb-3 author-profile" data-did="${m.post_did}">
@@ -1018,6 +1070,7 @@ function renderMatches(matches: MatchRow[]): string {
           ${m.track_name && m.track_uuid ? ` · <a href="/tracks/${m.track_uuid}" class="bg-gradient-to-r from-blue-500 to-emerald-500 text-white text-[10px] font-medium px-1.5 py-0.5 rounded-full hover:opacity-80 transition-opacity no-underline">${escHtml(m.track_name)}</a>` : ''}
         </div>
         <div class="text-sm text-slate-700 leading-relaxed break-words post-body">${renderRichText(m.post_text, m.facets)}</div>
+        ${nativeEmbedHtml}
         <div class="unfurled-cards mt-3 space-y-2 empty:hidden"></div>
         <div class="mt-4 flex items-center justify-between">
           <div class="flex items-center gap-4">
@@ -1120,7 +1173,11 @@ function renderMatches(matches: MatchRow[]): string {
       if (!link) return;
       const url = link.href;
 
-      const container = body.nextElementSibling;
+      let container = body.nextElementSibling;
+      if (container && container.classList.contains('native-embed')) {
+        return; // Skip HTML scraping if backend already built a Native Embed card below it
+      }
+      
       if (!container || !container.classList.contains('unfurled-cards')) return;
 
       try {
@@ -1201,17 +1258,58 @@ function timeAgo(date: Date): string {
 function buildRss(title: string, matches: MatchRow[]): string {
   const items = matches.map((m) => {
     const bskyUrl = m.post_uri.replace('at://', 'https://bsky.app/profile/').replace('/app.bsky.feed.post/', '/post/');
+    let mediaTags = '';
+    let enclosureTags = '';
+    let descriptionExt = '';
+
+    if (m.embed) {
+      try {
+        const embed = typeof m.embed === 'string' ? JSON.parse(m.embed) : m.embed;
+        if (embed.$type === 'app.bsky.embed.external' && embed.external) {
+          const ext = embed.external;
+          if (ext.thumb && ext.thumb.ref && ext.thumb.ref.$link) {
+             const thumbUrl = `https://cdn.bsky.app/img/feed_fullsize/plain/${m.post_did}/${ext.thumb.ref.$link}@jpeg`;
+             mediaTags += `<media:content url="${escHtml(thumbUrl)}" medium="image"><media:title>${escHtml(ext.title || '')}</media:title><media:description>${escHtml(ext.description || '')}</media:description></media:content>`;
+             enclosureTags += `<enclosure url="${escHtml(thumbUrl)}" type="image/jpeg" length="0" />`;
+             descriptionExt += `<br/><br/><a href="${escHtml(ext.uri)}"><img src="${escHtml(thumbUrl)}" style="max-width:100%; border-radius:8px;"/><br/><strong>${escHtml(ext.title || 'Link')}</strong></a>`;
+          }
+        } else if (embed.$type === 'app.bsky.embed.images' && Array.isArray(embed.images)) {
+          for (const img of embed.images) {
+            if (img.image && img.image.ref && img.image.ref.$link) {
+               const thumbUrl = `https://cdn.bsky.app/img/feed_fullsize/plain/${m.post_did}/${img.image.ref.$link}@jpeg`;
+               mediaTags += `<media:content url="${escHtml(thumbUrl)}" medium="image"><media:description>${escHtml(img.alt || '')}</media:description></media:content>`;
+               if (!enclosureTags) {
+                 enclosureTags += `<enclosure url="${escHtml(thumbUrl)}" type="image/jpeg" length="0" />`;
+               }
+               descriptionExt += `<br/><br/><img src="${escHtml(thumbUrl)}" alt="${escHtml(img.alt || '')}" style="max-width:100%; border-radius:8px;" />`;
+            }
+          }
+        } else if (embed.$type === 'app.bsky.embed.record' && embed.record) {
+          const rec = embed.record;
+          if (rec.value && rec.value.text) {
+             descriptionExt += `<br/><br/><blockquote style="border-left:4px solid #cbd5e1; padding-left:12px; margin-left:0; color:#475569;">${escHtml(rec.value.text)}</blockquote>`;
+          }
+        }
+      } catch (e) {}
+    }
+
+    const postTitle = m.post_text ? m.post_text.slice(0, 100) : 'Bluesky Post';
+    const finalDescription = `${renderRichText(m.post_text, m.facets)}${descriptionExt}`;
+
     return `<item>
-      <title>${escHtml(m.post_text.slice(0, 100))}</title>
+      <title>${escHtml(postTitle)}</title>
       <link>${bskyUrl}</link>
-      <description>${escHtml(m.post_text)}</description>
+      <description><![CDATA[${finalDescription}]]></description>
       <pubDate>${m.matched_at.toUTCString()}</pubDate>
       <guid>${m.post_uri}</guid>
+      <author>${m.post_did}</author>
+      ${enclosureTags}
+      ${mediaTags}
     </item>`;
   }).join('\n');
 
   return `<?xml version="1.0" encoding="UTF-8"?>
-<rss version="2.0">
+<rss version="2.0" xmlns:media="http://search.yahoo.com/mrss/">
   <channel>
     <title>Track: ${escHtml(title)}</title>
     <description>Bluesky posts matching "${escHtml(title)}"</description>

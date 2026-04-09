@@ -148,6 +148,7 @@ export interface TrackMatch {
   post_text: string;
   matched_at: Date;
   facets: string | null;
+  embed: any | null;
 }
 
 export async function insertTrackMatch(
@@ -155,13 +156,14 @@ export async function insertTrackMatch(
   postUri: string,
   postDid: string,
   postText: string,
-  facetsRaw = ''
+  facetsRaw = '',
+  embedRaw = ''
 ): Promise<void> {
   await db.query(
-    `INSERT INTO track_matches (track_id, post_uri, post_did, post_text, facets)
-     VALUES ($1, $2, $3, $4, $5::jsonb)
+    `INSERT INTO track_matches (track_id, post_uri, post_did, post_text, facets, embed)
+     VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb)
      ON CONFLICT (track_id, post_uri) DO NOTHING`,
-    [trackId, postUri, postDid, postText, facetsRaw ? facetsRaw : null]
+    [trackId, postUri, postDid, postText, facetsRaw ? facetsRaw : null, embedRaw ? embedRaw : null]
   );
 }
 

@@ -124,6 +124,7 @@ interface Post {
   uri: string;
   langs: string;
   facets: string;
+  embed: string;
 }
 
 async function processMessages(redis: Redis): Promise<void> {
@@ -156,7 +157,7 @@ async function processMessages(redis: Redis): Promise<void> {
         continue;
       }
 
-      posts.push({ messageId, did: data.did, text: data.text, uri: data.uri, langs: data.langs ?? '', facets: data.facets ?? '' });
+      posts.push({ messageId, did: data.did, text: data.text, uri: data.uri, langs: data.langs ?? '', facets: data.facets ?? '', embed: data.embed ?? '' });
     }
   }
 
@@ -211,7 +212,7 @@ async function processMessages(redis: Redis): Promise<void> {
       const isEnglish = !post.langs || post.langs.split(',').some((l) => l.startsWith('en'));
       const matchedTrackIds = await matchPost(post.text, post.did, post.uri, safeEmbeddings[i], isEnglish);
       for (const trackId of matchedTrackIds) {
-        await insertTrackMatch(trackId, post.uri, post.did, post.text, post.facets);
+        await insertTrackMatch(trackId, post.uri, post.did, post.text, post.facets, post.embed);
       }
       totalMatches += matchedTrackIds.length;
     } catch (err) {

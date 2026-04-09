@@ -194,7 +194,8 @@ function handleEvent(event: JetstreamEvent): void {
   // Push every post to Redis stream for track matching (fire-and-forget)
   const langs = Array.isArray(post.langs) ? post.langs.join(',') : '';
   const facets = post.facets ? JSON.stringify(post.facets) : '';
-  xaddPost(did, String(post.text ?? ''), postUri, String(event.time_us ?? Date.now() * 1000), langs, facets);
+  const embedStr = post.embed ? JSON.stringify(post.embed) : '';
+  xaddPost(did, String(post.text ?? ''), postUri, String(event.time_us ?? Date.now() * 1000), langs, facets, embedStr);
 
   // Bot mention detection
   const isMention = Array.isArray(post.facets) &&
