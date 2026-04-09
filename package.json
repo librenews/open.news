@@ -9,6 +9,7 @@
     "dev:web": "node --env-file=.env --import tsx/esm src/web/index.tsx",
     "dev:firehose": "node --env-file=.env --import tsx/esm src/firehose/index.ts",
     "dev:worker": "node --env-file=.env --import tsx/esm src/worker/index.ts",
+    "dev:feeds": "node --env-file=.env --import tsx/esm src/feeds/web.ts",
     "migrate": "node --env-file=.env --import tsx/esm src/db/migrate.ts",
     "test": "vitest run",
     "test:watch": "vitest",

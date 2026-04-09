@@ -9,3 +9,7 @@ open.news {
 track.social {
     reverse_proxy localhost:4200
 }
+
+feeds.social {
+    reverse_proxy localhost:4300
+}

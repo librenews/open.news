@@ -72,5 +72,16 @@ module.exports = {
       error_file: '/var/log/opennews/track-worker-error.log',
       out_file: '/var/log/opennews/track-worker-out.log',
     },
+    {
+      name: 'feeds-web',
+      script: 'node',
+      args: '--import tsx/esm src/feeds/web.ts',
+      cwd: '/home/opennews/open-news',
+      instances: 1, autorestart: true, watch: false,
+      max_memory_restart: '256M',
+      env: envVars,
+      error_file: '/var/log/opennews/feeds-web-error.log',
+      out_file: '/var/log/opennews/feeds-web-out.log',
+    },
   ],
 };
