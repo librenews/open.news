@@ -12,6 +12,7 @@ import {
   getMatchesByTrackId, getMatchesByUserId, getMatchCountByTrack,
   getFeedSkeletonMatches, getTrackByUuid,
 } from '../db/queries/tracks.js';
+import { logFeedRequest } from '../db/queries/metrics.js';
 import { RichText, Agent } from '@atproto/api';
 import { upsertTrackQuery, deleteTrackQuery } from './opensearch.js';
 import { embedText } from './embedClient.js';
@@ -118,6 +119,23 @@ app.get('/xrpc/app.bsky.feed.getFeedSkeleton', async (c) => {
   const limit = Math.min(parseInt(c.req.query('limit') ?? '30', 10), 100);
   const cursor = c.req.query('cursor') ?? undefined;
 
+  // Extract requester DID universally for metrics & auth
+  const authHeader = c.req.header('Authorization');
+  let requesterDid: string | undefined;
+  if (authHeader?.startsWith('Bearer ')) {
+    try {
+      const token = authHeader.slice(7);
+      const payloadB64 = token.split('.')[1];
+      const payload = JSON.parse(Buffer.from(payloadB64, 'base64url').toString());
+      requesterDid = payload.iss;
+    } catch {
+      // Ignore
+    }
+  }
+
+  // Fire-and-forget telemetry logging
+  logFeedRequest(rkey, requesterDid, cursor, limit).catch(() => {});
+
   // 1. Dynamic Track custom feed
   if (rkey !== FEED_RKEY) {
     const track = await getTrackByUuid(rkey);
@@ -134,19 +152,6 @@ app.get('/xrpc/app.bsky.feed.getFeedSkeleton', async (c) => {
   }
 
   // 2. Legacy / Root 'track-matches' feed
-  const authHeader = c.req.header('Authorization');
-  let requesterDid: string | undefined;
-
-  if (authHeader?.startsWith('Bearer ')) {
-    try {
-      const token = authHeader.slice(7);
-      const payloadB64 = token.split('.')[1];
-      const payload = JSON.parse(Buffer.from(payloadB64, 'base64url').toString());
-      requesterDid = payload.iss;
-    } catch {
-      // Ignore JWT parse errors
-    }
-  }
 
   if (requesterDid) {
     const user = await getTrackUserByDid(requesterDid);
