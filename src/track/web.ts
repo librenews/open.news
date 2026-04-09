@@ -12,7 +12,7 @@ import {
   getMatchesByTrackId, getMatchesByUserId, getMatchCountByTrack,
   getFeedSkeletonMatches, getTrackByUuid,
 } from '../db/queries/tracks.js';
-import { logFeedRequest } from '../db/queries/metrics.js';
+import { logFeedRequest, getFeedMetricsTotals, getFeedMetricsChartData } from '../db/queries/metrics.js';
 import { RichText, Agent } from '@atproto/api';
 import { upsertTrackQuery, deleteTrackQuery } from './opensearch.js';
 import { embedText } from './embedClient.js';
@@ -940,8 +940,12 @@ app.get('/tracks/:uuid', async (c) => {
   const before = c.req.query('before');
   const matches = await getMatchesByTrackId(track.id, 50, before);
 
+  // Fetch telemetry
+  const totals = await getFeedMetricsTotals(track.uuid);
+  const chartData = await getFeedMetricsChartData(track.uuid);
+
   return c.html(renderPage(track.name, user, `
-    <div class="flex justify-between items-center mb-6">
+    <div class="flex justify-between items-start mb-6">
       <div>
         <a href="/" class="text-sm text-blue-500 hover:text-blue-700 transition-colors">← Back</a>
         <div class="flex items-center gap-3 mt-1">
@@ -963,7 +967,60 @@ app.get('/tracks/:uuid', async (c) => {
           <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="6.18" cy="17.82" r="2.18"/><path d="M4 4.44v2.83c7.03 0 12.73 5.7 12.73 12.73h2.83c0-8.59-6.97-15.56-15.56-15.56zm0 5.66v2.83c3.9 0 7.07 3.17 7.07 7.07h2.83c0-5.47-4.43-9.9-9.9-9.9z"/></svg>
         </a>
       </div>
+      </div>
     </div>
+
+    ${track.feed_published ? `
+      <div class="mb-8 grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="bg-white p-4 rounded-xl border border-slate-200">
+          <div class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Feed Requests (24h)</div>
+          <div class="text-2xl font-bold text-slate-800">${totals.total}</div>
+        </div>
+        <div class="bg-white p-4 rounded-xl border border-slate-200">
+          <div class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Unique Viewers (24h)</div>
+          <div class="text-2xl font-bold text-slate-800">${totals.uniqueUsers}</div>
+        </div>
+        <div class="bg-white p-4 rounded-xl border border-slate-200 md:col-span-1 h-24 relative">
+          <canvas id="metricsChart"></canvas>
+        </div>
+      </div>
+      <script>
+        const ctx = document.getElementById('metricsChart').getContext('2d');
+        const rawData = ${JSON.stringify(chartData)};
+        
+        // Ensure continuous 24h pad if data is sparse
+        const chartLabels = rawData.map(d => new Date(d.label).toLocaleTimeString([], {hour: '2-digit'}));
+        const chartCounts = rawData.map(d => d.count);
+
+        new Chart(ctx, {
+          type: 'line',
+          data: {
+            labels: chartLabels,
+            datasets: [{
+              label: 'Requests',
+              data: chartCounts,
+              borderColor: '#6366f1',
+              backgroundColor: 'rgba(99, 102, 241, 0.1)',
+              borderWidth: 2,
+              fill: true,
+              tension: 0.4,
+              pointRadius: 0
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+              x: { display: false },
+              y: { display: false, beginAtZero: true }
+            },
+            interaction: { mode: 'index', intersect: false }
+          }
+        });
+      </script>
+    ` : ''}
+
     ${renderMatches(matches)}
     ${matches.length === 50 ? `<a href="/tracks/${track.uuid}?before=${matches[matches.length - 1].matched_at.toISOString()}" class="block text-center mt-4 py-2.5 border border-slate-200 text-slate-500 text-sm rounded-lg hover:border-blue-500 hover:text-blue-500 transition-colors no-underline">Load more</a>` : ''}
   `));
@@ -1339,6 +1396,7 @@ function renderPage(title: string, user: TrackUser | null, content: string): str
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body class="bg-slate-50 font-[Inter] text-slate-800 min-h-screen">
   <nav class="bg-white border-b border-slate-200 sticky top-0 z-10">
