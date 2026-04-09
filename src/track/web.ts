@@ -1045,6 +1045,69 @@ app.get('/feed', async (c) => {
   `));
 });
 
+app.get('/metrics', async (c) => {
+  const userId = c.get('userId');
+  const user = await getTrackUserById(userId);
+  
+  const totals = await getFeedMetricsTotals(FEED_RKEY);
+  const chartData = await getFeedMetricsChartData(FEED_RKEY);
+
+  return c.html(renderPage('Global Metrics', user, `
+    <div class="flex items-center gap-3 mb-6">
+      <h2 class="text-xl font-semibold text-slate-800">Global Feed Analytics</h2>
+      <span class="text-xs font-medium text-slate-500 bg-slate-100 px-2 py-1 rounded-md">track-matches</span>
+    </div>
+
+    <div class="mb-8 grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div class="bg-white p-4 rounded-xl border border-slate-200">
+        <div class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Global Requests (24h)</div>
+        <div class="text-2xl font-bold text-slate-800">${totals.total}</div>
+      </div>
+      <div class="bg-white p-4 rounded-xl border border-slate-200">
+        <div class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Unique Viewers (24h)</div>
+        <div class="text-2xl font-bold text-slate-800">${totals.uniqueUsers}</div>
+      </div>
+      <div class="bg-white p-4 rounded-xl border border-slate-200 md:col-span-1 h-24 relative">
+        <canvas id="globalMetricsChart"></canvas>
+      </div>
+    </div>
+    <script>
+      const ctx = document.getElementById('globalMetricsChart').getContext('2d');
+      const rawData = ${JSON.stringify(chartData)};
+      
+      const chartLabels = rawData.map(d => new Date(d.label).toLocaleTimeString([], {hour: '2-digit'}));
+      const chartCounts = rawData.map(d => d.count);
+
+      new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: chartLabels,
+          datasets: [{
+            label: 'Requests',
+            data: chartCounts,
+            borderColor: '#6366f1',
+            backgroundColor: 'rgba(99, 102, 241, 0.1)',
+            borderWidth: 2,
+            fill: true,
+            tension: 0.4,
+            pointRadius: 0
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { display: false },
+            y: { display: false, beginAtZero: true }
+          },
+          interaction: { mode: 'index', intersect: false }
+        }
+      });
+    </script>
+  `));
+});
+
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 function escHtml(s: string): string {
@@ -1414,6 +1477,9 @@ function renderPage(title: string, user: TrackUser | null, content: string): str
             <div class="px-4 py-3 border-b border-slate-100 bg-slate-50">
               <p class="text-sm font-medium text-slate-900 truncate">${escHtml(user.display_name ?? user.handle)}</p>
               <p class="text-xs text-slate-500 truncate">@${escHtml(user.handle)}</p>
+            </div>
+            <div class="border-b border-slate-100 py-1">
+              <a href="/metrics" class="block w-full text-left px-4 py-1.5 text-sm text-slate-700 hover:bg-slate-50 hover:text-blue-600 transition-colors no-underline">Global Metrics</a>
             </div>
             ${isAdmin ? `
             <div class="border-b border-slate-100 py-1">
