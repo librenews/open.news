@@ -1294,16 +1294,16 @@ function renderMatches(matches: MatchRow[]): string {
 
     return `
       <div class="bg-white border border-slate-200 rounded-xl p-4 hover:shadow-sm transition-shadow">
-        <div class="flex items-center gap-2 mb-3 author-profile" data-did="${m.post_did}">
-          <a href="https://bsky.app/profile/${m.post_did}" target="_blank" class="flex items-center gap-2 text-slate-800 hover:text-blue-600 transition-colors no-underline group">
+        <div class="flex items-center flex-wrap gap-x-2 gap-y-1 mb-3 author-profile" data-did="${m.post_did}">
+          <a href="https://bsky.app/profile/${m.post_did}" target="_blank" class="flex items-center gap-2 text-slate-800 hover:text-blue-600 transition-colors no-underline group min-w-0 shrink">
             <div class="w-6 h-6 rounded-full bg-slate-200 overflow-hidden flex items-center justify-center shrink-0 author-avatar">
               <svg class="w-4 h-4 text-slate-400" fill="currentColor" viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
             </div>
-            <span class="text-sm font-semibold author-name">${m.post_did.slice(0, 16)}…</span>
-            <span class="text-xs text-slate-400 font-normal author-handle hidden group-hover:text-blue-400"></span>
+            <span class="text-sm font-semibold author-name truncate max-w-[100px] shrink-0">${m.post_did.slice(0, 16)}…</span>
+            <span class="text-xs text-slate-400 font-normal author-handle hidden group-hover:text-blue-400 truncate min-w-0 shrink"></span>
           </a>
-          <span class="text-xs text-slate-400">· <a href="${bskyUrl}" target="_blank" class="text-slate-400 hover:underline">${ago}</a></span>
-          ${m.track_name && m.track_uuid ? ` · <a href="/tracks/${m.track_uuid}" class="bg-gradient-to-r from-blue-500 to-emerald-500 text-white text-[10px] font-medium px-1.5 py-0.5 rounded-full hover:opacity-80 transition-opacity no-underline">${escHtml(m.track_name)}</a>` : ''}
+          <span class="text-xs text-slate-400 shrink-0 whitespace-nowrap">· <a href="${bskyUrl}" target="_blank" class="text-slate-400 hover:underline">${ago}</a></span>
+          ${m.track_name && m.track_uuid ? ` <span class="text-xs text-slate-400 shrink-0 whitespace-nowrap">· <a href="/tracks/${m.track_uuid}" class="bg-gradient-to-r from-blue-500 to-emerald-500 text-white text-[10px] font-medium px-1.5 py-0.5 rounded-full hover:opacity-80 transition-opacity no-underline">${escHtml(m.track_name)}</a></span>` : ''}
         </div>
         <div class="text-sm text-slate-700 leading-relaxed break-words post-body">${renderRichText(m.post_text, m.facets)}</div>
         ${nativeEmbedHtml}
