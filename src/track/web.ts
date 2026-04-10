@@ -1580,7 +1580,7 @@ function renderPage(title: string, user: TrackUser | null, content: string): str
           <img src="/logo.png" alt="Track" class="h-7">
         </a>
         ${user ? `
-        <div class="hidden sm:flex border border-slate-200 rounded-md overflow-hidden bg-slate-50">
+        <div class="flex border border-slate-200 rounded-md overflow-hidden bg-slate-50">
           <a href="/" class="px-3 py-1.5 text-xs font-medium bg-white text-slate-900 shadow-sm border-r border-slate-200 no-underline cursor-default">List</a>
           <a href="/deck" class="px-3 py-1.5 text-xs font-medium text-slate-600 hover:text-slate-900 transition-colors no-underline">Deck</a>
         </div>
@@ -1657,7 +1657,7 @@ function renderDeckPage(title: string, user: TrackUser | null, content: string):
         <a href="/" class="flex items-center gap-2 no-underline">
           <img src="/logo.png" alt="Track" class="h-7">
         </a>
-        <div class="hidden sm:flex border border-slate-200 rounded-md overflow-hidden bg-slate-50">
+        <div class="flex border border-slate-200 rounded-md overflow-hidden bg-slate-50">
           <a href="/" class="px-3 py-1.5 text-xs font-medium text-slate-600 hover:text-slate-900 transition-colors no-underline">List</a>
           <a href="/deck" class="px-3 py-1.5 text-xs font-medium bg-white text-slate-900 shadow-sm border-l border-slate-200 no-underline cursor-default">Deck</a>
         </div>
