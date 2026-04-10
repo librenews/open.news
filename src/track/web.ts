@@ -1078,6 +1078,54 @@ app.get('/tracks/:uuid', async (c) => {
   `));
 });
 
+app.get('/api/tracks/:uuid/htmx-feed', async (c) => {
+  const userId = c.get('userId');
+  const uuid = c.req.param('uuid');
+  const track = await getTrackByUuid(uuid);
+  if (!track || String(track.user_id) !== String(userId)) return c.text('Not found', 404);
+
+  const before = c.req.query('before');
+  const matches = await getMatchesByTrackId(track.id, 20, before);
+
+  let html = renderMatches(matches);
+  if (matches.length === 20) {
+    const nextBefore = matches[matches.length - 1].matched_at.toISOString();
+    html += `<div hx-get="/api/tracks/${track.uuid}/htmx-feed?before=${nextBefore}" hx-trigger="revealed" hx-swap="outerHTML" class="py-4 text-center text-sm text-slate-500">Loading more...</div>`;
+  }
+  return c.html(html);
+});
+
+app.get('/deck', async (c) => {
+  const userId = c.get('userId');
+  const user = await getTrackUserById(userId);
+  const tracks = await getTracksByUserId(userId);
+  
+  // Only show active tracks in deck by default to save screen real estate
+  const activeTracks = tracks.filter(t => t.is_active);
+
+  const columnsHtml = activeTracks.map(track => `
+    <div class="shrink-0 w-80 h-full bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col relative group">
+      <div class="px-3 py-2 border-b border-slate-100 flex items-center justify-between bg-slate-50 rounded-t-xl z-10 shrink-0">
+        <a href="/tracks/${track.uuid}" class="font-semibold text-slate-800 hover:text-blue-600 transition-colors truncate no-underline">${escHtml(track.name)}</a>
+        <a href="/tracks/${track.uuid}/edit" class="text-slate-400 hover:text-blue-500 transition-colors opacity-0 group-hover:opacity-100">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+        </a>
+      </div>
+      <div class="flex-1 overflow-y-auto p-3 space-y-4 bg-slate-100/50" hx-get="/api/tracks/${track.uuid}/htmx-feed" hx-trigger="load">
+        <div class="flex justify-center items-center h-24">
+          <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500"></div>
+        </div>
+      </div>
+    </div>
+  `).join('');
+
+  const emptyHtml = activeTracks.length === 0 
+    ? `<div class="flex-1 flex flex-col items-center justify-center text-slate-500"><p>No active tracks to display. Go to List view to create one.</p></div>`
+    : '';
+
+  return c.html(renderDeckPage('Deck View', user, emptyHtml + columnsHtml));
+});
+
 app.get('/feed', async (c) => {
   const userId = c.get('userId');
   const user = await getTrackUserById(userId);
@@ -1527,9 +1575,17 @@ function renderPage(title: string, user: TrackUser | null, content: string): str
 <body class="bg-slate-50 font-[Inter] text-slate-800 min-h-screen">
   <nav class="bg-white border-b border-slate-200 sticky top-0 z-10">
     <div class="max-w-3xl mx-auto px-4 flex justify-between items-center h-14">
-      <a href="/" class="flex items-center gap-2 no-underline">
-        <img src="/logo.png" alt="Track" class="h-7">
-      </a>
+      <div class="flex items-center gap-4">
+        <a href="/" class="flex items-center gap-2 no-underline">
+          <img src="/logo.png" alt="Track" class="h-7">
+        </a>
+        ${user ? `
+        <div class="hidden sm:flex border border-slate-200 rounded-md overflow-hidden bg-slate-50">
+          <a href="/" class="px-3 py-1.5 text-xs font-medium bg-white text-slate-900 shadow-sm border-r border-slate-200 no-underline cursor-default">List</a>
+          <a href="/deck" class="px-3 py-1.5 text-xs font-medium text-slate-600 hover:text-slate-900 transition-colors no-underline">Deck</a>
+        </div>
+        ` : ''}
+      </div>
       <div class="flex items-center gap-4">
         ${user ? `
         <div class="relative group">
@@ -1570,6 +1626,68 @@ function renderPage(title: string, user: TrackUser | null, content: string): str
       Contact: <a href="mailto:app@track.social" class="hover:text-slate-800 transition-colors no-underline">app@track.social</a>
     </p>
   </footer>
+</body>
+</html>`;
+}
+
+function renderDeckPage(title: string, user: TrackUser | null, content: string): string {
+  const adminHandles = (process.env.ADMIN_HANDLES ?? '').split(',').map(h => h.trim().toLowerCase()).filter(Boolean);
+  const isAdmin = user ? (adminHandles.length === 0 || adminHandles.includes(user.handle.toLowerCase())) : false;
+  const mainAppUrl = process.env.BASE_URL ?? 'https://open.news';
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>${escHtml(title)} — Track Deck</title>
+  <link rel="icon" type="image/png" href="/favicon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+  <style>
+    html, body { height: 100%; overflow: hidden; }
+  </style>
+</head>
+<body class="bg-slate-100 font-[Inter] text-slate-800 h-full flex flex-col">
+  <nav class="bg-white border-b border-slate-200 shrink-0 z-10">
+    <div class="px-4 flex justify-between items-center h-14">
+      <div class="flex items-center gap-4">
+        <a href="/" class="flex items-center gap-2 no-underline">
+          <img src="/logo.png" alt="Track" class="h-7">
+        </a>
+        <div class="hidden sm:flex border border-slate-200 rounded-md overflow-hidden bg-slate-50">
+          <a href="/" class="px-3 py-1.5 text-xs font-medium text-slate-600 hover:text-slate-900 transition-colors no-underline">List</a>
+          <a href="/deck" class="px-3 py-1.5 text-xs font-medium bg-white text-slate-900 shadow-sm border-l border-slate-200 no-underline cursor-default">Deck</a>
+        </div>
+      </div>
+      <div class="flex items-center gap-4">
+        ${user ? `
+        <div class="relative group">
+          <button class="flex items-center justify-center w-8 h-8 rounded-full bg-slate-100 overflow-hidden ring-2 ring-transparent group-hover:ring-blue-500 transition-all focus:outline-none">
+            ${user.avatar_url ? `<img src="${escHtml(user.avatar_url)}" alt="${escHtml(user.handle)}" class="w-full h-full object-cover">` : `<span class="text-xs font-semibold text-slate-500">${escHtml(user.handle.slice(0, 2).toUpperCase())}</span>`}
+          </button>
+          <div class="absolute right-0 mt-2 w-48 bg-white border border-slate-200 rounded-lg shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-20 overflow-hidden">
+            <div class="px-4 py-3 border-b border-slate-100 bg-slate-50">
+              <p class="text-sm font-medium text-slate-900 truncate">${escHtml(user.display_name ?? user.handle)}</p>
+              <p class="text-xs text-slate-500 truncate">@${escHtml(user.handle)}</p>
+            </div>
+            <div class="border-b border-slate-100 py-1">
+              <a href="/metrics" class="block w-full text-left px-4 py-1.5 text-sm text-slate-700 hover:bg-slate-50 hover:text-blue-600 transition-colors no-underline">Global Metrics</a>
+            </div>
+            <form method="POST" action="/oauth/logout" class="block w-full">
+              <button type="submit" class="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-slate-50 transition-colors cursor-pointer focus:outline-none">Sign out</button>
+            </form>
+          </div>
+        </div>
+        ` : ''}
+      </div>
+    </div>
+  </nav>
+  <main class="flex-1 overflow-x-auto overflow-y-hidden p-4 flex gap-4">
+    ${content}
+  </main>
 </body>
 </html>`;
 }
