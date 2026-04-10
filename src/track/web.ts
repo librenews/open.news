@@ -1003,7 +1003,7 @@ app.get('/metrics', async (c) => {
       <span class="text-xs font-medium text-slate-500 bg-slate-100 px-2 py-1 rounded-md">track-matches</span>
     </div>
 
-    <div class="mb-8 grid grid-cols-1 md:grid-cols-3 gap-4">
+    <div class="mb-4 grid grid-cols-1 md:grid-cols-2 gap-4">
       <div class="bg-white p-4 rounded-xl border border-slate-200">
         <div class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Global Requests (24h)</div>
         <div class="text-2xl font-bold text-slate-800">${totals.total}</div>
@@ -1012,10 +1012,12 @@ app.get('/metrics', async (c) => {
         <div class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Unique Viewers (24h)</div>
         <div class="text-2xl font-bold text-slate-800">${totals.uniqueUsers}</div>
       </div>
-      <div class="bg-white p-4 rounded-xl border border-slate-200 md:col-span-1 h-24 relative">
-        <canvas id="globalMetricsChart"></canvas>
-      </div>
     </div>
+    
+    <div class="mb-8 bg-white p-4 rounded-xl border border-slate-200 h-64 relative">
+      <canvas id="globalMetricsChart"></canvas>
+    </div>
+
     <script>
       const ctx = document.getElementById('globalMetricsChart').getContext('2d');
       const rawData = ${JSON.stringify(chartData)};
@@ -1035,7 +1037,8 @@ app.get('/metrics', async (c) => {
             borderWidth: 2,
             fill: true,
             tension: 0.4,
-            pointRadius: 0
+            pointRadius: 2,
+            pointBackgroundColor: '#6366f1'
           }]
         },
         options: {
@@ -1043,8 +1046,16 @@ app.get('/metrics', async (c) => {
           maintainAspectRatio: false,
           plugins: { legend: { display: false } },
           scales: {
-            x: { display: false },
-            y: { display: false, beginAtZero: true }
+            x: { 
+              display: true,
+              grid: { display: false }
+            },
+            y: { 
+              display: true, 
+              beginAtZero: true,
+              border: { dash: [4, 4] },
+              ticks: { precision: 0 }
+            }
           },
           interaction: { mode: 'index', intersect: false }
         }
