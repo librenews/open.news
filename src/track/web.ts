@@ -1324,7 +1324,8 @@ function renderMatches(matches: MatchRow[]): string {
   <script>
   (async function() {
     // ─── Actions Engine ───
-    document.querySelectorAll('.action-btn').forEach(btn => {
+    document.querySelectorAll('.action-btn:not(.bound)').forEach(btn => {
+      btn.classList.add('bound');
       btn.addEventListener('click', async (e) => {
         const action = btn.dataset.action;
         const uri = btn.dataset.uri;
@@ -1357,7 +1358,9 @@ function renderMatches(matches: MatchRow[]): string {
     });
 
     // ─── Profile Resolution ───
-    const elements = document.querySelectorAll('.author-profile');
+    const elements = document.querySelectorAll('.author-profile:not(.hydrated)');
+    if (elements.length === 0) return;
+    elements.forEach(el => el.classList.add('hydrated'));
     const dids = new Set();
     elements.forEach(el => dids.add(el.dataset.did));
     if (dids.size === 0) return;
@@ -1415,6 +1418,8 @@ function renderMatches(matches: MatchRow[]): string {
       }
       
       if (!container || !container.classList.contains('unfurled-cards')) return;
+      if (container.dataset.unfurling) return; // Prevent duplicate unfurls
+      container.dataset.unfurling = "true";
 
       try {
         const res = await fetch('/api/unfurl?url=' + encodeURIComponent(url));
