@@ -10,7 +10,7 @@ import {
   deleteTrack as dbDeleteTrack, updateTrackKeywords, updateTrackQueryEmbedding, toggleTrackActive,
   updateTrack,
   getMatchesByTrackId, getMatchesByUserId, getMatchCountByTrack,
-  getFeedSkeletonMatches, getTrackByUuid,
+  getFeedSkeletonMatches, getTrackByUuid, getMatchVolumeByTrack,
 } from '../db/queries/tracks.js';
 import { logFeedRequest, getFeedMetricsTotals, getFeedMetricsChartData } from '../db/queries/metrics.js';
 import { RichText, Agent } from '@atproto/api';
@@ -930,6 +930,19 @@ app.post('/tracks/:uuid/feed', async (c) => {
 
 // ─── Track Feed ─────────────────────────────────────────────────────────────
 
+app.get('/api/tracks/:uuid/metrics', async (c) => {
+  const userId = c.get('userId');
+  const uuid = c.req.param('uuid');
+  const track = await getTrackByUuid(uuid);
+  if (!track || String(track.user_id) !== String(userId)) return c.json({ error: 'Not found' }, 404);
+
+  const range = c.req.query('range') as 'hour' | 'day' | 'week' | 'max';
+  if (!['hour', 'day', 'week', 'max'].includes(range)) return c.json({ error: 'Invalid range' }, 400);
+
+  const data = await getMatchVolumeByTrack(track.id, range);
+  return c.json(data);
+});
+
 app.get('/tracks/:uuid', async (c) => {
   const userId = c.get('userId');
   const uuid = c.req.param('uuid');
@@ -965,6 +978,100 @@ app.get('/tracks/:uuid', async (c) => {
       </div>
       </div>
     </div>
+
+    <!-- Match Volume Chart -->
+    <div class="mb-8 bg-white p-4 rounded-xl border border-slate-200">
+      <div class="flex justify-between items-center mb-4">
+        <h3 class="text-sm font-semibold text-slate-800">Match Volume</h3>
+        <div class="flex bg-slate-100 p-0.5 rounded-lg border border-slate-200" id="match-range-toggles">
+          <button data-range="hour" class="px-3 py-1 text-xs font-medium rounded-md text-slate-600 hover:text-slate-900 focus:outline-none transition-colors">1H</button>
+          <button data-range="day" class="px-3 py-1 text-xs font-medium rounded-md bg-white text-slate-900 shadow shadow-slate-200/50 focus:outline-none transition-colors">1D</button>
+          <button data-range="week" class="px-3 py-1 text-xs font-medium rounded-md text-slate-600 hover:text-slate-900 focus:outline-none transition-colors">1W</button>
+          <button data-range="max" class="px-3 py-1 text-xs font-medium rounded-md text-slate-600 hover:text-slate-900 focus:outline-none transition-colors">MAX</button>
+        </div>
+      </div>
+      <div class="h-48 relative w-full">
+        <canvas id="matchVolumeChart"></canvas>
+      </div>
+    </div>
+
+    <script>
+      (function() {
+        const ctx = document.getElementById('matchVolumeChart');
+        if (!ctx) return;
+        let chartInstance = null;
+        let currentRange = 'day';
+
+        async function loadData(range) {
+          try {
+            const res = await fetch(\`/api/tracks/${track.uuid}/metrics?range=\${range}\`);
+            const data = await res.json();
+            
+            let timeFormatOptions = {};
+            if (range === 'hour' || range === 'day') {
+              timeFormatOptions = { hour: 'numeric', minute: range==='hour'?'2-digit':undefined };
+            } else {
+              timeFormatOptions = { month: 'short', day: 'numeric' };
+            }
+
+            const labels = data.map(d => new Date(d.label).toLocaleString([], timeFormatOptions));
+            const counts = data.map(d => d.count);
+
+            if (chartInstance) {
+              chartInstance.data.labels = labels;
+              chartInstance.data.datasets[0].data = counts;
+              chartInstance.update();
+            } else {
+              chartInstance = new Chart(ctx.getContext('2d'), {
+                type: 'line',
+                data: {
+                  labels,
+                  datasets: [{
+                    label: 'Matches',
+                    data: counts,
+                    borderColor: '#0ea5e9',
+                    backgroundColor: 'rgba(14, 165, 233, 0.1)',
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 2,
+                    pointBackgroundColor: '#0ea5e9'
+                  }]
+                },
+                options: {
+                  responsive: true,
+                  maintainAspectRatio: false,
+                  plugins: { legend: { display: false } },
+                  scales: {
+                    x: { display: true, grid: { display: false } },
+                    y: { display: true, beginAtZero: true, border: { dash: [4, 4] }, ticks: { precision: 0 } }
+                  },
+                  interaction: { mode: 'index', intersect: false }
+                }
+              });
+            }
+          } catch(e) {
+            console.error('Failed to load chart data', e);
+          }
+        }
+
+        const buttons = document.querySelectorAll('#match-range-toggles button');
+        buttons.forEach(btn => {
+          btn.addEventListener('click', (e) => {
+            buttons.forEach(b => {
+              b.classList.remove('bg-white', 'text-slate-900', 'shadow', 'shadow-slate-200/50');
+              b.classList.add('text-slate-600');
+            });
+            const clicked = e.target;
+            clicked.classList.remove('text-slate-600');
+            clicked.classList.add('bg-white', 'text-slate-900', 'shadow', 'shadow-slate-200/50');
+            loadData(clicked.dataset.range);
+          });
+        });
+
+        loadData('day'); // Initial load
+      })();
+    </script>
 
     ${renderMatches(matches)}
     ${matches.length === 50 ? `<a href="/tracks/${track.uuid}?before=${matches[matches.length - 1].matched_at.toISOString()}" class="block text-center mt-4 py-2.5 border border-slate-200 text-slate-500 text-sm rounded-lg hover:border-blue-500 hover:text-blue-500 transition-colors no-underline">Load more</a>` : ''}

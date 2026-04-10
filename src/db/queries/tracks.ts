@@ -222,6 +222,42 @@ export async function getMatchCountByTrack(
   return rows;
 }
 
+export async function getMatchVolumeByTrack(
+  trackId: bigint | number,
+  range: 'hour' | 'day' | 'week' | 'max'
+): Promise<{ label: string; count: number }[]> {
+  let trunc = 'hour';
+  let interval = '24 hours';
+  
+  if (range === 'hour') {
+    trunc = 'minute';
+    interval = '1 hour';
+  } else if (range === 'day') {
+    trunc = 'hour';
+    interval = '24 hours';
+  } else if (range === 'week') {
+    trunc = 'day';
+    interval = '7 days';
+  } else if (range === 'max') {
+    trunc = 'day';
+    interval = '14 days';
+  }
+
+  const { rows } = await db.query<{ label: Date; count: string }>(
+    `SELECT date_trunc('${trunc}', matched_at) as label, COUNT(*) as count
+     FROM track_matches
+     WHERE track_id = $1 AND matched_at > NOW() - INTERVAL '${interval}'
+     GROUP BY 1
+     ORDER BY 1 ASC`,
+    [trackId]
+  );
+
+  return rows.map(r => ({
+    label: new Date(r.label).toISOString(),
+    count: parseInt(r.count, 10)
+  }));
+}
+
 /** Get matches for the Bluesky feed skeleton, ordered by matched_at DESC with cursor pagination. */
 export async function getFeedSkeletonMatches(
   userDid: string,
