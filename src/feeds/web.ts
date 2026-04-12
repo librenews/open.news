@@ -3,8 +3,12 @@ import { Hono } from 'hono';
 import { getCookie } from 'hono/cookie';
 import { createHmac, createCipheriv, createDecipheriv, randomBytes } from 'crypto';
 import { logger } from '../lib/logger.js';
-import { feedsAuthRouter, getAgent } from './auth.js';
-import { getFeedUserById, getUserColumns, getColumnById, insertColumn, deleteColumn, setAppPassword, removeAppPassword, getFeedUserByRssToken, FeedUser, FeedColumn } from './db.js';
+import { feedsAuthRouter, getOAuthClient, getAgent } from './auth.js';
+import { getFeedUserById, getUserColumns, getColumnById, insertColumn, deleteColumn, setAppPassword, removeAppPassword, getFeedUserByRssToken } from './db.js';
+import type { FeedUser, FeedColumn } from './db.js';
+import { upsertUser } from '../db/queries/users.js';
+import { createTrack, updateTrackKeywords, updateTrack, getTrackByUuid, getMatchesByTrackId } from '../db/queries/tracks.js';
+import { upsertTrackQuery } from '../track/opensearch.js';
 
 type Variables = {
   userId: bigint;
@@ -119,20 +123,49 @@ function renderApp(user: FeedUser, content: string): string {
     ${content}
   </main>
 
-  <!-- Search Modal overlay -->
+  <!-- Add Feed Modal overlay -->
   <div x-show="searchOpen" style="display: none;" class="fixed inset-0 z-50 flex items-start justify-center pt-16 bg-slate-900/40 backdrop-blur-sm">
-    <div @click.outside="searchOpen = false" class="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden border border-slate-200">
-      <div class="p-4 border-b border-slate-100">
-        <input type="text" name="q" placeholder="Search for custom feeds..." 
-               class="w-full bg-slate-50 border border-slate-200 text-slate-900 text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block p-2.5 outline-none"
-               hx-post="/api/search/feeds" 
-               hx-trigger="input changed delay:400ms, search" 
-               hx-target="#search-results">
-        <p class="text-xs text-slate-400 mt-2">Powered by ATProto FeedGenerator Search</p>
+    <div @click.outside="searchOpen = false" class="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden border border-slate-200 flex flex-col" x-data="{ tab: 'search' }">
+      
+      <!-- Tabs -->
+      <div class="flex border-b border-slate-100 pb-0 shrink-0">
+        <button @click="tab = 'search'" :class="tab === 'search' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700'" class="flex-1 py-3 px-4 border-b-2 text-sm font-semibold transition-colors focus:outline-none cursor-pointer">Search Bluesky</button>
+        <button @click="tab = 'create'" :class="tab === 'create' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700'" class="flex-1 py-3 px-4 border-b-2 text-sm font-semibold transition-colors focus:outline-none cursor-pointer">Create Tracker</button>
       </div>
-      <div id="search-results" class="max-h-96 overflow-y-auto bg-slate-50/50 p-2" @htmx:after-request.camel="if($event.detail.elt.id === 'search-results') searchOpen = false">
-        <!-- Results appended here -->
-        <div class="text-center text-xs text-slate-500 py-6">Type to search existing feeds directly from Bluesky.</div>
+
+      <!-- Content -->
+      <div class="flex-1 overflow-y-auto">
+        <!-- Tab: Search -->
+        <div x-show="tab === 'search'">
+          <div class="p-4 border-b border-slate-100">
+            <input type="text" name="q" placeholder="Search for custom feeds..." 
+                   class="w-full bg-slate-50 border border-slate-200 text-slate-900 text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block p-2.5 outline-none"
+                   hx-post="/api/search/feeds" 
+                   hx-trigger="input changed delay:400ms, search" 
+                   hx-target="#search-results">
+          </div>
+          <div id="search-results" class="max-h-96 min-h-[150px] overflow-y-auto bg-slate-50/50 p-2" @htmx:after-request.camel="if($event.detail.elt.id === 'search-results') searchOpen = false">
+            <div class="text-center text-xs text-slate-500 py-6">Type to search existing feeds directly from Bluesky.</div>
+          </div>
+        </div>
+
+        <!-- Tab: Create -->
+        <div x-show="tab === 'create'" style="display: none;" class="p-6">
+          <form hx-post="/api/track/create" hx-target="#columns-container" hx-swap="beforeend" @submit="searchOpen = false" class="space-y-4">
+            <div>
+               <label class="block text-xs font-semibold text-slate-600 mb-1">Tracker Name</label>
+               <input type="text" name="name" required placeholder="e.g., Tech and AI News" class="w-full bg-slate-50 border border-slate-200 text-slate-900 text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block p-2.5">
+            </div>
+            <div>
+               <label class="block text-xs font-semibold text-slate-600 mb-1">Keywords</label>
+               <input type="text" name="keywords" required placeholder="e.g., artificial intelligence, openai, claude" class="w-full bg-slate-50 border border-slate-200 text-slate-900 text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block p-2.5">
+               <p class="text-[10px] text-slate-400 mt-1">Comma-separated. Max 5.</p>
+            </div>
+            <button type="submit" class="w-full bg-indigo-500 hover:bg-indigo-600 text-white font-semibold py-2 rounded-lg transition-colors shadow-sm cursor-pointer mt-2">
+              Create & Publish to Bluesky
+            </button>
+          </form>
+        </div>
       </div>
     </div>
   </div>
@@ -422,6 +455,80 @@ app.delete('/api/columns/:id', async (c) => {
   }
   
   return c.text(''); // Return empty content, HTMX will swap 'outerHTML' and destroy the column block
+});
+
+// ─── Track Creation Endpoint ────────────────────────────────────────────────
+
+app.post('/api/track/create', async (c) => {
+  const userId = c.get('userId');
+  const user = await getFeedUserById(userId);
+  if (!user) return c.text('Unauthorized', 401);
+
+  const body = await c.req.parseBody();
+  const name = String(body.name ?? '').trim().slice(0, 75);
+  const keywordsRaw = String(body.keywords ?? '').trim();
+  const keywords = keywordsRaw ? keywordsRaw.split(',').map(k => k.trim().slice(0, 100)).filter(Boolean).slice(0, 5) : [];
+
+  if (!name || keywords.length === 0) return c.text('Invalid input', 400);
+
+  // 1. Sync User to Core Database
+  const trackUser = await upsertUser({ did: user.did, handle: user.handle, display_name: user.display_name, avatar_url: user.avatar_url });
+
+  // 2. Create Track & OpenSearch Query
+  const track = await createTrack(trackUser.id, name, keywords, '');
+  const osQueryId = await upsertTrackQuery(track.id, keywords);
+  await updateTrackKeywords(track.id, keywords, osQueryId);
+
+  // 3. Publish to PDS directly from Feeds UI
+  let atUri = '';
+  try {
+    const client = await getOAuthClient();
+    const oauthSession = await client.restore(user.did);
+    const { Agent } = await import('@atproto/api');
+    const agent = new Agent(oauthSession);
+
+    await agent.com.atproto.repo.putRecord({
+      repo: user.did,
+      collection: 'app.bsky.feed.generator',
+      rkey: track.uuid,
+      record: {
+        did: 'did:web:track.social',
+        displayName: track.name,
+        description: `Custom tracking feed for: ${track.name}\\n\\nPowered by track.social`,
+        createdAt: new Date().toISOString(),
+      }
+    });
+
+    await updateTrack(track.id, { feed_published: true });
+    atUri = `at://${user.did}/app.bsky.feed.generator/${track.uuid}`;
+  } catch (err: any) {
+    logger.error({ err, uuid: track.uuid }, 'Failed to publish custom track to PDS via feeds.social');
+    atUri = `at://${user.did}/app.bsky.feed.generator/${track.uuid}`; 
+  }
+
+  const columns = await getUserColumns(userId);
+  const newPos = columns.length;
+  const column = await insertColumn({ user_id: userId, feed_type: 'custom', feed_uri: atUri, title: name, position: newPos });
+  
+  return c.html(`
+    <div class="w-[350px] shrink-0 flex flex-col bg-white border-r border-slate-200">
+      <div class="h-12 border-b border-slate-100 flex items-center justify-between px-3 shrink-0 bg-slate-50/50">
+        <h2 class="font-semibold text-slate-800 text-sm truncate flex items-center gap-1.5 cursor-move" title="${escapeHtml(column.title)}">
+          <svg class="w-4 h-4 text-slate-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
+          <span class="truncate">${escapeHtml(column.title)}</span>
+        </h2>
+        <div class="flex items-center gap-2">
+          <span class="text-[10px] uppercase font-bold text-orange-500 tracking-wider">Tracker</span>
+          <button hx-delete="/api/columns/${column.id}" hx-target="closest .shrink-0" hx-swap="outerHTML" hx-confirm="Remove this feed from your deck?" class="text-slate-400 hover:text-red-500 cursor-pointer shrink-0">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+          </button>
+        </div>
+      </div>
+      <div class="flex-1 overflow-y-auto" id="col-${column.id}" hx-get="/api/columns/${column.id}/feed" hx-trigger="load">
+        <div class="p-4 flex justify-center"><svg class="animate-spin h-5 w-5 text-indigo-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg></div>
+      </div>
+    </div>
+  `);
 });
 
 // ─── RSS Endpoints ──────────────────────────────────────────────────────────
