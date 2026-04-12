@@ -4,7 +4,7 @@ import { getCookie } from 'hono/cookie';
 import { createHmac } from 'crypto';
 import { logger } from '../lib/logger.js';
 import { feedsAuthRouter, getAgent } from './auth.js';
-import { getFeedUserById, getUserColumns, getColumnById, insertColumn, FeedUser } from './db.js';
+import { getFeedUserById, getUserColumns, getColumnById, insertColumn, deleteColumn, FeedUser } from './db.js';
 
 type Variables = {
   userId: bigint;
@@ -160,8 +160,8 @@ app.get('/', async (c) => {
       <!-- Column Header -->
       <div class="px-3 py-2 border-b border-slate-100 flex items-center justify-between cursor-move bg-slate-50 rounded-t-xl group">
         <h2 class="text-sm font-semibold text-slate-800 truncate select-none">${col.title}</h2>
-        <button class="text-slate-400 hover:text-slate-600 opacity-0 group-hover:opacity-100 transition-opacity">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"></path></svg>
+        <button hx-delete="/api/columns/${col.id}" hx-target="closest .shrink-0" hx-swap="outerHTML" hx-confirm="Remove this feed from your deck?" class="text-slate-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
         </button>
       </div>
       <!-- Column Feed Container (Loaded via HTMX later) -->
@@ -379,6 +379,17 @@ app.post('/api/columns/new', async (c) => {
   `;
 
   return c.html(columnHtml);
+});
+
+app.delete('/api/columns/:id', async (c) => {
+  const userId = c.get('userId');
+  const colId = parseInt(c.req.param('id'), 10);
+  
+  if (!isNaN(colId)) {
+    await deleteColumn(colId, userId);
+  }
+  
+  return c.text(''); // Return empty content, HTMX will swap 'outerHTML' and destroy the column block
 });
 
 // ─── Start ──────────────────────────────────────────────────────────────────

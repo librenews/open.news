@@ -85,3 +85,6 @@ export async function insertColumn(params: {
   );
   return rows[0]!;
 }
+export async function deleteColumn(id: bigint | number, userId: bigint | number): Promise<void> {
+  await pool.query('DELETE FROM feed_columns WHERE id = $1 AND user_id = $2', [id, userId]);
+}
