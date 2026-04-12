@@ -295,6 +295,10 @@ app.post('/api/search/feeds', async (c) => {
     const { Agent } = await import('@atproto/api');
     const agent = new Agent(session);
     
+    // Check which feeds are already added
+    const existingColumns = await getUserColumns(userId);
+    const existingUris = new Set(existingColumns.map(c => c.feed_uri));
+
     const res = await agent.app.bsky.unspecced.getPopularFeedGenerators({ query: q, limit: 15 });
     
     if (!res.data.feeds || res.data.feeds.length === 0) {
@@ -310,13 +314,19 @@ app.post('/api/search/feeds', async (c) => {
             <p class="text-xs text-slate-500 truncate">by @${escapeHtml(feed.creator.handle)} • ${feed.likeCount || 0} likes</p>
           </div>
         </div>
-        <form hx-post="/api/columns/new" hx-target="#deck-container" hx-swap="beforeend" class="m-0 shrink-0 ml-3">
-          <input type="hidden" name="uri" value="${escapeHtml(feed.uri)}">
-          <input type="hidden" name="title" value="${escapeHtml(feed.displayName)}">
-          <button type="submit" class="bg-indigo-500 hover:bg-indigo-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors cursor-pointer shadow-sm">
-            Add to Deck
+        ${existingUris.has(feed.uri) ? `
+          <button disabled class="bg-slate-100 text-slate-400 text-xs font-semibold px-3 py-1.5 rounded-lg shrink-0 ml-3 shadow-sm cursor-not-allowed">
+            Already Added
           </button>
-        </form>
+        ` : `
+          <form hx-post="/api/columns/new" hx-target="#deck-container" hx-swap="beforeend" @submit="searchOpen = false" class="m-0 shrink-0 ml-3">
+            <input type="hidden" name="uri" value="${escapeHtml(feed.uri)}">
+            <input type="hidden" name="title" value="${escapeHtml(feed.displayName)}">
+            <button type="submit" class="bg-indigo-500 hover:bg-indigo-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors cursor-pointer shadow-sm">
+              Add to Deck
+            </button>
+          </form>
+        `}
       </div>
     `).join('');
 
@@ -337,6 +347,10 @@ app.post('/api/columns/new', async (c) => {
   if (!uri) return c.text('Missing feed uri', 400);
 
   const existingColumns = await getUserColumns(userId);
+  if (existingColumns.some(c => c.feed_uri === uri)) {
+    return c.text('Feed already added', 400);
+  }
+
   const nextPos = existingColumns.length > 0 ? Math.max(...existingColumns.map(c => c.position)) + 1 : 0;
 
   const col = await insertColumn({
