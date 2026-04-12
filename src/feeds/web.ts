@@ -1,10 +1,10 @@
 import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
 import { getCookie } from 'hono/cookie';
-import { createHmac } from 'crypto';
+import { createHmac, createCipheriv, createDecipheriv, randomBytes } from 'crypto';
 import { logger } from '../lib/logger.js';
 import { feedsAuthRouter, getAgent } from './auth.js';
-import { getFeedUserById, getUserColumns, getColumnById, insertColumn, deleteColumn, FeedUser } from './db.js';
+import { getFeedUserById, getUserColumns, getColumnById, insertColumn, deleteColumn, setAppPassword, removeAppPassword, getFeedUserByRssToken, FeedUser, FeedColumn } from './db.js';
 
 type Variables = {
   userId: bigint;
@@ -13,6 +13,26 @@ type Variables = {
 const app = new Hono<{ Variables: Variables }>();
 const FEEDS_PORT = parseInt(process.env.FEEDS_PORT ?? '4300', 10);
 const SESSION_SECRET = process.env.SESSION_SECRET ?? 'dev-secret';
+const ENCRYPTION_KEY = Buffer.from(SESSION_SECRET.padEnd(32, '0').slice(0, 32));
+const FEEDS_BASE_URL = process.env.FEEDS_BASE_URL ?? 'http://localhost:4300';
+
+function encryptPassword(text: string) {
+  const iv = randomBytes(16);
+  const cipher = createCipheriv('aes-256-cbc', ENCRYPTION_KEY, iv);
+  let encrypted = cipher.update(text);
+  encrypted = Buffer.concat([encrypted, cipher.final()]);
+  return iv.toString('hex') + ':' + encrypted.toString('hex');
+}
+
+function decryptPassword(text: string) {
+  const textParts = text.split(':');
+  const iv = Buffer.from(textParts.shift()!, 'hex');
+  const encryptedText = Buffer.from(textParts.join(':'), 'hex');
+  const decipher = createDecipheriv('aes-256-cbc', ENCRYPTION_KEY, iv);
+  let decrypted = decipher.update(encryptedText);
+  decrypted = Buffer.concat([decrypted, decipher.final()]);
+  return decrypted.toString();
+}
 
 app.route('/', feedsAuthRouter);
 
@@ -63,7 +83,7 @@ function renderApp(user: FeedUser, content: string): string {
     }
   </style>
 </head>
-<body class="bg-slate-100 font-[Inter] text-slate-800 h-full flex flex-col" x-data="{ searchOpen: false }" @keydown.escape.window="searchOpen = false">
+<body class="bg-slate-100 font-[Inter] text-slate-800 h-full flex flex-col" x-data="{ searchOpen: false, rssOpen: false }" @keydown.escape.window="searchOpen = false; rssOpen = false">
   <!-- Minimalist Nav -->
   <nav class="bg-white border-b border-slate-200 shrink-0">
     <div class="px-4 flex justify-between items-center h-12">
@@ -71,6 +91,9 @@ function renderApp(user: FeedUser, content: string): string {
         <h1 class="text-lg font-bold text-slate-800 tracking-tight">feeds.social</h1>
         <button @click="searchOpen = true" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-600 text-xs font-semibold px-2.5 py-1 rounded-md transition-colors cursor-pointer">
           + Add Feed
+        </button>
+        <button @click="rssOpen = true" class="text-slate-400 hover:text-orange-500 transition-colors focus:outline-none cursor-pointer" title="RSS Config">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 11a9 9 0 019 9M4 4a16 16 0 0116 16M4 20h.01M4 20a1 1 0 110-2 1 1 0 010 2z"></path></svg>
         </button>
       </div>
       
@@ -110,6 +133,15 @@ function renderApp(user: FeedUser, content: string): string {
       <div id="search-results" class="max-h-96 overflow-y-auto bg-slate-50/50 p-2" @htmx:after-request.camel="if($event.detail.elt.id === 'search-results') searchOpen = false">
         <!-- Results appended here -->
         <div class="text-center text-xs text-slate-500 py-6">Type to search existing feeds directly from Bluesky.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RSS Modal overlay -->
+  <div x-show="rssOpen" style="display: none;" class="fixed inset-0 z-50 flex items-start justify-center pt-16 bg-slate-900/40 backdrop-blur-sm">
+    <div @click.outside="rssOpen = false" class="bg-white rounded-2xl shadow-xl w-full max-w-xl overflow-hidden border border-slate-200" hx-get="/api/rss/modal" hx-trigger="intersect once" >
+      <div class="text-center text-xs text-slate-500 py-12 flex flex-col items-center">
+        <svg class="animate-spin h-6 w-6 text-orange-500 mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
       </div>
     </div>
   </div>
@@ -390,6 +422,193 @@ app.delete('/api/columns/:id', async (c) => {
   }
   
   return c.text(''); // Return empty content, HTMX will swap 'outerHTML' and destroy the column block
+});
+
+// ─── RSS Endpoints ──────────────────────────────────────────────────────────
+
+app.get('/api/rss/modal', async (c) => {
+  const userId = c.get('userId');
+  const user = await getFeedUserById(userId);
+  if (!user) return c.text('Unauthorized', 401);
+
+  if (!user.app_password || !user.rss_token) {
+    return c.html(`
+      <div class="p-6">
+        <h3 class="text-lg font-bold text-slate-800 mb-2">Configure RSS Feeds</h3>
+        <p class="text-sm text-slate-500 mb-6 leading-relaxed">
+          To generate highly-detailed RSS feeds that fetch automatically in the background, we need an <strong>App Password</strong>. This securely grants our server the ability to read your timelines via ATProto when you're completely offline.
+        </p>
+        <form hx-post="/api/rss/setup" hx-target="closest div" hx-swap="outerHTML" class="space-y-4">
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1">App Password</label>
+            <input type="password" name="password" required placeholder="xxxx-xxxx-xxxx-xxxx"
+                   class="w-full bg-slate-50 border border-slate-200 text-slate-900 text-sm rounded-lg focus:ring-orange-500 focus:border-orange-500 block p-2.5">
+            <p class="text-[11px] text-slate-400 mt-1">Generate this in your Bluesky Settings > App Passwords.</p>
+          </div>
+          <button type="submit" class="w-full bg-orange-500 hover:bg-orange-600 text-white font-semibold py-2 rounded-lg transition-colors shadow-sm cursor-pointer">
+            Save App Password
+          </button>
+        </form>
+      </div>
+    `);
+  }
+
+  const columns = await getUserColumns(userId);
+  const linksHtml = columns.map(c => `
+    <div class="flex items-center justify-between bg-slate-50 p-3 rounded-lg border border-slate-200">
+      <div>
+        <p class="text-sm font-semibold text-slate-800">${escapeHtml(c.title)}</p>
+        <p class="text-xs text-slate-500 mt-0.5 truncate max-w-[280px] font-mono">${FEEDS_BASE_URL}/rss/${user.rss_token}/${c.id}</p>
+      </div>
+      <button class="bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 text-xs font-medium px-3 py-1.5 rounded-md cursor-pointer transition-colors shadow-sm"
+              onclick="navigator.clipboard.writeText('${FEEDS_BASE_URL}/rss/${user.rss_token}/${c.id}')">
+        Copy
+      </button>
+    </div>
+  `).join('');
+
+  return c.html(`
+    <div class="p-6">
+      <div class="flex justify-between items-start mb-6">
+        <div>
+          <h3 class="text-lg font-bold text-slate-800">Your RSS URLs</h3>
+          <p class="text-xs text-slate-500 mt-1">Paste these endpoints directly into Feedly, Reeder, etc.</p>
+        </div>
+        <button hx-post="/api/rss/disable" hx-target="closest div.p-6" hx-swap="outerHTML" hx-confirm="Disable your background feeds and clear your Password?" 
+                class="text-xs text-red-500 hover:text-red-700 font-medium cursor-pointer">Disable</button>
+      </div>
+      <div class="space-y-3 max-h-80 overflow-y-auto pr-2">
+        ${linksHtml || '<p class="text-xs text-slate-400">Add feeds to your deck to generate URLs.</p>'}
+      </div>
+    </div>
+  `);
+});
+
+app.post('/api/rss/setup', async (c) => {
+  const userId = c.get('userId');
+  const body = await c.req.parseBody();
+  const rawPassword = typeof body.password === 'string' ? body.password.trim() : '';
+
+  if (!rawPassword) return c.text('No password', 400);
+
+  const token = randomBytes(16).toString('hex');
+  const encrypted = encryptPassword(rawPassword);
+
+  await setAppPassword(userId, encrypted, token);
+
+  return c.html(`<p hx-get="/api/rss/modal" hx-trigger="load" hx-swap="outerHTML"></p>`);
+});
+
+app.post('/api/rss/disable', async (c) => {
+  const userId = c.get('userId');
+  await removeAppPassword(userId);
+  return c.html(`<p hx-get="/api/rss/modal" hx-trigger="load" hx-swap="outerHTML"></p>`);
+});
+
+function buildFeedRss(title: string, items: any[]): string {
+  const rssItems = items.map((item) => {
+    const post = item.post;
+    const author = post.author;
+    const record = post.record;
+    
+    // AT URI -> Web URL
+    const bskyUrl = post.uri.replace('at://', 'https://bsky.app/profile/').replace('/app.bsky.feed.post/', '/post/');
+    
+    let mediaTags = '';
+    let enclosureTags = '';
+    let descriptionExt = '';
+
+    if (post.embed) {
+      const embed = post.embed;
+      if (embed.$type === 'app.bsky.embed.external#view' && embed.external) {
+         const ext = embed.external;
+         if (ext.thumb) {
+            mediaTags += `<media:content url="${escapeHtml(ext.thumb)}" medium="image"><media:title>${escapeHtml(ext.title || '')}</media:title><media:description>${escapeHtml(ext.description || '')}</media:description></media:content>`;
+            enclosureTags += `<enclosure url="${escapeHtml(ext.thumb)}" type="image/jpeg" length="0" />`;
+            descriptionExt += `<br/><br/><a href="${escapeHtml(ext.uri)}"><img src="${escapeHtml(ext.thumb)}" style="max-width:100%; border-radius:8px;"/><br/><strong>${escapeHtml(ext.title || 'Link')}</strong></a>`;
+         }
+      } else if (embed.$type === 'app.bsky.embed.images#view' && Array.isArray(embed.images)) {
+        for (const img of embed.images) {
+           if (img.thumb) {
+             mediaTags += `<media:content url="${escapeHtml(img.thumb)}" medium="image"><media:description>${escapeHtml(img.alt || '')}</media:description></media:content>`;
+             if (!enclosureTags) enclosureTags += `<enclosure url="${escapeHtml(img.thumb)}" type="image/jpeg" length="0" />`;
+             descriptionExt += `<br/><br/><img src="${escapeHtml(img.thumb)}" alt="${escapeHtml(img.alt || '')}" style="max-width:100%; border-radius:8px;" />`;
+           }
+        }
+      } else if (embed.$type === 'app.bsky.embed.record#view' && embed.record && embed.record.value) {
+        descriptionExt += `<br/><br/><blockquote style="border-left:4px solid #cbd5e1; padding-left:12px; margin-left:0; color:#475569;">${escapeHtml(embed.record.value.text)}</blockquote>`;
+      }
+    }
+
+    const postTitle = record.text ? record.text.slice(0, 100) : 'Bluesky Post';
+    let finalDescription = escapeHtml(record.text || '');
+    finalDescription += descriptionExt;
+
+    let pubDate = '';
+    if (record.createdAt) pubDate = new Date(record.createdAt).toUTCString();
+
+    return `<item>
+      <title>${escapeHtml(postTitle)}</title>
+      <link>${bskyUrl}</link>
+      <description><![CDATA[${finalDescription}]]></description>
+      ${pubDate ? `<pubDate>${pubDate}</pubDate>` : ''}
+      <guid>${post.uri}</guid>
+      <author>${post.author.did}</author>
+      ${enclosureTags}
+      ${mediaTags}
+    </item>`;
+  }).join('\n');
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:media="http://search.yahoo.com/mrss/">
+  <channel>
+    <title>${escapeHtml(title)}</title>
+    <link>${FEEDS_BASE_URL}</link>
+    <description>Bluesky feed exported from feeds.social</description>
+    <generator>feeds.social</generator>
+    ${rssItems}
+  </channel>
+</rss>`;
+}
+
+app.get('/rss/:token/:colId', async (c) => {
+  const token = c.req.param('token');
+  const colId = parseInt(c.req.param('colId'), 10);
+
+  const user = await getFeedUserByRssToken(token);
+  if (!user || (!user.app_password)) return c.text('Invalid token', 401);
+
+  const column = await getColumnById(colId);
+  if (!column || Number(column.user_id) !== Number(user.id)) return c.text('Not found', 404);
+
+  const rawPassword = decryptPassword(user.app_password);
+
+  try {
+    const { BskyAgent } = await import('@atproto/api');
+    const agent = new BskyAgent({ service: 'https://bsky.social' });
+    await agent.login({ identifier: user.handle, password: rawPassword });
+
+    let feedItems: any[] = [];
+    if (column.feed_type === 'following') {
+      const res = await agent.getTimeline({ limit: 30 });
+      feedItems = res.data.feed;
+    } else if (column.feed_type === 'custom' && column.feed_uri) {
+      const res = await agent.app.bsky.feed.getFeed({ feed: column.feed_uri, limit: 30 });
+      feedItems = res.data.feed;
+    }
+
+    const xml = buildFeedRss(column.title, feedItems || []);
+    return c.body(xml, 200, {
+      'Content-Type': 'application/xml',
+      'Cache-Control': 'public, max-age=60'
+    });
+  } catch (err: any) {
+    logger.error({ err, handle: user.handle }, 'RSS Background fetch failed');
+    if (err.message?.includes('Authentication Required') || err.message?.includes('jwt')) {
+      await removeAppPassword(user.id);
+    }
+    return c.text('Failed to authenticate or fetch feed.', 500);
+  }
 });
 
 // ─── Start ──────────────────────────────────────────────────────────────────

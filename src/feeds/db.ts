@@ -6,6 +6,8 @@ export interface FeedUser {
   handle: string;
   display_name: string | null;
   avatar_url: string | null;
+  app_password?: string | null;
+  rss_token?: string | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -53,6 +55,21 @@ export async function getFeedUserByDid(did: string): Promise<FeedUser | null> {
     'SELECT * FROM feed_users WHERE did = $1', [did]
   );
   return rows[0] ?? null;
+}
+
+export async function getFeedUserByRssToken(token: string): Promise<FeedUser | null> {
+  const { rows } = await pool.query<FeedUser>(
+    'SELECT * FROM feed_users WHERE rss_token = $1', [token]
+  );
+  return rows[0] ?? null;
+}
+
+export async function setAppPassword(userId: bigint | number, encrypted: string, token: string) {
+  await pool.query('UPDATE feed_users SET app_password = $1, rss_token = $2 WHERE id = $3', [encrypted, token, userId]);
+}
+
+export async function removeAppPassword(userId: bigint | number) {
+  await pool.query('UPDATE feed_users SET app_password = NULL, rss_token = NULL WHERE id = $1', [userId]);
 }
 
 // Column Management
