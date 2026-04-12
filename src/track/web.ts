@@ -11,6 +11,7 @@ import {
   updateTrack,
   getMatchesByTrackId, getMatchesByUserId, getMatchCountByTrack,
   getFeedSkeletonMatches, getTrackByUuid, getMatchVolumeByTrack,
+  createWebhook, getWebhooksByUserId, deleteWebhook
 } from '../db/queries/tracks.js';
 import { logFeedRequest, getFeedMetricsTotals, getFeedMetricsChartData } from '../db/queries/metrics.js';
 import { RichText, Agent } from '@atproto/api';
@@ -1094,6 +1095,157 @@ app.get('/api/tracks/:uuid/htmx-feed', async (c) => {
   }
   return c.html(html);
 });
+// ─── Webhooks ───────────────────────────────────────────────────────────────
+
+app.get('/webhooks', async (c) => {
+  const userId = c.get('userId');
+  const user = await getTrackUserById(userId);
+  if (!user) return c.redirect('/oauth/login');
+
+  const webhooks = await getWebhooksByUserId(userId);
+  const tracks = await getTracksByUserId(userId);
+  const trackMap = new Map(tracks.map(t => [Number(t.id), t.name]));
+
+  const content = `
+    <div class="mb-8 flex justify-between items-center">
+      <div>
+        <h1 class="text-2xl font-bold text-slate-800 tracking-tight">Webhooks</h1>
+        <p class="text-slate-500 mt-1">Receive real-time alerts when posts match your tracks.</p>
+      </div>
+      <a href="/webhooks/new" class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg shadow-sm transition-colors no-underline">
+        Create Webhook
+      </a>
+    </div>
+
+    ${webhooks.length === 0 ? `
+      <div class="bg-white border border-slate-200 rounded-2xl p-12 text-center shadow-sm">
+        <svg class="mx-auto h-12 w-12 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+        </svg>
+        <h3 class="mt-4 text-lg font-medium text-slate-900">No webhooks configured</h3>
+        <p class="mt-2 text-sm text-slate-500">Configure an endpoint to receive incoming posts immediately.</p>
+      </div>
+    ` : `
+      <div class="space-y-4">
+        ${webhooks.map(w => `
+          <div class="bg-white border border-slate-200 rounded-xl p-5 hover:shadow-sm transition-shadow">
+            <div class="flex justify-between items-start gap-4">
+              <div class="min-w-0 flex-1">
+                <div class="flex items-center gap-2 mb-1">
+                  <h3 class="text-base font-semibold text-slate-900 truncate">${escHtml(w.url)}</h3>
+                  ${w.is_active 
+                    ? '<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">Healthy</span>'
+                    : '<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">Disabled (Failing)</span>'
+                  }
+                </div>
+                <div class="text-xs text-slate-500 font-mono tracking-tight mb-3">Secret: ${w.secret}</div>
+                <div class="flex flex-wrap gap-1.5">
+                  ${w.track_ids.map(tid => `<span class="inline-flex items-center px-2 py-1 rounded-md text-[10px] font-medium bg-slate-100 text-slate-700">${escHtml(trackMap.get(Number(tid)) || 'Unknown Track')}</span>`).join('')}
+                </div>
+              </div>
+              <form method="POST" action="/webhooks/${w.id}/delete" onsubmit="return confirm('Are you sure you want to delete this webhook?');">
+                <button class="text-sm font-medium text-red-600 hover:text-red-700 hover:bg-red-50 px-3 py-1.5 rounded-lg transition-colors cursor-pointer">Delete</button>
+              </form>
+            </div>
+            ${w.consecutive_failures > 0 ? `
+              <div class="mt-3 text-xs text-red-600 rounded bg-red-50 px-3 py-2 border border-red-100">
+                Warning: This endpoint has failed ${w.consecutive_failures} consecutive time(s). If it reaches 5, it will be disabled.
+              </div>
+            ` : ''}
+          </div>
+        `).join('')}
+      </div>
+    `}
+  `;
+
+  return c.html(renderPage('Webhooks', user, content));
+});
+
+app.get('/webhooks/new', async (c) => {
+  const userId = c.get('userId');
+  const user = await getTrackUserById(userId);
+  if (!user) return c.redirect('/oauth/login');
+
+  const tracks = await getTracksByUserId(userId);
+
+  const content = `
+    <div class="mb-6 flex items-center gap-3">
+      <a href="/webhooks" class="text-slate-400 hover:text-slate-600 transition-colors">
+        <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
+      </a>
+      <h1 class="text-2xl font-bold text-slate-800 tracking-tight">Create Webhook</h1>
+    </div>
+
+    <form method="POST" action="/webhooks/new" class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+      <div class="space-y-6">
+        <div>
+          <label class="block text-sm font-semibold text-slate-900 mb-1.5">Destination URL</label>
+          <input type="url" name="url" required placeholder="https://api.yourdomain.com/incoming" class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all placeholder:text-slate-400">
+          <p class="text-xs text-slate-500 mt-2">Only HTTPS endpoints are permitted. A signing secret will be generated automatically for verification.</p>
+        </div>
+
+        <div>
+          <label class="block text-sm font-semibold text-slate-900 mb-3">Linked Tracks</label>
+          ${tracks.length === 0 ? `
+            <p class="text-sm text-red-600">You must create at least one Track before setting up a webhook.</p>
+          ` : `
+            <div class="space-y-2 border border-slate-200 rounded-xl p-4 bg-slate-50 overflow-y-auto max-h-60">
+              ${tracks.map(t => `
+                <label class="flex items-center gap-3 p-2 hover:bg-slate-100 rounded-lg cursor-pointer transition-colors">
+                  <input type="checkbox" name="track_id" value="${t.id}" class="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500">
+                  <span class="text-sm font-medium text-slate-800">${escHtml(t.name)}</span>
+                </label>
+              `).join('')}
+            </div>
+          `}
+        </div>
+      </div>
+
+      <div class="mt-8 pt-6 border-t border-slate-100 flex justify-end gap-3">
+        <a href="/webhooks" class="px-5 py-2.5 text-sm font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors no-underline">Cancel</a>
+        <button type="submit" ${tracks.length === 0 ? 'disabled' : ''} class="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg shadow-sm transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
+          Save Webhook
+        </button>
+      </div>
+    </form>
+  `;
+
+  return c.html(renderPage('New Webhook', user, content));
+});
+
+app.post('/webhooks/new', async (c) => {
+  const userId = c.get('userId');
+  const body = await c.req.parseBody();
+  
+  const url = typeof body.url === 'string' ? body.url.trim() : '';
+  if (!url.startsWith('https://') && !url.startsWith('http://localhost')) {
+    return c.text('Invalid URL destination. Must be HTTPS.', 400);
+  }
+
+  let trackIds = Array.isArray(body.track_id) ? body.track_id : (body.track_id ? [body.track_id] : []);
+  const parsedIds = trackIds.map((id: any) => parseInt(id, 10)).filter(id => !isNaN(id));
+
+  if (parsedIds.length === 0) {
+    return c.text('You must select at least one track to map to the webhook.', 400);
+  }
+
+  // Generate secure signing secret: 32 bytes hex
+  const crypto = await import('crypto');
+  const secret = crypto.randomBytes(32).toString('hex');
+
+  await createWebhook(userId, url, secret, parsedIds);
+  return c.redirect('/webhooks');
+});
+
+app.post('/webhooks/:id/delete', async (c) => {
+  const userId = c.get('userId');
+  const webhookId = parseInt(c.req.param('id'), 10);
+  if (!isNaN(webhookId)) {
+    await deleteWebhook(webhookId, userId);
+  }
+  return c.redirect('/webhooks');
+});
+
 
 app.get('/deck', async (c) => {
   const userId = c.get('userId');
@@ -1604,6 +1756,7 @@ function renderPage(title: string, user: TrackUser | null, content: string): str
             </div>
             <div class="border-b border-slate-100 py-1">
               <a href="/metrics" class="block w-full text-left px-4 py-1.5 text-sm text-slate-700 hover:bg-slate-50 hover:text-blue-600 transition-colors no-underline">Global Metrics</a>
+              <a href="/webhooks" class="block w-full text-left px-4 py-1.5 text-sm text-slate-700 hover:bg-slate-50 hover:text-blue-600 transition-colors no-underline">Webhooks</a>
             </div>
             ${isAdmin ? `
             <div class="border-b border-slate-100 py-1">
@@ -1680,6 +1833,7 @@ function renderDeckPage(title: string, user: TrackUser | null, content: string):
             </div>
             <div class="border-b border-slate-100 py-1">
               <a href="/metrics" class="block w-full text-left px-4 py-1.5 text-sm text-slate-700 hover:bg-slate-50 hover:text-blue-600 transition-colors no-underline">Global Metrics</a>
+              <a href="/webhooks" class="block w-full text-left px-4 py-1.5 text-sm text-slate-700 hover:bg-slate-50 hover:text-blue-600 transition-colors no-underline">Webhooks</a>
             </div>
             <form method="POST" action="/oauth/logout" class="block w-full">
               <button type="submit" class="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-slate-50 transition-colors cursor-pointer focus:outline-none">Sign out</button>

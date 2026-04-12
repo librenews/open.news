@@ -114,6 +114,7 @@ export async function updateTrackQueryEmbedding(
 
 export interface TrackWithEmbedding {
   id: number;
+  uuid: string;
   threshold: number;
   query_embedding: number[] | null;
 }
@@ -121,7 +122,7 @@ export interface TrackWithEmbedding {
 /** Get all active tracks (with or without embeddings). */
 export async function getTracksWithEmbeddings(): Promise<TrackWithEmbedding[]> {
   const { rows } = await db.query<TrackWithEmbedding>(
-    `SELECT id, threshold, query_embedding FROM tracks
+    `SELECT id, uuid, threshold, query_embedding FROM tracks
      WHERE is_active = TRUE`
   );
   return rows;
@@ -293,3 +294,93 @@ export async function getSystemMetrics(): Promise<{ totalMatches: string; active
     activeTracks: rows[0].tracks
   };
 }
+
+// ─── Webhooks ───────────────────────────────────────────────────────────────
+
+export interface TrackWebhook {
+  id: bigint;
+  uuid: string;
+  user_id: bigint;
+  url: string;
+  secret: string;
+  is_active: boolean;
+  consecutive_failures: number;
+  created_at: Date;
+  updated_at: Date;
+}
+
+export async function createWebhook(userId: bigint | number, url: string, secret: string, trackIds: (bigint | number)[]): Promise<TrackWebhook> {
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+    const { rows } = await client.query<TrackWebhook>(
+      'INSERT INTO track_webhooks (user_id, url, secret) VALUES ($1, $2, $3) RETURNING *',
+      [userId, url, secret]
+    );
+    const webhook = rows[0];
+
+    for (const trackId of trackIds) {
+      await client.query(
+        'INSERT INTO track_webhook_subs (webhook_id, track_id) VALUES ($1, $2)',
+        [webhook.id, trackId]
+      );
+    }
+    await client.query('COMMIT');
+    return webhook;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+export async function getWebhooksByUserId(userId: bigint | number): Promise<(TrackWebhook & { track_ids: string[] })[]> {
+  const { rows } = await db.query(
+    `SELECT w.*, array_agg(ws.track_id) as track_ids
+     FROM track_webhooks w
+     LEFT JOIN track_webhook_subs ws ON ws.webhook_id = w.id
+     WHERE w.user_id = $1
+     GROUP BY w.id
+     ORDER BY w.created_at DESC`,
+    [userId]
+  );
+  return rows;
+}
+
+export async function deleteWebhook(webhookId: bigint | number, userId: bigint | number): Promise<void> {
+  await db.query('DELETE FROM track_webhooks WHERE id = $1 AND user_id = $2', [webhookId, userId]);
+}
+
+export async function getWebhooksForTracks(trackIds: (bigint | number)[]): Promise<{ track_id: bigint; webhook: TrackWebhook }[]> {
+  if (trackIds.length === 0) return [];
+  const { rows } = await db.query<{ track_id: bigint; webhook: TrackWebhook }>(
+    `SELECT ws.track_id, row_to_json(w.*) as webhook
+     FROM track_webhooks w
+     JOIN track_webhook_subs ws ON ws.webhook_id = w.id
+     WHERE ws.track_id = ANY($1) AND w.is_active = true`,
+    [trackIds]
+  );
+  return rows.map((r) => ({ track_id: r.track_id, webhook: r.webhook as TrackWebhook }));
+}
+
+export async function logWebhookFailure(webhookId: bigint | number): Promise<void> {
+  await db.query(
+    `UPDATE track_webhooks 
+     SET consecutive_failures = consecutive_failures + 1,
+         is_active = CASE WHEN consecutive_failures + 1 >= 5 THEN false ELSE true END,
+         updated_at = NOW()
+     WHERE id = $1`,
+    [webhookId]
+  );
+}
+
+export async function logWebhookSuccess(webhookId: bigint | number): Promise<void> {
+  await db.query(
+    `UPDATE track_webhooks 
+     SET consecutive_failures = 0, updated_at = NOW()
+     WHERE id = $1`,
+    [webhookId]
+  );
+}
+

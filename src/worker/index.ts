@@ -5,6 +5,7 @@ import { fetchArticleJob } from '../jobs/fetchArticle.js';
 import { syncFollowsJob } from '../jobs/syncFollows.js';
 import { botReplyJob } from '../jobs/botReply.js';
 import { botPostJob } from '../jobs/botPost.js';
+import { deliverWebhookJob } from '../jobs/deliverWebhook.js';
 
 async function start() {
   const boss = new PgBoss({
@@ -22,7 +23,7 @@ async function start() {
 
   // pg-boss v10 requires explicit queue creation before send/work.
   // Must be sequential — parallel ALTER TABLE calls deadlock on the FK constraint.
-  const queues = ['fetchArticle', 'syncFollows', 'botReply', 'botPost', 'followSignup'];
+  const queues = ['fetchArticle', 'syncFollows', 'botReply', 'botPost', 'followSignup', 'deliverWebhook'];
   for (const q of queues) await boss.createQueue(q);
   logger.info({ queues }, 'Queues created');
 
@@ -47,6 +48,12 @@ async function start() {
   await boss.work('botPost', { batchSize: 2 }, async (jobs) => {
     for (const job of jobs) {
       await botPostJob(job.data as Parameters<typeof botPostJob>[0]);
+    }
+  });
+
+  await boss.work('deliverWebhook', { batchSize: 20 }, async (jobs) => {
+    for (const job of jobs) {
+      await deliverWebhookJob(job.data as Parameters<typeof deliverWebhookJob>[0]);
     }
   });
 

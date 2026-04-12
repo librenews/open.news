@@ -2,10 +2,11 @@ import { Redis } from 'ioredis';
 import { config } from '../lib/config.js';
 import { logger } from '../lib/logger.js';
 import { ensureIndex, percolatePost } from './opensearch.js';
-import { insertTrackMatch, getTracksWithEmbeddings, TrackWithEmbedding } from '../db/queries/tracks.js';
+import { insertTrackMatch, getTracksWithEmbeddings, TrackWithEmbedding, getWebhooksForTracks, TrackWebhook } from '../db/queries/tracks.js';
 import { embedTexts, checkEmbedHealth } from './embedClient.js';
 import { logEmbeddings } from './embedLogger.js';
 import { logModeration } from '../db/queries/moderation.js';
+import { enqueueJob } from '../web/jobEnqueue.js';
 
 const STREAM_KEY = 'track:posts';
 const GROUP_NAME = 'track-workers';
@@ -18,23 +19,36 @@ let lastLagLog = 0;
 
 // Cache track embeddings — refresh every 30s
 let cachedTracks: TrackWithEmbedding[] = [];
+let cachedWebhooks: Map<number, TrackWebhook[]> = new Map();
 let cacheAge = 0;
 const CACHE_TTL = 30_000;
 
-async function getTrackEmbeddings(): Promise<TrackWithEmbedding[]> {
+async function getTrackEmbeddings(): Promise<{ tracks: TrackWithEmbedding[]; webhooks: Map<number, TrackWebhook[]> }> {
   if (Date.now() - cacheAge > CACHE_TTL) {
     cachedTracks = await getTracksWithEmbeddings();
-    cacheAge = Date.now();
+    
+    // Refresh webhooks mapping for active tracks
+    cachedWebhooks.clear();
     if (cachedTracks.length > 0) {
-      logger.debug({ count: cachedTracks.length }, 'Refreshed track embeddings cache');
+      const activeIds = cachedTracks.map(t => t.id);
+      const whmap = await getWebhooksForTracks(activeIds);
+      for (const mapping of whmap) {
+        const idStr = Number(mapping.track_id);
+        if (!cachedWebhooks.has(idStr)) cachedWebhooks.set(idStr, []);
+        cachedWebhooks.get(idStr)!.push(mapping.webhook);
+      }
+      logger.debug({ count: cachedTracks.length, webhooks: whmap.length }, 'Refreshed track and webhook caches');
     }
+    
+    cacheAge = Date.now();
   }
-  return cachedTracks;
+  return { tracks: cachedTracks, webhooks: cachedWebhooks };
 }
 
 /** Reset track cache (exported for testing). */
 export function resetTrackCache(): void {
   cachedTracks = [];
+  cachedWebhooks.clear();
   cacheAge = 0;
 }
 
@@ -63,7 +77,7 @@ export async function matchPost(
   const matchedIds = new Set<number>();
 
   // Get active tracks (cached, refreshes every 30s)
-  const tracks = await getTrackEmbeddings();
+  const { tracks } = await getTrackEmbeddings();
   const activeIds = new Set(tracks.map((t) => Number(t.id)));
   const trackById = new Map(tracks.map((t) => [Number(t.id), t]));
 
@@ -206,6 +220,8 @@ async function processMessages(redis: Redis): Promise<void> {
 
   // 3. Two-phase match each post and store matches
   let totalMatches = 0;
+  const { webhooks } = await getTrackEmbeddings();
+  
   for (let i = 0; i < safePosts.length; i++) {
     const post = safePosts[i];
     try {
@@ -213,6 +229,28 @@ async function processMessages(redis: Redis): Promise<void> {
       const matchedTrackIds = await matchPost(post.text, post.did, post.uri, safeEmbeddings[i], isEnglish);
       for (const trackId of matchedTrackIds) {
         await insertTrackMatch(trackId, post.uri, post.did, post.text, post.facets, post.embed);
+        
+        // Broadcast webhook alerts
+        const activeWhs = webhooks.get(trackId);
+        if (activeWhs) {
+          const track = cachedTracks.find(t => Number(t.id) === trackId);
+          if (track) {
+            for (const wh of activeWhs) {
+              enqueueJob('deliverWebhook', {
+                webhookId: Number(wh.id),
+                url: wh.url,
+                secret: wh.secret,
+                trackUuid: track.uuid,
+                match: {
+                  post_uri: post.uri,
+                  post_did: post.did,
+                  post_text: post.text,
+                  matched_at: new Date().toISOString()
+                }
+              }).catch(err => logger.error({ err }, 'Failed to enqueue webhook job'));
+            }
+          }
+        }
       }
       totalMatches += matchedTrackIds.length;
     } catch (err) {
