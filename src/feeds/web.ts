@@ -7,8 +7,9 @@ import { feedsAuthRouter, getOAuthClient, getAgent } from './auth.js';
 import { getFeedUserById, getUserColumns, getColumnById, insertColumn, deleteColumn, setAppPassword, removeAppPassword, getFeedUserByRssToken } from './db.js';
 import type { FeedUser, FeedColumn } from './db.js';
 import { upsertUser } from '../db/queries/users.js';
-import { createTrack, updateTrackKeywords, updateTrack, getTrackByUuid, getMatchesByTrackId } from '../db/queries/tracks.js';
+import { createTrack, updateTrackKeywords, updateTrack, getTrackByUuid, getMatchesByTrackId, updateTrackQueryEmbedding } from '../db/queries/tracks.js';
 import { upsertTrackQuery } from '../track/opensearch.js';
+import { embedText } from '../track/embedClient.js';
 
 type Variables = {
   userId: bigint;
@@ -124,8 +125,8 @@ function renderApp(user: FeedUser, content: string): string {
   </main>
 
   <!-- Add Feed Modal overlay -->
-  <div x-show="searchOpen" style="display: none;" class="fixed inset-0 z-50 flex items-start justify-center pt-16 bg-slate-900/40 backdrop-blur-sm">
-    <div @click.outside="searchOpen = false" class="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden border border-slate-200 flex flex-col" x-data="{ tab: 'search' }">
+  <div x-show="searchOpen" style="display: none;" class="fixed inset-0 z-50 flex items-start justify-center pt-16 bg-slate-900/40 backdrop-blur-sm px-4">
+    <div @click.outside="searchOpen = false" class="bg-white rounded-2xl shadow-xl w-full max-w-2xl overflow-hidden border border-slate-200 flex flex-col max-h-[85vh]" x-data="{ tab: 'search', threshold: 0.75 }">
       
       <!-- Tabs -->
       <div class="flex border-b border-slate-100 pb-0 shrink-0">
@@ -151,17 +152,40 @@ function renderApp(user: FeedUser, content: string): string {
 
         <!-- Tab: Create -->
         <div x-show="tab === 'create'" style="display: none;" class="p-6">
-          <form hx-post="/api/track/create" hx-target="#columns-container" hx-swap="beforeend" @submit="searchOpen = false" class="space-y-4">
-            <div>
-               <label class="block text-xs font-semibold text-slate-600 mb-1">Tracker Name</label>
-               <input type="text" name="name" required placeholder="e.g., Tech and AI News" class="w-full bg-slate-50 border border-slate-200 text-slate-900 text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block p-2.5">
+          <form hx-post="/api/track/create" hx-target="#columns-container" hx-swap="beforeend" @submit="searchOpen = false" class="space-y-5">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+              <div>
+                 <label class="block text-xs font-semibold text-slate-600 mb-1">Tracker Name</label>
+                 <input type="text" name="name" required placeholder="e.g., Tech and AI News" class="w-full bg-slate-50 border border-slate-200 text-slate-900 text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block p-2.5">
+              </div>
+              <div>
+                 <label class="block text-xs font-semibold text-slate-600 mb-1">Keywords</label>
+                 <input type="text" name="keywords" placeholder="e.g., ai, openai, claude" class="w-full bg-slate-50 border border-slate-200 text-slate-900 text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block p-2.5">
+                 <p class="text-[10px] text-slate-400 mt-1">Comma-separated. Max 5.</p>
+              </div>
             </div>
-            <div>
-               <label class="block text-xs font-semibold text-slate-600 mb-1">Keywords</label>
-               <input type="text" name="keywords" required placeholder="e.g., artificial intelligence, openai, claude" class="w-full bg-slate-50 border border-slate-200 text-slate-900 text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block p-2.5">
-               <p class="text-[10px] text-slate-400 mt-1">Comma-separated. Max 5.</p>
+            
+            <div class="border-t border-slate-100 pt-4">
+              <label class="block text-xs font-semibold text-slate-600 mb-1 flex items-center gap-2">
+                Semantic Embed Query <span class="bg-indigo-100 text-indigo-600 text-[10px] px-1.5 py-0.5 rounded font-bold">AI</span>
+              </label>
+              <textarea name="query" rows="2" placeholder="e.g., News and updates about generative artificial intelligence and large language models." class="w-full bg-slate-50 border border-slate-200 text-slate-900 text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block p-2.5 resize-none"></textarea>
+              <p class="text-[10px] text-slate-400 mt-1">Natural language query for semantic matching.</p>
             </div>
-            <button type="submit" class="w-full bg-indigo-500 hover:bg-indigo-600 text-white font-semibold py-2 rounded-lg transition-colors shadow-sm cursor-pointer mt-2">
+
+            <div>
+              <div class="flex items-center justify-between mb-1">
+                <label class="block text-xs font-semibold text-slate-600">Similarity Threshold</label>
+                <span class="text-xs font-mono text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded" x-text="threshold"></span>
+              </div>
+              <input type="range" name="threshold" x-model="threshold" min="0.5" max="0.9" step="0.01" class="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-500">
+              <div class="flex justify-between text-[10px] text-slate-400 mt-1 px-1">
+                <span>Looser (More results)</span>
+                <span>Stricter (Fewer results)</span>
+              </div>
+            </div>
+
+            <button type="submit" class="w-full bg-indigo-500 hover:bg-indigo-600 text-white font-semibold py-2.5 rounded-lg transition-colors shadow-sm cursor-pointer mt-4">
               Create & Publish to Bluesky
             </button>
           </form>
@@ -467,17 +491,29 @@ app.post('/api/track/create', async (c) => {
   const body = await c.req.parseBody();
   const name = String(body.name ?? '').trim().slice(0, 75);
   const keywordsRaw = String(body.keywords ?? '').trim();
+  const query = String(body.query ?? '').trim().slice(0, 600);
+  const threshold = parseFloat(String(body.threshold ?? '0.75'));
   const keywords = keywordsRaw ? keywordsRaw.split(',').map(k => k.trim().slice(0, 100)).filter(Boolean).slice(0, 5) : [];
 
-  if (!name || keywords.length === 0) return c.text('Invalid input', 400);
+  if (!name || (!query && keywords.length === 0)) return c.text('Invalid input', 400);
 
   // 1. Sync User to Core Database
   const trackUser = await upsertUser({ did: user.did, handle: user.handle, display_name: user.display_name, avatar_url: user.avatar_url });
 
   // 2. Create Track & OpenSearch Query
-  const track = await createTrack(trackUser.id, name, keywords, '');
+  const track = await createTrack(trackUser.id, name, keywords, '', query || undefined, isNaN(threshold) ? 0.75 : threshold);
   const osQueryId = await upsertTrackQuery(track.id, keywords);
   await updateTrackKeywords(track.id, keywords, osQueryId);
+
+  // Embed the semantic query if provided
+  if (query) {
+    try {
+      const queryEmbedding = await embedText(query);
+      await updateTrackQueryEmbedding(track.id, queryEmbedding);
+    } catch (err) {
+      logger.error({ err }, 'Failed to embed query — track created without semantic matching');
+    }
+  }
 
   // 3. Publish to PDS directly from Feeds UI
   let atUri = '';
