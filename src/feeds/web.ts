@@ -7,7 +7,7 @@ import { feedsAuthRouter, getOAuthClient, getAgent } from './auth.js';
 import { getFeedUserById, getUserColumns, getColumnById, insertColumn, deleteColumn, setAppPassword, removeAppPassword, getFeedUserByRssToken } from './db.js';
 import type { FeedUser, FeedColumn } from './db.js';
 import { upsertUser } from '../db/queries/users.js';
-import { createTrack, updateTrackKeywords, updateTrack, getTrackByUuid, getMatchesByTrackId, updateTrackQueryEmbedding } from '../db/queries/tracks.js';
+import { createTrack, updateTrackKeywords, updateTrack, getTrackByUuid, getMatchesByTrackId, updateTrackQueryEmbedding, getTracksByUserId, deleteTrack } from '../db/queries/tracks.js';
 import { upsertTrackQuery } from '../track/opensearch.js';
 import { embedText } from '../track/embedClient.js';
 
@@ -63,14 +63,13 @@ app.use('*', async (c, next) => {
 
 // ─── Setup HTMX + Alpine.js UI ──────────────────────────────────────────────
 
-function renderApp(user: FeedUser, content: string): string {
-  // We use slightly tailored styling suitable for horizontal scroll
+function renderLayout(user: FeedUser, content: string, title = 'feeds.social'): string {
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>feeds.social</title>
+  <title>${title}</title>
   <link rel="icon" type="image/png" href="/favicon.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -88,15 +87,15 @@ function renderApp(user: FeedUser, content: string): string {
     }
   </style>
 </head>
-<body class="bg-slate-100 font-[Inter] text-slate-800 h-full flex flex-col" x-data="{ searchOpen: false, rssOpen: false }" @keydown.escape.window="searchOpen = false; rssOpen = false">
+<body class="bg-slate-100 font-[Inter] text-slate-800 h-full flex flex-col" x-data="{ rssOpen: false }" @keydown.escape.window="rssOpen = false">
   <!-- Minimalist Nav -->
   <nav class="bg-white border-b border-slate-200 shrink-0">
     <div class="px-4 flex justify-between items-center h-12">
       <div class="flex items-center gap-3">
-        <h1 class="text-lg font-bold text-slate-800 tracking-tight">feeds.social</h1>
-        <button @click="searchOpen = true" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-600 text-xs font-semibold px-2.5 py-1 rounded-md transition-colors cursor-pointer">
+        <a href="/" class="text-lg font-bold text-slate-800 tracking-tight no-underline">feeds.social</a>
+        <a href="/manage" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-600 text-xs font-semibold px-2.5 py-1 rounded-md transition-colors cursor-pointer no-underline">
           + Add Feed
-        </button>
+        </a>
         <button @click="rssOpen = true" class="text-slate-400 hover:text-orange-500 transition-colors focus:outline-none cursor-pointer" title="RSS Config">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 11a9 9 0 019 9M4 4a16 16 0 0116 16M4 20h.01M4 20a1 1 0 110-2 1 1 0 010 2z"></path></svg>
         </button>
@@ -119,80 +118,7 @@ function renderApp(user: FeedUser, content: string): string {
     </div>
   </nav>
 
-  <!-- Horizontal Scroll Container -->
-  <main class="flex-1 overflow-x-auto overflow-y-hidden p-4">
-    ${content}
-  </main>
-
-  <!-- Add Feed Modal overlay -->
-  <div x-show="searchOpen" style="display: none;" class="fixed inset-0 z-50 flex items-start justify-center pt-16 bg-slate-900/40 backdrop-blur-sm px-4">
-    <div @click.outside="searchOpen = false" class="bg-white rounded-2xl shadow-xl w-full max-w-2xl overflow-hidden border border-slate-200 flex flex-col max-h-[85vh]" x-data="{ tab: 'search', threshold: 0.75 }">
-      
-      <!-- Tabs -->
-      <div class="flex border-b border-slate-100 pb-0 shrink-0">
-        <button @click="tab = 'search'" :class="tab === 'search' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700'" class="flex-1 py-3 px-4 border-b-2 text-sm font-semibold transition-colors focus:outline-none cursor-pointer">Search Bluesky</button>
-        <button @click="tab = 'create'" :class="tab === 'create' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700'" class="flex-1 py-3 px-4 border-b-2 text-sm font-semibold transition-colors focus:outline-none cursor-pointer">Create Tracker</button>
-      </div>
-
-      <!-- Content -->
-      <div class="flex-1 overflow-y-auto">
-        <!-- Tab: Search -->
-        <div x-show="tab === 'search'">
-          <div class="p-4 border-b border-slate-100">
-            <input type="text" name="q" placeholder="Search for custom feeds..." 
-                   class="w-full bg-slate-50 border border-slate-200 text-slate-900 text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block p-2.5 outline-none"
-                   hx-post="/api/search/feeds" 
-                   hx-trigger="input changed delay:400ms, search" 
-                   hx-target="#search-results">
-          </div>
-          <div id="search-results" class="max-h-96 min-h-[150px] overflow-y-auto bg-slate-50/50 p-2" @htmx:after-request.camel="if($event.detail.elt.id === 'search-results') searchOpen = false">
-            <div class="text-center text-xs text-slate-500 py-6">Type to search existing feeds directly from Bluesky.</div>
-          </div>
-        </div>
-
-        <!-- Tab: Create -->
-        <div x-show="tab === 'create'" style="display: none;" class="p-6">
-          <form hx-post="/api/track/create" hx-target="#columns-container" hx-swap="beforeend" @submit="searchOpen = false" class="space-y-5">
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
-              <div>
-                 <label class="block text-xs font-semibold text-slate-600 mb-1">Tracker Name</label>
-                 <input type="text" name="name" required placeholder="e.g., Tech and AI News" class="w-full bg-slate-50 border border-slate-200 text-slate-900 text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block p-2.5">
-              </div>
-              <div>
-                 <label class="block text-xs font-semibold text-slate-600 mb-1">Keywords</label>
-                 <input type="text" name="keywords" placeholder="e.g., ai, openai, claude" class="w-full bg-slate-50 border border-slate-200 text-slate-900 text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block p-2.5">
-                 <p class="text-[10px] text-slate-400 mt-1">Comma-separated. Max 5.</p>
-              </div>
-            </div>
-            
-            <div class="border-t border-slate-100 pt-4">
-              <label class="block text-xs font-semibold text-slate-600 mb-1 flex items-center gap-2">
-                Semantic Embed Query <span class="bg-indigo-100 text-indigo-600 text-[10px] px-1.5 py-0.5 rounded font-bold">AI</span>
-              </label>
-              <textarea name="query" rows="2" placeholder="e.g., News and updates about generative artificial intelligence and large language models." class="w-full bg-slate-50 border border-slate-200 text-slate-900 text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block p-2.5 resize-none"></textarea>
-              <p class="text-[10px] text-slate-400 mt-1">Natural language query for semantic matching.</p>
-            </div>
-
-            <div>
-              <div class="flex items-center justify-between mb-1">
-                <label class="block text-xs font-semibold text-slate-600">Similarity Threshold</label>
-                <span class="text-xs font-mono text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded" x-text="threshold"></span>
-              </div>
-              <input type="range" name="threshold" x-model="threshold" min="0.5" max="0.9" step="0.01" class="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-500">
-              <div class="flex justify-between text-[10px] text-slate-400 mt-1 px-1">
-                <span>Looser (More results)</span>
-                <span>Stricter (Fewer results)</span>
-              </div>
-            </div>
-
-            <button type="submit" class="w-full bg-indigo-500 hover:bg-indigo-600 text-white font-semibold py-2.5 rounded-lg transition-colors shadow-sm cursor-pointer mt-4">
-              Create & Publish to Bluesky
-            </button>
-          </form>
-        </div>
-      </div>
-    </div>
-  </div>
+  ${content}
 
   <!-- RSS Modal overlay -->
   <div x-show="rssOpen" style="display: none;" class="fixed inset-0 z-50 flex items-start justify-center pt-16 bg-slate-900/40 backdrop-blur-sm">
@@ -225,6 +151,295 @@ function renderApp(user: FeedUser, content: string): string {
 </body>
 </html>`;
 }
+
+function renderApp(user: FeedUser, content: string): string {
+  return renderLayout(user, `
+  <main class="flex-1 overflow-x-auto overflow-y-hidden p-4">
+    ${content}
+  </main>
+  `);
+}
+
+
+// ─── Manage Tracks Route ────────────────────────────────────────────────────
+app.get('/manage', async (c) => {
+  const userId = c.get('userId');
+  const user = await getFeedUserById(userId);
+  if (!user) return c.redirect('/login');
+
+  const trackUser = await upsertUser({ did: user.did, handle: user.handle, display_name: user.display_name, avatar_url: user.avatar_url });
+  const tracks = await getTracksByUserId(trackUser.id);
+
+  function escHtml(unsafe: string) {
+    return String(unsafe).replace(/[&<"']/g, m => ({ '&': '&amp;', '<': '&lt;', '"': '&quot;', "'": '&#39;' })[m] as string);
+  }
+
+  const trackRows = tracks.length === 0 ? `<p class="text-xs text-slate-500 p-4">You haven't created any custom tracks yet.</p>` : tracks.map(t => `
+    <div class="flex items-center justify-between p-4 border-b border-slate-100 last:border-b-0 hover:bg-slate-50 transition-colors">
+      <div>
+        <h4 class="text-sm font-semibold text-slate-800">${escHtml(t.name)}</h4>
+        <p class="text-xs text-slate-500 truncate max-w-sm mt-0.5">${escHtml(t.keywords.join(', '))} ${t.query ? `| Semaphore: ${t.threshold.toFixed(2)}` : ''}</p>
+      </div>
+      <div class="flex items-center gap-3">
+        <a href="/manage/edit/${t.uuid}" class="text-xs font-semibold text-indigo-600 hover:text-indigo-800 cursor-pointer no-underline">Edit</a>
+        <form method="POST" action="/api/track/${t.uuid}/delete" onsubmit="return confirm('Are you sure you want to delete this track? This may break your Bluesky feed.');" class="m-0">
+          <button type="submit" class="text-xs font-semibold text-red-600 hover:text-red-800 cursor-pointer">Delete</button>
+        </form>
+      </div>
+    </div>
+  `).join('');
+
+  const content = `
+    <div class="max-w-4xl mx-auto w-full p-6 pt-10 overflow-y-auto">
+      <div class="mb-4">
+        <a href="/" class="text-sm text-indigo-500 hover:text-indigo-700 transition-colors no-underline font-semibold">&larr; Back to Dashboard</a>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-8 items-start pb-20">
+        <!-- Create Form inside a Card -->
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col pt-2" x-data="{ threshold: 0.75 }">
+          <div class="px-6 py-4 border-b border-slate-100 bg-slate-50">
+            <h2 class="text-lg font-bold text-slate-800">Create Tracker</h2>
+            <p class="text-xs text-slate-500 mt-1 mb-2">Build a custom algorithmic feed and sink it to Bluesky.</p>
+          </div>
+          <div class="p-6">
+            <form method="POST" action="/api/track/create" class="space-y-5">
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <div>
+                  <label class="block text-xs font-semibold text-slate-600 mb-1">Tracker Name</label>
+                  <input type="text" name="name" required placeholder="e.g., Tech and AI News" class="w-full bg-white border border-slate-200 text-slate-900 text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block p-2.5">
+                </div>
+                <div>
+                  <label class="block text-xs font-semibold text-slate-600 mb-1">Keywords</label>
+                  <input type="text" name="keywords" placeholder="e.g., ai, openai, claude" class="w-full bg-white border border-slate-200 text-slate-900 text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block p-2.5">
+                  <p class="text-[10px] text-slate-400 mt-1">Comma-separated. Max 5.</p>
+                </div>
+              </div>
+              
+              <div class="border-t border-slate-100 pt-4">
+                <label class="block text-xs font-semibold text-slate-600 mb-1 flex items-center gap-2">
+                  Semantic Embed Query <span class="bg-indigo-100 text-indigo-600 text-[10px] px-1.5 py-0.5 rounded font-bold">AI</span>
+                </label>
+                <textarea name="query" rows="2" placeholder="e.g., News and updates about generative artificial intelligence and large language models." class="w-full bg-white border border-slate-200 text-slate-900 text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block p-2.5 resize-none"></textarea>
+                <p class="text-[10px] text-slate-400 mt-1">Natural language query for semantic matching.</p>
+              </div>
+
+              <div>
+                <div class="flex items-center justify-between mb-1">
+                  <label class="block text-xs font-semibold text-slate-600">Similarity Threshold</label>
+                  <span class="text-xs font-mono text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded" x-text="threshold"></span>
+                </div>
+                <input type="range" name="threshold" x-model="threshold" min="0.5" max="0.9" step="0.01" class="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-500">
+                <div class="flex justify-between text-[10px] text-slate-400 mt-1 px-1">
+                  <span>Looser (More results)</span>
+                  <span>Stricter (Fewer results)</span>
+                </div>
+              </div>
+
+              <button type="submit" class="w-full bg-indigo-500 hover:bg-indigo-600 text-white font-semibold py-2.5 rounded-lg transition-colors shadow-sm cursor-pointer mt-4">
+                Create & Publish to Bluesky
+              </button>
+            </form>
+          </div>
+          <!-- Powered by track.social -->
+          <div class="px-6 py-4 border-t border-slate-100 bg-slate-50/50 flex flex-col items-center justify-center text-center">
+            <span class="text-[10px] uppercase font-bold tracking-wider text-slate-400 mb-1 flex items-center gap-1.5">
+              Powered by
+              <svg class="w-3 h-3 text-indigo-400" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/>
+              </svg>
+            </span>
+            <span class="text-xs font-semibold text-slate-600">track.social engine</span>
+          </div>
+        </div>
+
+        <div class="space-y-6 flex flex-col">
+          <!-- Search UI -->
+          <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col" x-data="{ tab: 'search' }">
+            <div class="px-6 py-4 border-b border-slate-100 bg-slate-50">
+              <h2 class="text-lg font-bold text-slate-800">Search Bluesky</h2>
+              <p class="text-xs text-slate-500 mt-1">Search and add existing public feeds directly to your deck.</p>
+            </div>
+            <div class="p-4 border-b border-slate-100">
+              <input type="text" name="q" placeholder="Search for feeds..." 
+                     class="w-full bg-white border border-slate-200 text-slate-900 text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block p-2.5 outline-none"
+                     hx-post="/api/search/feeds" 
+                     hx-trigger="input changed delay:400ms, search" 
+                     hx-target="#search-results">
+            </div>
+            <div id="search-results" class="max-h-64 min-h-[150px] overflow-y-auto bg-slate-50/50 p-2" @htmx:after-request.camel="if($event.detail.elt.id === 'search-results') setTimeout(() => window.location.href = '/', 150)">
+              <div class="text-center text-xs text-slate-500 py-6">Type to search existing feeds directly from Bluesky.</div>
+            </div>
+          </div>
+
+          <!-- My Tracks -->
+          <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
+            <div class="px-6 py-4 border-b border-slate-100 bg-slate-50">
+              <h2 class="text-lg font-bold text-slate-800">My Custom Tracks</h2>
+            </div>
+            <div class="flex flex-col">
+              ${trackRows}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+  return c.html(renderLayout(user, content, 'Manage Feeds - feeds.social'));
+});
+
+app.get('/manage/edit/:uuid', async (c) => {
+  const userId = c.get('userId');
+  const uuid = c.req.param('uuid');
+  const user = await getFeedUserById(userId);
+  if (!user) return c.redirect('/login');
+  
+  const trackUser = await upsertUser({ did: user.did, handle: user.handle, display_name: user.display_name, avatar_url: user.avatar_url });
+  const track = await getTrackByUuid(uuid);
+  if (!track || String(track.user_id) !== String(trackUser.id)) return c.text('Not found', 404);
+
+  function escHtml(unsafe: string) {
+    return String(unsafe).replace(/[&<"']/g, m => ({ '&': '&amp;', '<': '&lt;', '"': '&quot;', "'": '&#39;' })[m] as string);
+  }
+
+  const content = `
+    <div class="max-w-2xl mx-auto w-full p-6 pt-10 overflow-y-auto">
+      <div class="mb-6">
+        <a href="/manage" class="text-sm text-indigo-500 hover:text-indigo-700 transition-colors no-underline font-semibold">&larr; Back to Manage</a>
+      </div>
+      <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col pt-2 pb-6">
+        <div class="px-6 py-4 border-b border-slate-100 bg-slate-50">
+          <h2 class="text-xl font-bold text-slate-800">Edit: ${escHtml(track.name)}</h2>
+        </div>
+        <form method="POST" action="/api/track/${track.uuid}/edit" class="p-6 space-y-5">
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1">Name</label>
+            <input type="text" name="name" value="${escHtml(track.name)}" required maxlength="75"
+              class="w-full bg-white border border-slate-200 text-slate-900 text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block p-2.5">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1 flex items-center gap-2">Semantic Embed Query <span class="bg-indigo-100 text-indigo-600 text-[10px] px-1.5 py-0.5 rounded font-bold">AI</span></label>
+            <textarea name="query" maxlength="600" rows="3"
+              class="w-full bg-white border border-slate-200 text-slate-900 text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block p-2.5 resize-y"
+              oninput="document.getElementById('edit-squelch-section').style.display = 'block'">${escHtml(track.query ?? '')}</textarea>
+          </div>
+          <div id="edit-squelch-section">
+            <div class="flex items-center justify-between mb-1">
+              <label class="block text-xs font-semibold text-slate-600">Similarity Threshold</label>
+              <span class="text-xs font-mono text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded" id="edit-squelch-val">${track.threshold.toFixed(2)}</span>
+            </div>
+            <input type="range" name="threshold" min="0.5" max="0.9" step="0.01" value="${track.threshold.toFixed(2)}"
+              class="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-500" oninput="document.getElementById('edit-squelch-val').textContent=parseFloat(this.value).toFixed(2)">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1">Keywords</label>
+            <input type="hidden" name="keywords" id="edit-kw-value" value="${track.keywords.map(k => escHtml(k)).join(',')}">
+            <div id="edit-kw-wrap" class="flex flex-wrap gap-1.5 p-2 bg-white border border-slate-200 rounded-lg min-h-[42px] cursor-text focus-within:ring-2 focus-within:ring-indigo-500" onclick="document.getElementById('edit-kw-input').focus()">
+              <input type="text" id="edit-kw-input" placeholder="Type and press Enter"
+                class="flex-1 min-w-[140px] border-none outline-none text-sm bg-transparent p-0.5">
+            </div>
+          </div>
+
+          <button type="submit" class="w-full bg-indigo-500 hover:bg-indigo-600 text-white font-semibold py-2.5 rounded-lg transition-colors shadow-sm cursor-pointer mt-4">
+            Save Changes
+          </button>
+        </form>
+      </div>
+
+      <script>
+      (function(){
+        const wrap = document.getElementById('edit-kw-wrap');
+        const input = document.getElementById('edit-kw-input');
+        const hidden = document.getElementById('edit-kw-value');
+        const tags = hidden.value ? hidden.value.split(',').filter(Boolean) : [];
+        function render() {
+          wrap.querySelectorAll('.kw-pill').forEach(el => el.remove());
+          tags.forEach((tag, i) => {
+            const pill = document.createElement('span');
+            pill.className = 'kw-pill inline-flex items-center gap-1 bg-indigo-50 text-indigo-700 text-xs font-medium px-2.5 py-1 rounded-full';
+            pill.innerHTML = tag + '<button type="button" class="ml-0.5 text-indigo-400 hover:text-indigo-700 cursor-pointer" data-i="' + i + '">&times;</button>';
+            wrap.insertBefore(pill, input);
+          });
+          hidden.value = tags.join(',');
+        }
+        function add(val) {
+          const v = val.trim();
+          if (v && !tags.includes(v) && tags.length < 5) { tags.push(v); render(); }
+          input.value = '';
+        }
+        input.addEventListener('keydown', function(e) {
+          if ((e.key === 'Enter' || e.key === ',' || e.key === 'Tab') && input.value.trim()) {
+            e.preventDefault();
+            add(input.value);
+          }
+          if (e.key === 'Backspace' && !input.value && tags.length) {
+            tags.pop(); render();
+          }
+        });
+        input.addEventListener('blur', function() { if (input.value.trim()) add(input.value); });
+        wrap.addEventListener('click', function(e) {
+          if (e.target.dataset.i !== undefined) { tags.splice(Number(e.target.dataset.i), 1); render(); }
+        });
+        render();
+      })();
+      </script>
+    </div>
+  `;
+  return c.html(renderLayout(user, content, 'Edit Track - feeds.social'));
+});
+
+app.post('/api/track/:uuid/edit', async (c) => {
+  const userId = c.get('userId');
+  const uuid = c.req.param('uuid');
+  const user = await getFeedUserById(userId);
+  if (!user) return c.redirect('/login');
+  const trackUser = await upsertUser({ did: user.did, handle: user.handle, display_name: user.display_name, avatar_url: user.avatar_url });
+  const track = await getTrackByUuid(uuid);
+  if (!track || String(track.user_id) !== String(trackUser.id)) return c.text('Not found', 404);
+
+  const body = await c.req.parseBody();
+  const name = String(body.name ?? '').trim().slice(0, 75);
+  const keywordsRaw = String(body.keywords ?? '').trim();
+  const query = String(body.query ?? '').trim().slice(0, 600);
+  const threshold = parseFloat(String(body.threshold ?? '0.75'));
+  const keywords = keywordsRaw ? keywordsRaw.split(',').map(k => k.trim().slice(0, 100)).filter(Boolean).slice(0, 5) : [];
+
+  if (!name || (!query && keywords.length === 0)) return c.text('Invalid input', 400);
+
+  await updateTrack(track.id, { name, query: query || undefined, threshold: isNaN(threshold) ? 0.75 : threshold });
+  const osQueryId = await upsertTrackQuery(track.id, keywords);
+  await updateTrackKeywords(track.id, keywords, osQueryId);
+
+  if (query) {
+    try {
+      const queryEmbedding = await embedText(query);
+      await updateTrackQueryEmbedding(track.id, queryEmbedding);
+    } catch (err) {
+      logger.error({ err }, 'Failed to embed updated query');
+    }
+  }
+
+  return c.redirect('/manage');
+});
+
+app.post('/api/track/:uuid/delete', async (c) => {
+  const userId = c.get('userId');
+  const uuid = c.req.param('uuid');
+  const user = await getFeedUserById(userId);
+  if (!user) return c.redirect('/login');
+  const trackUser = await upsertUser({ did: user.did, handle: user.handle, display_name: user.display_name, avatar_url: user.avatar_url });
+  const track = await getTrackByUuid(uuid);
+  if (!track || String(track.user_id) !== String(trackUser.id)) return c.text('Not found', 404);
+
+  await deleteTrack(track.id);
+  const cols = await getUserColumns(userId);
+  const atUri = `at://${user.did}/app.bsky.feed.generator/${track.uuid}`;
+  for (const col of cols) {
+    if (col.feed_uri === atUri) {
+      await deleteColumn(col.id, userId);
+    }
+  }
+  return c.redirect('/manage');
+});
 
 // ─── Dashboard ──────────────────────────────────────────────────────────────
 app.get('/', async (c) => {
@@ -546,25 +761,7 @@ app.post('/api/track/create', async (c) => {
   const newPos = columns.length;
   const column = await insertColumn({ user_id: userId, feed_type: 'custom', feed_uri: atUri, title: name, position: newPos });
   
-  return c.html(`
-    <div class="w-[350px] shrink-0 flex flex-col bg-white border-r border-slate-200">
-      <div class="h-12 border-b border-slate-100 flex items-center justify-between px-3 shrink-0 bg-slate-50/50">
-        <h2 class="font-semibold text-slate-800 text-sm truncate flex items-center gap-1.5 cursor-move" title="${escapeHtml(column.title)}">
-          <svg class="w-4 h-4 text-slate-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
-          <span class="truncate">${escapeHtml(column.title)}</span>
-        </h2>
-        <div class="flex items-center gap-2">
-          <span class="text-[10px] uppercase font-bold text-orange-500 tracking-wider">Tracker</span>
-          <button hx-delete="/api/columns/${column.id}" hx-target="closest .shrink-0" hx-swap="outerHTML" hx-confirm="Remove this feed from your deck?" class="text-slate-400 hover:text-red-500 cursor-pointer shrink-0">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-          </button>
-        </div>
-      </div>
-      <div class="flex-1 overflow-y-auto" id="col-${column.id}" hx-get="/api/columns/${column.id}/feed" hx-trigger="load">
-        <div class="p-4 flex justify-center"><svg class="animate-spin h-5 w-5 text-indigo-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg></div>
-      </div>
-    </div>
-  `);
+  return c.redirect('/manage');
 });
 
 // ─── RSS Endpoints ──────────────────────────────────────────────────────────
