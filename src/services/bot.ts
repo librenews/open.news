@@ -1,6 +1,8 @@
 import { llm, type LLMMessage } from './llm.js';
 import { db } from '../db/client.js';
-import { getContextArticlesForUser, getContextArticlesPopular } from '../db/queries/articles.js';
+import { getContextArticlesForUser, getContextArticlesPopular, getArticlesMetaByIds } from '../db/queries/articles.js';
+import { findSemanticArticlesContext } from '../db/queries/search.js';
+import { embedText } from '../track/embedClient.js';
 import { getUserByDid } from '../db/queries/users.js';
 import { getPersona } from '../db/queries/preferences.js';
 import { logger } from '../lib/logger.js';
@@ -80,9 +82,40 @@ export async function composeBotReply(ctx: BotContext): Promise<{
   llmProvider: string;
 }> {
   const user = await getUserByDid(ctx.senderDid);
-  const articles = user
-    ? await getContextArticlesForUser(user.id, ctx.question)
-    : await getContextArticlesPopular(ctx.question);
+  let articles: ContextArticle[] = [];
+  
+  // Try semantic search first
+  try {
+    const questionEmbedding = await embedText(ctx.question);
+    const semanticChunks = await findSemanticArticlesContext(questionEmbedding, 5);
+    
+    if (semanticChunks.length > 0) {
+      const articleIds = semanticChunks.map(c => c.article_id);
+      const metaRows = await getArticlesMetaByIds(articleIds, user ? BigInt(user.id) : undefined);
+      
+      for (const chunk of semanticChunks) {
+        const meta = metaRows.find(m => String(m.id) === chunk.article_id);
+        if (meta) {
+          articles.push({
+            title: meta.title,
+            description: meta.description,
+            url: meta.url,
+            published_at: meta.published_at,
+            text_excerpt: chunk.text_content
+          });
+        }
+      }
+    }
+  } catch (err) {
+    logger.warn({ err }, 'Semantic context retrieval failed, falling back to FTS');
+  }
+
+  // Fallback to FTS if semantic lookup fails or yields nothing the user can see
+  if (articles.length === 0) {
+    articles = user
+      ? await getContextArticlesForUser(user.id, ctx.question)
+      : await getContextArticlesPopular(ctx.question);
+  }
 
   const articlesUsed: bigint[] = []; // TODO: track article IDs used
 

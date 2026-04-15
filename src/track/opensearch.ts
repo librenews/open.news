@@ -58,6 +58,7 @@ export async function ensureArticleIndex(): Promise<void> {
         properties: {
           article_id: { type: 'keyword' },
           chunk_index: { type: 'integer' },
+          published_at: { type: 'date' },
           text_content: { type: 'text' },
           embedding: { 
             type: 'knn_vector', 
@@ -73,6 +74,17 @@ export async function ensureArticleIndex(): Promise<void> {
     },
   });
   logger.info('OpenSearch article index created');
+}
+
+/** Utility to destroy the article chunks index so mappings can be recreated */
+export async function dropArticleIndex(): Promise<void> {
+  const os = getOsClient();
+  try {
+    await os.indices.delete({ index: ARTICLE_INDEX });
+    logger.info('OpenSearch article index dropped');
+  } catch (err) {
+    logger.warn({ err }, 'Failed to drop article index (it may not exist)');
+  }
 }
 
 /**

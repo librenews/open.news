@@ -165,7 +165,7 @@ export async function fetchArticleJob(data: FetchArticleJobData): Promise<void> 
           const chunks = chunkText(fullText);
           if (chunks.length > 0) {
             const { embeddings } = await embedTexts(chunks);
-            await indexArticleChunks(targetArticleId, chunks, embeddings);
+            await indexArticleChunks(targetArticleId, chunks, embeddings, meta.publishedAt ?? null);
           }
         } catch (embedErr) {
           logger.error({ err: embedErr, url, articleId: targetArticleId }, 'Failed to chunk and embed article');

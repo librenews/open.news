@@ -332,3 +332,35 @@ export async function getContextArticlesPopular(
   );
   return rows;
 }
+
+export async function getArticlesMetaByIds(
+  articleIds: (bigint | number | string)[],
+  userId?: bigint | number
+): Promise<{ id: number; title: string | null; description: string | null; url: string; published_at: Date | null }[]> {
+  if (articleIds.length === 0) return [];
+  const ids = articleIds.map(id => BigInt(id).toString());
+
+  if (userId) {
+    // Only return if it's in the user's feed
+    const { rows } = await db.query(
+      `SELECT a.id, a.title, a.description, a.url, a.published_at
+       FROM articles a
+       JOIN user_articles ua ON ua.article_id = a.id
+       WHERE a.id = ANY($1::bigint[])
+         AND ua.user_id = $2
+         AND a.is_news = TRUE`,
+      [ids, userId]
+    );
+    return rows;
+  } else {
+    // Global filter (popular/fallback)
+    const { rows } = await db.query(
+      `SELECT a.id, a.title, a.description, a.url, a.published_at
+       FROM articles a
+       WHERE a.id = ANY($1::bigint[])
+         AND a.is_news = TRUE`,
+      [ids]
+    );
+    return rows;
+  }
+}
