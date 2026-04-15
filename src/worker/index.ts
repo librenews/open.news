@@ -6,8 +6,11 @@ import { syncFollowsJob } from '../jobs/syncFollows.js';
 import { botReplyJob } from '../jobs/botReply.js';
 import { botPostJob } from '../jobs/botPost.js';
 import { deliverWebhookJob } from '../jobs/deliverWebhook.js';
+import { ensureArticleIndex } from '../track/opensearch.js';
 
 async function start() {
+  await ensureArticleIndex().catch(err => logger.error({ err }, 'Failed to ensure OpenSearch article index'));
+
   const boss = new PgBoss({
     connectionString: config.DATABASE_URL,
     retryLimit: 3,

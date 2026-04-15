@@ -10,6 +10,9 @@ import {
   fanOutArticleToUsers,
 } from '../db/queries/articles.js';
 import { getSourceByDid, touchSourceLastSeen } from '../db/queries/sources.js';
+import { indexArticleChunks } from '../db/queries/search.js';
+import { chunkText } from '../lib/chunking.js';
+import { embedTexts } from '../track/embedClient.js';
 import { logger } from '../lib/logger.js';
 
 export interface FetchArticleJobData {
@@ -155,6 +158,21 @@ export async function fetchArticleJob(data: FetchArticleJobData): Promise<void> 
         await upsertArticleSource(article.id, source.id, postUri, postCid);
         await fanOutArticleToUsers(article.id, sourceDid);
       }
+      
+      // Chunk and embed the article for semantic search
+      if (fullText) {
+        try {
+          const chunks = chunkText(fullText);
+          if (chunks.length > 0) {
+            const { embeddings } = await embedTexts(chunks);
+            await indexArticleChunks(targetArticleId, chunks, embeddings);
+          }
+        } catch (embedErr) {
+          logger.error({ err: embedErr, url, articleId: targetArticleId }, 'Failed to chunk and embed article');
+          // Allow fetch to succeed even if embedding fails
+        }
+      }
+      
       // botPost job would be enqueued here in a real deployment
     }
   } catch (err) {

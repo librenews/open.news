@@ -26,6 +26,7 @@ const schema = z.object({
   // Track infrastructure
   REDIS_URL: z.string().default('redis://localhost:6379'),
   OPENSEARCH_URL: z.string().url().default('http://localhost:9200'),
+  EMBED_DIMENSION: z.coerce.number().default(384),
 
   // Web
   PORT: z.coerce.number().default(3000),

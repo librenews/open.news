@@ -38,6 +38,43 @@ export async function ensureIndex(): Promise<void> {
   logger.info('OpenSearch percolate index created');
 }
 
+export const ARTICLE_INDEX = 'article_chunks';
+
+/** Ensure the articles index exists with knn vector mapping. */
+export async function ensureArticleIndex(): Promise<void> {
+  const os = getOsClient();
+  const exists = await os.indices.exists({ index: ARTICLE_INDEX });
+  if (exists.body) return;
+
+  await os.indices.create({
+    index: ARTICLE_INDEX,
+    body: {
+      settings: {
+        index: {
+          knn: true
+        }
+      },
+      mappings: {
+        properties: {
+          article_id: { type: 'keyword' },
+          chunk_index: { type: 'integer' },
+          text_content: { type: 'text' },
+          embedding: { 
+            type: 'knn_vector', 
+            dimension: config.EMBED_DIMENSION, 
+            method: {
+              name: 'hnsw',
+              space_type: 'cosinesimil',
+              engine: 'nmslib'
+            }
+          },
+        },
+      },
+    },
+  });
+  logger.info('OpenSearch article index created');
+}
+
 /**
  * Store a keyword-only percolate query for a track.
  * Semantic matching is handled separately in the worker via cosine similarity.
