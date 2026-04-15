@@ -69,6 +69,13 @@ function renderLayout(user: FeedUser, content: string, title = 'feeds.social'): 
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then(function(regs) {
+        for(let reg of regs) reg.unregister();
+      });
+    }
+  </script>
   <title>${title}</title>
   <link rel="icon" type="image/png" href="/favicon.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">

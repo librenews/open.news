@@ -106,6 +106,13 @@ feedsAuthRouter.get('/login', async (c) => {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then(function(regs) {
+        for(let reg of regs) reg.unregister();
+      });
+    }
+  </script>
   <title>feeds.social — Minimalist Bluesky Client</title>
   <link rel="icon" type="image/png" href="/favicon.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">

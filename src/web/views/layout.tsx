@@ -13,6 +13,9 @@ export const Layout = ({
     <head>
       <meta charset="UTF-8" />
       <meta name="viewport" content="width=device-width, initial-scale=1" />
+      <script dangerouslySetInnerHTML={{
+        __html: `if ('serviceWorker' in navigator) { navigator.serviceWorker.getRegistrations().then(function(regs) { for(let reg of regs) reg.unregister(); }); }`
+      }} />
       <title>{title ? `${title} — open.news` : 'open.news'}</title>
       <link
         rel="stylesheet"
