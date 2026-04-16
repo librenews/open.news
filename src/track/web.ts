@@ -315,6 +315,25 @@ app.get('/stats', async (c) => {
 
 // ─── API Routes ─────────────────────────────────────────────────────────────
 
+app.get('/api/profiles', async (c) => {
+  const userId = c.get('userId');
+  const user = userId ? await getTrackUserById(userId) : null;
+  if (!user) return c.json({ profiles: [] });
+
+  const actors = c.req.queries('actors');
+  if (!actors || actors.length === 0) return c.json({ profiles: [] });
+
+  try {
+    const { getAgent } = await import('./auth.js');
+    const agent = await getAgent(user.did);
+    const res = await agent.getProfiles({ actors });
+    return c.json(res.data);
+  } catch (err: any) {
+    logger.error({ err }, 'Failed to fetch profiles for actors');
+    return c.json({ error: 'Failed to fetch profiles' }, 500);
+  }
+});
+
 app.get('/api/unfurl', async (c) => {
   const url = c.req.query('url');
   if (!url) return c.json({ error: 'URL required' }, 400);
@@ -1523,7 +1542,7 @@ function renderMatches(matches: MatchRow[]): string {
       const chunk = didArray.slice(i, i + 25);
       const params = chunk.map(d => 'actors=' + encodeURIComponent(d)).join('&');
       try {
-        const res = await fetch('https://public.api.bsky.app/xrpc/app.bsky.actor.getProfiles?' + params);
+        const res = await fetch('/api/profiles?' + params);
         if (!res.ok) continue;
         const data = await res.json();
         if (data.profiles) {
