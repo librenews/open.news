@@ -83,5 +83,16 @@ module.exports = {
       error_file: '/var/log/opennews/feeds-web-error.log',
       out_file: '/var/log/opennews/feeds-web-out.log',
     },
+    {
+      name: 'weblog',
+      script: 'node',
+      args: '--import tsx/esm src/weblog/index.ts',
+      cwd: '/home/opennews/open-news',
+      instances: 1, autorestart: true, watch: false,
+      max_memory_restart: '256M',
+      env: { ...envVars, WEBLOG_PORT: '4400' },
+      error_file: '/var/log/opennews/weblog-error.log',
+      out_file: '/var/log/opennews/weblog-out.log',
+    },
   ],
 };
