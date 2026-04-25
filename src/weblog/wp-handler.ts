@@ -132,8 +132,8 @@ router.all('/wp/v2/settings', requireAuth, (req, res) => {
 router.post('/wp/v2/media', requireAuth, async (req, res) => {
   const user = (req as any).user;
   try {
-    const mimeType = req.get('Content-Type') || 'application/octet-stream';
-    const fileName = req.get('Content-Disposition')?.match(/filename="([^"]+)"/i)?.[1] || `upload_${Date.now()}.bin`;
+    let mimeType = req.get('Content-Type') || 'application/octet-stream';
+    let fileName = req.get('Content-Disposition')?.match(/filename="([^"]+)"/i)?.[1] || `upload_${Date.now()}.bin`;
     
     // Express raw body-parser ensures req.body is securely mapped exactly as a Buffer dynamically when octet-streams push
     let buffer: Buffer;
@@ -145,7 +145,56 @@ router.post('/wp/v2/media', requireAuth, async (req, res) => {
        // if parsed organically as empty JSON object bypass edgecase
        buffer = Buffer.from(JSON.stringify(req.body));
     }
-    
+
+    // iOS and WordPress mobile apps use physical multipart/form-data, pushing literal HTTP boundary strings straight into our buffers! 
+    if (mimeType.includes('multipart/form-data')) {
+      const boundaryMatch = mimeType.match(/boundary=([^;]+)/i);
+      if (boundaryMatch) {
+        // Strip out enclosing double quotes if client sends e.g. boundary="----webkit..."
+        let rawBoundary = boundaryMatch[1];
+        if (rawBoundary.startsWith('"') && rawBoundary.endsWith('"')) {
+            rawBoundary = rawBoundary.slice(1, -1);
+        }
+        const doubleDashBoundary = Buffer.from(`--${rawBoundary}`);
+        let idx = buffer.indexOf(doubleDashBoundary);
+        
+        while (idx !== -1) {
+          const nextIdx = buffer.indexOf(doubleDashBoundary, idx + doubleDashBoundary.length);
+          if (nextIdx === -1) break;
+          
+          const partBuffer = buffer.slice(idx + doubleDashBoundary.length, nextIdx);
+          const headerEnd = partBuffer.indexOf(Buffer.from('\r\n\r\n'));
+          
+          if (headerEnd !== -1) {
+            const headerSegment = partBuffer.slice(0, headerEnd).toString('utf-8');
+            if (headerSegment.includes('filename="')) {
+              const fileMatch = headerSegment.match(/filename="([^"]+)"/i);
+              if (fileMatch) fileName = fileMatch[1];
+              
+              const typeMatch = headerSegment.match(/Content-Type:\s*([^\s\r\n]+)/i);
+              if (typeMatch) mimeType = typeMatch[1];
+              
+              let payloadEnd = partBuffer.length;
+              if (payloadEnd >= 2 && partBuffer[payloadEnd - 2] === 0x0D && partBuffer[payloadEnd - 1] === 0x0A) {
+                payloadEnd -= 2; // Drop trailing \r\n before the next boundary
+              }
+              
+              buffer = partBuffer.slice(headerEnd + 4, payloadEnd);
+              break;
+            }
+          }
+          idx = nextIdx;
+        }
+      }
+    }
+
+    // Force strictly valid web Mime Types preventing browser CORB layout rejections entirely safely!
+    if (fileName && (fileName.toLowerCase().endsWith('.jpg') || fileName.toLowerCase().endsWith('.jpeg'))) mimeType = 'image/jpeg';
+    else if (fileName && fileName.toLowerCase().endsWith('.png')) mimeType = 'image/png';
+    else if (buffer.length > 2 && buffer[0] === 0xFF && buffer[1] === 0xD8) mimeType = 'image/jpeg';
+    else if (buffer.length > 4 && buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4E && buffer[3] === 0x47) mimeType = 'image/png';
+    else if (mimeType.includes('multipart/form-data') || mimeType === 'application/octet-stream') mimeType = 'image/jpeg'; // Absolute baseline natively
+
     // Dispatch to pipeline natively extending the identical AT Protocol execution route cleanly mapped inside xmlrpc
     const serverUrl = `${req.protocol}://${req.get('host')}`;
     const { url, mime, cid } = await uploadMediaToBluesky(user.handle, user.appPassword, fileName, mimeType, new Uint8Array(buffer), serverUrl);
@@ -162,20 +211,23 @@ router.post('/wp/v2/media', requireAuth, async (req, res) => {
       status: 'inherit',
       type: 'attachment',
       link: url,
-      title: { rendered: fileName },
+      title: { raw: fileName, rendered: fileName },
       author: 1,
       comment_status: 'closed',
       ping_status: 'closed',
       meta: [],
       template: '',
       alt_text: '',
-      caption: { rendered: '' },
-      description: { rendered: '' },
+      caption: { raw: '', rendered: '' },
+      description: { raw: '', rendered: '' },
       media_type: mimeType.startsWith('image/') ? 'image' : 'file',
       mime_type: mime,
       media_details: {},
       post: null,
-      source_url: url 
+      source_url: url,
+      permalink_template: url,
+      generated_slug: cid,
+      missing_image_sizes: []
     });
   } catch (error) {
     console.error('REST Upload API Failure:', error);

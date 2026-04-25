@@ -1,0 +1,11 @@
+CREATE TABLE IF NOT EXISTS longform_oauth_state (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL,
+  expires_at TIMESTAMP WITH TIME ZONE NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS longform_oauth_sessions (
+  sub TEXT PRIMARY KEY,
+  value TEXT NOT NULL,
+  updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+);

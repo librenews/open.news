@@ -30,8 +30,10 @@ const schema = z.object({
 
   // Web
   PORT: z.coerce.number().default(3000),
+  LONGFORM_PORT: z.coerce.number().default(3001),
   SESSION_SECRET: z.string().min(16),
   BASE_URL: z.string().url(),
+  LONGFORM_DOMAIN: z.string().default('dev.libre.news'),
 
   // Operational
   LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error']).default('info'),
