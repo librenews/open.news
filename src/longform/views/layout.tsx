@@ -178,9 +178,7 @@ export function Layout({ title, children, profile, headerAction }: { title: stri
                       <a href="/logout" style="display: block; padding: 0.75rem 1rem; color: #d32f2f;">Sign out</a>
                     </div>
                   </div>
-                ` : html`
-                  <a href="/logout">Logout</a>
-                `}
+                ` : ''}
               </div>
             </nav>
           `}
