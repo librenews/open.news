@@ -142,7 +142,7 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', service: 'MetaWeblog-to-Bluesky Bridge' });
 });
 
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.WEBLOG_PORT || process.env.PORT || 4400;
 app.listen(PORT, () => {
   console.log(`MetaWeblog -> Bluesky bridge running on http://localhost:${PORT}/xmlrpc`);
   console.log(`Health check available at http://localhost:${PORT}/health`);
