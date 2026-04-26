@@ -101,7 +101,7 @@ module.exports = {
       cwd: '/home/opennews/open-news',
       instances: 1, autorestart: true, watch: false,
       max_memory_restart: '256M',
-      env: { ...envVars, LONGFORM_PORT: '4500' },
+      env: { ...envVars, LONGFORM_PORT: '4500', LONGFORM_DOMAIN: 'longform.social' },
       error_file: '/var/log/opennews/longform-error.log',
       out_file: '/var/log/opennews/longform-out.log',
     },
