@@ -60,7 +60,37 @@ function renderLeafletBlocks(blocks: LeafletBlock[], did: string) {
         
         if (!cid) return '';
         const src = `/blob/${did}/${cid}`;
-        return html`<img src="${src}" alt="${(block as any).alt || ''}" style="max-width: 100%; border-radius: 8px; margin: 1rem 0; box-shadow: 0 4px 12px rgba(0,0,0,0.1);" />`;
+        return html`<img src="${src}" alt="${(block as any).alt || ''}" style="max-width: 100%; border-radius: 8px; margin: 1.5rem 0; box-shadow: 0 4px 12px rgba(0,0,0,0.1);" />`;
+        
+      case 'pub.leaflet.blocks.iframe':
+        const iframeUrl = (block as any).url;
+        if (!iframeUrl) return '';
+        return html`
+          <div style="position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; border-radius: 8px; margin: 1.5rem 0; background: #1a1a1a;">
+            <iframe 
+              src="${iframeUrl}" 
+              style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 0;"
+              allowfullscreen 
+              sandbox="allow-scripts allow-same-origin allow-popups"
+            ></iframe>
+          </div>
+        `;
+
+      case 'pub.leaflet.blocks.website':
+        const webUrl = (block as any).src || (block as any).url;
+        if (!webUrl) return '';
+        try {
+           const parsedUrl = new URL(webUrl);
+           const domain = parsedUrl.hostname.replace(/^www\./, '');
+           return html`
+             <a href="${webUrl}" target="_blank" rel="noopener noreferrer" style="display: flex; flex-direction: column; padding: 1.5rem; border: 1px solid rgba(0,0,0,0.1); border-radius: 8px; text-decoration: none; color: inherit; margin: 1.5rem 0; transition: background-color 0.2s;" onmouseover="this.style.backgroundColor='rgba(0,0,0,0.02)'" onmouseout="this.style.backgroundColor='transparent'">
+               <span style="font-weight: 600; font-family: var(--font-sans); margin-bottom: 0.25rem;">${webUrl}</span>
+               <span style="font-size: 14px; color: var(--text-muted); font-family: var(--font-sans);">External Link • ${domain}</span>
+             </a>
+           `;
+        } catch(e) {
+           return html`<a href="${webUrl}" style="color: #118156; word-break: break-all;">${webUrl}</a>`;
+        }
         
       case 'pub.leaflet.blocks.text':
       default:

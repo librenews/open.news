@@ -39,21 +39,21 @@ app.get('/', async (c) => {
   
   if (!sessionDid) {
     return c.html((
-      <Layout title={`Login - ${config.LONGFORM_DOMAIN}`}>
+      <Layout title={`Longform - Write securely on the AT Protocol`}>
         <div style="text-align: center; padding-top: 20vh;">
-          <h1 style="font-family: var(--font-sans); letter-spacing: -0.03em;">Publish securely</h1>
-          <p style="color: var(--text-muted); margin-bottom: 2rem;">Sign in to your Bluesky PDS to write.</p>
+          <h1 style="font-family: var(--font-body); font-weight: 700; font-size: 54px; color: var(--text-main); letter-spacing: -0.03em; margin-bottom: 0.5rem;">Longform</h1>
+          <p style="color: var(--text-muted); font-family: var(--font-sans); margin-bottom: 3rem; font-size: 18px;">Sign in to your ATproto PDS to write.</p>
           <form action="/oauth/login" method="get">
             <input 
               type="text" 
               name="handle" 
               placeholder="e.g. alice.bsky.social" 
-              style="padding: 0.5rem 1rem; border: 1px solid rgba(0,0,0,0.2); border-radius: 4px; font-size: 16px; margin-right: 0.5rem;" 
+              style="padding: 0.75rem 1rem; border: 1px solid rgba(0,0,0,0.2); border-radius: 6px; font-size: 16px; margin-right: 0.5rem; width: 260px; font-family: var(--font-sans);" 
               required 
             />
             <button 
               type="submit" 
-              style="padding: 0.5rem 1rem; background: #242424; color: white; border: none; border-radius: 4px; font-size: 16px; cursor: pointer;"
+              style="padding: 0.75rem 1.5rem; background: #242424; color: white; border: none; border-radius: 6px; font-size: 16px; cursor: pointer; font-family: var(--font-sans); font-weight: 500;"
             >Sign In</button>
           </form>
         </div>

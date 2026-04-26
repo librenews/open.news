@@ -140,6 +140,43 @@ export async function serializeTiptapToLeaflet(tiptapJson: any, title: string, d
           }
         });
       }
+    } else if (node.type === 'embed') {
+      const src = node.attrs?.src;
+      if (!src) continue;
+      
+      const isYoutube = src.includes('youtube.com') || src.includes('youtu.be');
+      if (isYoutube) {
+        // Extract video ID safely
+        let videoId = '';
+        try {
+          if (src.includes('youtu.be')) {
+            videoId = new URL(src).pathname.slice(1);
+          } else {
+            videoId = new URL(src).searchParams.get('v') || '';
+          }
+        } catch (e) {}
+
+        if (videoId) {
+          leafletBlocks.push({
+            $type: 'pub.leaflet.pages.linearDocument#block',
+            block: {
+              $type: 'pub.leaflet.blocks.iframe',
+              url: `https://www.youtube.com/embed/${videoId}`,
+              aspectRatio: { width: 16, height: 9 }
+            } as any
+          });
+          continue;
+        }
+      }
+      
+      // Generic fallback
+      leafletBlocks.push({
+        $type: 'pub.leaflet.pages.linearDocument#block',
+        block: {
+          $type: 'pub.leaflet.blocks.website',
+          src: src
+        } as any
+      });
     }
   }
 

@@ -6,7 +6,7 @@ export function EditorPage() {
     <div id="draft-status" style="position: fixed; bottom: 20px; right: 20px; background: rgba(0,0,0,0.8); color: white; padding: 6px 12px; border-radius: 6px; font-size: 13px; font-family: var(--font-sans); opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 50;">Draft saved locally</div>
     
     <!-- Floating 'New Block' Context Menu (Medium '+') -->
-    <div class="floating-menu" id="floating-menu">
+    <div class="floating-menu" id="floating-menu" style="visibility: hidden;">
       <button class="add-btn" title="Add new block">
         <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
           <line x1="12" y1="5" x2="12" y2="19"></line>
@@ -15,13 +15,14 @@ export function EditorPage() {
       </button>
       <div class="expand-menu">
         <button data-type="image" title="Upload Image">🖼️</button>
+        <button data-type="embed" title="Embed URL">🔗</button>
         <button data-type="codeBlock" title="Code">{}</button>
         <input type="file" id="image-upload" accept="image/png, image/jpeg, image/gif, image/webp" style="display: none;" />
       </div>
     </div>
 
     <!-- Bubble contextual text-selection menu -->
-    <div class="bubble-menu" id="bubble-menu">
+    <div class="bubble-menu" id="bubble-menu" style="visibility: hidden;">
       <button data-command="bold"><b>B</b></button>
       <button data-command="italic"><i>i</i></button>
       <button data-command="strike"><s>S</s></button>
@@ -39,6 +40,25 @@ export function EditorPage() {
       import { BubbleMenu } from 'https://esm.sh/@tiptap/extension-bubble-menu@2.2.4';
       import { FloatingMenu } from 'https://esm.sh/@tiptap/extension-floating-menu@2.2.4';
       import Image from 'https://esm.sh/@tiptap/extension-image@2.2.4';
+      import { Node, mergeAttributes } from 'https://esm.sh/@tiptap/core@2.2.4';
+
+      const EmbedNode = Node.create({
+        name: 'embed',
+        group: 'block',
+        atom: true,
+        addAttributes() {
+          return { src: { default: null } };
+        },
+        parseHTML() {
+          return [{ tag: 'div[data-embed]' }];
+        },
+        renderHTML({ HTMLAttributes }) {
+          return ['div', mergeAttributes(HTMLAttributes, { 'data-embed': '', class: 'embed-placeholder' }), 
+            ['div', { class: 'embed-label' }, 'Embed:'],
+            ['a', { href: HTMLAttributes.src, target: '_blank', contenteditable: 'false' }, HTMLAttributes.src]
+          ];
+        },
+      });
 
       document.addEventListener('DOMContentLoaded', () => {
         try {
@@ -91,6 +111,7 @@ export function EditorPage() {
           extensions: [
             StarterKit.configure({ heading: { levels: [2, 3] } }),
             Image,
+            EmbedNode,
             Placeholder.configure({
               placeholder: 'Tell your story...',
             }),
@@ -205,6 +226,14 @@ export function EditorPage() {
         floatingMenuEl.querySelector('[data-type="codeBlock"]').addEventListener('click', () => {
            floatingMenuEl.classList.remove('expanded');
            window.editor.chain().focus().toggleCodeBlock().run();
+        });
+
+        floatingMenuEl.querySelector('[data-type="embed"]').addEventListener('click', () => {
+           floatingMenuEl.classList.remove('expanded');
+           const url = window.prompt('Enter a URL to embed (e.g. YouTube, Bluesky):');
+           if (url) {
+             window.editor.chain().focus().insertContent({ type: 'embed', attrs: { src: url } }).run();
+           }
         });
         
         } catch (e) {
@@ -351,7 +380,22 @@ export function EditorPage() {
        .prose blockquote { border-left: 3px solid rgba(0,0,0,0.8); padding-left: 1rem; font-style: italic; margin-left: 0; }
        .prose img { max-width: 100%; border-radius: 8px; margin: 1rem 0; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
        .prose pre { background: #1a1a1a; color: #fff; padding: 1rem; border-radius: 8px; overflow-x: auto; font-family: monospace; }
-       @media (prefers-color-scheme: dark) { .prose blockquote { border-left-color: rgba(255,255,255,0.8); } }
+       .prose .embed-placeholder {
+         background: rgba(0,0,0,0.03);
+         border: 1px dashed rgba(0,0,0,0.2);
+         padding: 1rem 1.5rem;
+         border-radius: 8px;
+         margin: 1.5rem 0;
+         display: flex;
+         align-items: center;
+         gap: 0.5rem;
+       }
+       .prose .embed-label { font-weight: 600; font-family: var(--font-sans); font-size: 14px; color: var(--text-muted); }
+       .prose .embed-placeholder a { color: #118156; text-decoration: none; word-break: break-all; }
+       @media (prefers-color-scheme: dark) { 
+         .prose blockquote { border-left-color: rgba(255,255,255,0.8); } 
+         .prose .embed-placeholder { background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.2); }
+       }
     </style>
   `;
 }
