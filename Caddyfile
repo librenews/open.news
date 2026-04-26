@@ -13,3 +13,11 @@ track.social {
 feeds.social {
     reverse_proxy localhost:4300
 }
+
+longform.social {
+    reverse_proxy localhost:3001
+}
+
+weblog.social {
+    reverse_proxy localhost:4400
+}

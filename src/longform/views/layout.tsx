@@ -145,12 +145,21 @@ export function Layout({ title, children, profile, headerAction }: { title: stri
         <div class="container">
           ${title.includes('Login') ? '' : html`
             <nav class="nav-header">
-              <a href="/" style="font-family: var(--font-body); font-weight: 700; font-size: 22px; color: var(--text-main); text-decoration: none; letter-spacing: -0.03em;">Longform</a>
+              <a href="/" style="display: flex; align-items: center; text-decoration: none;">
+                <img src="/logo.png" alt="Longform" style="height: 28px; width: auto;" onerror="this.outerHTML='<span style=\\'font-family: var(--font-body); font-weight: 700; font-size: 22px; color: var(--text-main); letter-spacing: -0.03em;\\'>Longform</span>'" />
+              </a>
               
+              ${profile ? html`
               <div class="nav-links">
-                <a href="/">Write</a>
+                <a href="/" title="Write" style="display: flex; align-items: center;">
+                  <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                  </svg>
+                </a>
                 <a href="/posts">My Posts</a>
               </div>
+              ` : ''}
               
               <div style="display: flex; align-items: center; gap: 1rem;">
                 ${headerAction ? headerAction : ''}

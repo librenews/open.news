@@ -18,6 +18,8 @@ process.on('unhandledRejection', (err) => {
 
 const app = new Hono();
 
+app.use('/logo.png', serveStatic({ root: './src/longform/public', path: 'logo.png' }));
+
 app.route('/', authRouter);
 
 async function fetchUserProfile(did: string) {
@@ -41,7 +43,7 @@ app.get('/', async (c) => {
     return c.html((
       <Layout title={`Longform - Write securely on the AT Protocol`}>
         <div style="text-align: center; padding-top: 20vh;">
-          <h1 style="font-family: var(--font-body); font-weight: 700; font-size: 54px; color: var(--text-main); letter-spacing: -0.03em; margin-bottom: 0.5rem;">Longform</h1>
+          <img src="/logo.png" alt="Longform" style="height: 64px; margin-bottom: 0.5rem;" onerror="this.outerHTML='<h1 style=\\'font-family: var(--font-body); font-weight: 700; font-size: 54px; color: var(--text-main); letter-spacing: -0.03em; margin-bottom: 0.5rem;\\'>Longform</h1>'" />
           <p style="color: var(--text-muted); font-family: var(--font-sans); margin-bottom: 3rem; font-size: 18px;">Sign in to your ATproto PDS to write.</p>
           <form action="/oauth/login" method="get">
             <input 

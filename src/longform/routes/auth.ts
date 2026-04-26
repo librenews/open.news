@@ -33,7 +33,7 @@ export async function getLongformAuthClient(): Promise<NodeOAuthClient> {
       grant_types: ['authorization_code', 'refresh_token'],
       response_types: ['code'],
       token_endpoint_auth_method: 'none',
-      scope: 'atproto repo:pub.leaflet.document',
+      scope: 'atproto repo:pub.leaflet.document blob:image/jpeg',
       dpop_bound_access_tokens: true,
     },
     requestLock,
@@ -98,7 +98,7 @@ authRouter.get('/client-metadata.json', async (c) => {
 authRouter.get('/oauth/login', async (c) => {
   const handle = c.req.query('handle')?.trim();
   if (!handle) {
-    return c.html('<form action="/oauth/login"><input name="handle" placeholder="you.bsky.social" /><button>Login directly</button></form>');
+    return c.redirect('/');
   }
 
   try {
@@ -135,7 +135,7 @@ authRouter.get('/oauth/callback', async (c) => {
 
 authRouter.get('/logout', async (c) => {
   setCookie(c, 'lf_session', '', { maxAge: 0, path: '/' });
-  return c.redirect('/oauth/login');
+  return c.redirect('/');
 });
 
 export async function getSession(c: any): Promise<string | null> {

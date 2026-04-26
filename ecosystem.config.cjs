@@ -94,5 +94,16 @@ module.exports = {
       error_file: '/var/log/opennews/weblog-error.log',
       out_file: '/var/log/opennews/weblog-out.log',
     },
+    {
+      name: 'longform',
+      script: 'node',
+      args: '--import tsx/esm src/longform/index.tsx',
+      cwd: '/home/opennews/open-news',
+      instances: 1, autorestart: true, watch: false,
+      max_memory_restart: '256M',
+      env: { ...envVars, LONGFORM_PORT: '3001' },
+      error_file: '/var/log/opennews/longform-error.log',
+      out_file: '/var/log/opennews/longform-out.log',
+    },
   ],
 };
