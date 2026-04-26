@@ -19,6 +19,7 @@ process.on('unhandledRejection', (err) => {
 const app = new Hono();
 
 app.use('/logo.png', serveStatic({ root: './src/longform/public', path: 'logo.png' }));
+app.use('/favicon.png', serveStatic({ root: './src/longform/public', path: 'favicon.png' }));
 
 app.route('/', authRouter);
 
