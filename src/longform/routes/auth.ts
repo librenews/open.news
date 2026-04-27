@@ -126,6 +126,8 @@ authRouter.get('/oauth/callback', async (c) => {
       maxAge: 60 * 60 * 24 * 30
     });
     
+    logger.info({ event: 'longform_login', did }, 'User successfully authenticated via AT Protocol');
+    
     return c.redirect('/');
   } catch (err) {
     logger.error({ err }, 'Longform OAuth callback parsing failed');

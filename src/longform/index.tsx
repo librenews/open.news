@@ -11,6 +11,7 @@ import { Layout } from './views/layout.js';
 import { authRouter, getSession, getLongformAuthClient } from './routes/auth.js';
 import { Agent } from '@atproto/api';
 import { serializeTiptapToLeaflet } from './lib/leafletExporter.js';
+import { announcePublication } from './bot.js';
 
 process.on('unhandledRejection', (err) => {
   logger.warn({ err }, 'Caught unhandled promise rejection in Longform (likely a background OAuth token getter)');
@@ -200,6 +201,23 @@ app.post('/api/publish', async (c) => {
        repo: sessionDid,
        collection: 'pub.leaflet.document',
        record: leafletDoc
+     });
+     
+     // Retrieve user handle for logging and announcement
+     let authorHandle = sessionDid;
+     try {
+       const profile = await agent.getProfile({ actor: sessionDid });
+       if (profile.data.handle) authorHandle = profile.data.handle;
+     } catch (e) {
+       // fallback to did
+     }
+     
+     // Structured telemetry log
+     logger.info({ event: 'longform_publish', did: sessionDid, handle: authorHandle, uri: res.data.uri }, 'User successfully published a document');
+     
+     // Announce the publication via Bot asynchronously (don't await)
+     announcePublication(authorHandle, title, res.data.uri).catch(e => {
+       logger.error({ err: e }, 'Failed asynchronous bot publication announcement');
      });
      
      return c.json({ success: true, uri: res.data.uri, cid: res.data.cid });
