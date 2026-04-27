@@ -85,10 +85,10 @@ app.get('/posts', async (c) => {
     const oauthSession = await client.restore(sessionDid);
     const agent = new Agent(oauthSession);
     
-    // Fetch all pub.leaflet.document records for the user
+    // Fetch all site.standard.document records for the user
     const res = await agent.com.atproto.repo.listRecords({
       repo: sessionDid,
-      collection: 'pub.leaflet.document',
+      collection: 'site.standard.document',
       limit: 100
     });
     
@@ -111,7 +111,7 @@ app.get('/post/:did/:rkey', async (c) => {
   
   try {
     // Unauthenticated fetch to public AppView since records are public
-    // Wait, pub.leaflet.document isn't guaranteed to be indexed by public AppView yet.
+    // Wait, site.standard.document isn't guaranteed to be indexed by public AppView yet.
     // Let's use the authenticated agent if there's a session, otherwise we'd hit the specific PDS directly.
     // For MVP, we'll try to fetch it via the public AppView, and fallback if needed, 
     // but the safest approach since we don't have the PDS URL is to use the AppView's atproto endpoints!
@@ -129,7 +129,7 @@ app.get('/post/:did/:rkey', async (c) => {
     
     const record = await agentToUse.com.atproto.repo.getRecord({
       repo: did,
-      collection: 'pub.leaflet.document',
+      collection: 'site.standard.document',
       rkey: rkey
     });
     
@@ -195,11 +195,13 @@ app.post('/api/publish', async (c) => {
      const agent = new Agent(oauthSession);
      
      const title = body.title || 'Untitled Draft';
-     const leafletDoc = await serializeTiptapToLeaflet(body.document, title, sessionDid, agent);
+     const rkey = Math.random().toString(36).substring(2, 15);
+     const leafletDoc = await serializeTiptapToLeaflet(body.document, title, sessionDid, agent, rkey);
      
      const res = await agent.com.atproto.repo.createRecord({
        repo: sessionDid,
-       collection: 'pub.leaflet.document',
+       collection: 'site.standard.document',
+       rkey: rkey,
        record: leafletDoc
      });
      

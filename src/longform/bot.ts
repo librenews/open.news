@@ -1,4 +1,4 @@
-import { BskyAgent } from '@atproto/api';
+import { BskyAgent, RichText } from '@atproto/api';
 import { config } from '../lib/config.js';
 import { logger } from '../lib/logger.js';
 
@@ -45,42 +45,12 @@ export async function announcePublication(authorHandle: string, title: string, u
     // Attempt to resolve the author's handle to tag them if possible, otherwise use handle as text
     const text = `📰 New article published on Longform by @${authorHandle}!\n\n"${title}"\n\nRead it here: ${postUrl}`;
     
-    // Manually construct facets for mentions and links
-    const facets = [];
-    
-    // Find mention
-    const mentionStart = text.indexOf(`@${authorHandle}`);
-    if (mentionStart !== -1) {
-      facets.push({
-        index: {
-          byteStart: Buffer.byteLength(text.slice(0, mentionStart)),
-          byteEnd: Buffer.byteLength(text.slice(0, mentionStart + authorHandle.length + 1))
-        },
-        features: [{
-          $type: 'app.bsky.richtext.facet#mention',
-          did: authorDid
-        }]
-      });
-    }
-    
-    // Find link
-    const linkStart = text.indexOf(postUrl);
-    if (linkStart !== -1) {
-      facets.push({
-        index: {
-          byteStart: Buffer.byteLength(text.slice(0, linkStart)),
-          byteEnd: Buffer.byteLength(text.slice(0, linkStart + postUrl.length))
-        },
-        features: [{
-          $type: 'app.bsky.richtext.facet#link',
-          uri: postUrl
-        }]
-      });
-    }
+    const rt = new RichText({ text });
+    await rt.detectFacets(agent);
 
     await agent.post({
-      text,
-      facets
+      text: rt.text,
+      facets: rt.facets
     });
     
     logger.info({ authorDid, postUrl }, 'Longform bot announced publication');

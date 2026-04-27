@@ -1,18 +1,27 @@
 import { LeafletDocument, LeafletBlock } from '../../weblog/lexicons.js';
 import { BlobRef } from '@atproto/api';
+import crypto from 'crypto';
+import { config } from '../../lib/config.js';
 
 // Exported from Tiptap AST format into Leaflet Linear Document structure natively
-export async function serializeTiptapToLeaflet(tiptapJson: any, title: string, did: string, agent: any): Promise<LeafletDocument> {
+export async function serializeTiptapToLeaflet(tiptapJson: any, title: string, did: string, agent: any, rkey: string): Promise<LeafletDocument> {
   const leafletBlocks: LeafletBlock[] = [];
   const encoder = new TextEncoder();
 
   if (!tiptapJson || !tiptapJson.content) {
     return {
-      $type: 'pub.leaflet.document',
+      $type: 'site.standard.document',
       title,
+      description: '',
+      tags: [],
+      site: `https://${config.LONGFORM_DOMAIN || 'longform.social'}`,
+      path: `/${rkey}`,
       author: did,
       publishedAt: new Date().toISOString(),
-      pages: [{ $type: 'pub.leaflet.pages.linearDocument', blocks: [] }]
+      content: {
+        $type: 'pub.leaflet.content',
+        pages: [{ id: crypto.randomUUID(), $type: 'pub.leaflet.pages.linearDocument', blocks: [] }]
+      }
     };
   }
 
@@ -181,15 +190,23 @@ export async function serializeTiptapToLeaflet(tiptapJson: any, title: string, d
   }
 
   return {
-    $type: 'pub.leaflet.document',
+    $type: 'site.standard.document',
     title,
+    description: '',
+    tags: [],
+    site: `https://${config.LONGFORM_DOMAIN || 'longform.social'}`,
+    path: `/${rkey}`,
     author: did,
     publishedAt: new Date().toISOString(),
-    pages: [
-      {
-        $type: 'pub.leaflet.pages.linearDocument',
-        blocks: leafletBlocks
-      }
-    ]
+    content: {
+      $type: 'pub.leaflet.content',
+      pages: [
+        {
+          id: crypto.randomUUID(),
+          $type: 'pub.leaflet.pages.linearDocument',
+          blocks: leafletBlocks
+        }
+      ]
+    }
   };
 }

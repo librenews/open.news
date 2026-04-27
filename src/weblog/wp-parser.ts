@@ -4,8 +4,10 @@ import { getMediaMapping } from '../db/queries/weblog.js';
 import * as cheerio from 'cheerio';
 import { BlobRef } from '@atproto/api';
 import { CID } from 'multiformats/cid';
+import crypto from 'crypto';
+import { config } from '../lib/config.js';
 
-export async function parseGutenbergToLeaflet(content: string, title: string, did: string): Promise<LeafletDocument> {
+export async function parseGutenbergToLeaflet(content: string, title: string, did: string, rkey: string): Promise<LeafletDocument> {
   // Gracefully shim legacy HTML clients (MarsEdit) dynamically mapped into standard generic Gutenberg logic
   if (!content.includes('<!-- wp:')) {
     content = content.replace(/<img([^>]+)>/gi, (match, attrs) => {
@@ -294,17 +296,24 @@ export async function parseGutenbergToLeaflet(content: string, title: string, di
   }
 
   const record: any = {
-    $type: 'pub.leaflet.document',
+    $type: 'site.standard.document',
     title: title || 'Untitled',
     description: '',
+    tags: [],
+    site: `https://${config.LONGFORM_DOMAIN || 'longform.social'}`,
+    path: `/${rkey}`,
     author: did,
     publishedAt: new Date().toISOString(),
-    pages: [
-      {
-        $type: 'pub.leaflet.pages.linearDocument',
-        blocks: leafletBlocks
-      }
-    ]
+    content: {
+      $type: 'pub.leaflet.content',
+      pages: [
+        {
+          id: crypto.randomUUID(),
+          $type: 'pub.leaflet.pages.linearDocument',
+          blocks: leafletBlocks
+        }
+      ]
+    }
   };
 
   return record as LeafletDocument;

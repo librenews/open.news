@@ -5,6 +5,7 @@ import bodyParser from 'body-parser';
 import * as xmlrpc from 'xmlrpc';
 import { handleMetaWeblogCall } from './xmlrpc-handler.js';
 import wpRouter from './wp-handler.js';
+import archiver from 'archiver';
 
 const app = express();
 app.use(express.static(path.join(process.cwd(), 'public')));
@@ -18,6 +19,15 @@ app.use(bodyParser.json({ limit: '100mb' }));
 app.use(bodyParser.raw({ type: '*/*', limit: '100mb' }));
 // Mount the WP REST API endpoint namespace targeting Gutenberg editor support
 app.use('/wp-json', wpRouter);
+
+app.get('/download/plugin.zip', (req, res) => {
+  res.attachment('weblog-atproto-sync.zip');
+  const archive = archiver('zip', { zlib: { level: 9 } });
+  archive.on('error', (err) => res.status(500).send({ error: err.message }));
+  archive.pipe(res);
+  archive.directory(path.join(process.cwd(), 'src/weblog/plugin/weblog-atproto-sync'), 'weblog-atproto-sync');
+  archive.finalize();
+});
 
 // Route legacy proxy endpoints dynamically mapped for desktop WYSIWYG editors specifically requiring static .jpg file extensions flawlessly
 app.get('/m/:did/:cid/:filename', (req, res) => {

@@ -41,6 +41,7 @@
     "@tiptap/react": "^3.22.4",
     "@tiptap/starter-kit": "^3.22.4",
     "@wordpress/block-serialization-default-parser": "^5.44.0",
+    "archiver": "^7.0.1",
     "basic-auth": "^2.0.1",
     "body-parser": "^2.2.2",
     "cheerio": "^1.0.0",
@@ -58,6 +59,7 @@
     "zod": "^3.24.2"
   },
   "devDependencies": {
+    "@types/archiver": "^7.0.0",
     "@types/basic-auth": "^1.1.8",
     "@types/body-parser": "^1.19.6",
     "@types/express": "^5.0.6",

@@ -23,6 +23,9 @@ export function renderHome(serverUrl: string): string {
             <div class="hero-badge">Bridge Online</div>
             <h1>Weblog.social</h1>
             <p class="subtitle">Publish seamlessly from any WordPress-compatible editor straight onto Bluesky’s decentralized AT Protocol.</p>
+            <div style="margin-top: 2rem;">
+                <a href="/download/plugin.zip" style="display: inline-block; padding: 0.75rem 1.5rem; background: #1a1a1a; color: #fff; text-decoration: none; border-radius: 8px; font-weight: 600; font-family: var(--font-sans); box-shadow: 0 4px 12px rgba(0,0,0,0.1); transition: opacity 0.2s;" onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">Download WordPress Plugin (.zip)</a>
+            </div>
         </header>
 
         <div class="grid-layout">

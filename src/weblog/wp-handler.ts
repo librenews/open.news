@@ -249,12 +249,14 @@ router.post('/wp/v2/posts', requireAuth, express.json(), async (req, res) => {
     const did = agent.session!.did;
 
     // Use WP Block to Leaflet AT Parser 
-    const leafletDoc = await parseGutenbergToLeaflet(content, title, did);
+    const rkey = Math.random().toString(36).substring(2, 15);
+    const leafletDoc = await parseGutenbergToLeaflet(content, title, did, rkey);
 
     // Save Leaflet Protocol record natively
     const result = await agent.com.atproto.repo.createRecord({
       repo: did,
-      collection: 'pub.leaflet.document',
+      collection: 'site.standard.document',
+      rkey: rkey,
       record: leafletDoc as any,
     });
 

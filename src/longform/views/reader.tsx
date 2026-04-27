@@ -109,7 +109,9 @@ export function ReaderPage(doc: LeafletDocument, authorDid: string, profile: any
   const avatar = profile?.avatar || '';
 
   let blocks: LeafletBlock[] = [];
-  if (doc.pages && doc.pages.length > 0) {
+  if ((doc as any).content?.pages && (doc as any).content.pages.length > 0) {
+    blocks = ((doc as any).content.pages[0] as any).blocks || [];
+  } else if (doc.pages && doc.pages.length > 0) {
     blocks = (doc.pages[0] as any).blocks || [];
   }
 
