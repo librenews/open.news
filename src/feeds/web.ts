@@ -8,7 +8,7 @@ import { getFeedUserById, getUserColumns, getColumnById, insertColumn, deleteCol
 import type { FeedUser, FeedColumn } from './db.js';
 import { upsertUser } from '../db/queries/users.js';
 import { createTrack, updateTrackKeywords, updateTrack, getTrackByUuid, getMatchesByTrackId, updateTrackQueryEmbedding, getTracksByUserId, deleteTrack } from '../db/queries/tracks.js';
-import { upsertTrackQuery } from '../track/opensearch.js';
+import { upsertTrackQuery, searchSiteStandardArticles } from '../track/opensearch.js';
 import { embedText } from '../track/embedClient.js';
 
 type Variables = {
@@ -102,6 +102,9 @@ function renderLayout(user: FeedUser, content: string, title = 'feeds.social'): 
         <a href="/" class="text-lg font-bold text-slate-800 tracking-tight no-underline">feeds.social</a>
         <a href="/manage" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-600 text-xs font-semibold px-2.5 py-1 rounded-md transition-colors cursor-pointer no-underline">
           + Add Feed
+        </a>
+        <a href="/articles" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-600 text-xs font-semibold px-2.5 py-1 rounded-md transition-colors cursor-pointer no-underline">
+          Articles
         </a>
         <button @click="rssOpen = true" class="text-slate-400 hover:text-orange-500 transition-colors focus:outline-none cursor-pointer" title="RSS Config">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 11a9 9 0 019 9M4 4a16 16 0 0116 16M4 20h.01M4 20a1 1 0 110-2 1 1 0 010 2z"></path></svg>
@@ -645,6 +648,129 @@ app.post('/api/search/feeds', async (c) => {
   } catch (err) {
     logger.error({ err, q }, 'Failed to search feeds');
     return c.html(`<div class="text-center text-xs text-red-500 py-6">Search failed.</div>`);
+  }
+});
+
+// ─── Articles Search Endpoints ──────────────────────────────────────────────
+
+app.get('/articles', async (c) => {
+  const userId = c.get('userId');
+  const user = await getFeedUserById(userId);
+  if (!user) return c.redirect('/login');
+
+  const content = `
+    <div class="max-w-4xl mx-auto w-full p-6 pt-10 overflow-y-auto">
+      <div class="mb-4">
+        <a href="/" class="text-sm text-indigo-500 hover:text-indigo-700 transition-colors no-underline font-semibold">&larr; Back to Dashboard</a>
+      </div>
+      <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col pb-6">
+        <div class="px-6 py-6 border-b border-slate-100 bg-slate-50 flex flex-col items-center justify-center text-center">
+          <h2 class="text-2xl font-bold text-slate-800">Global Article Search</h2>
+          <p class="text-sm text-slate-500 mt-2 max-w-lg">Search the entire AT Protocol ecosystem for long-form content. Indexed securely via site.standard.document.</p>
+        </div>
+        <div class="p-6 border-b border-slate-100 bg-white sticky top-0 z-10">
+          <div class="relative">
+            <svg class="absolute left-4 top-3.5 h-5 w-5 text-slate-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            <input type="text" name="q" placeholder="Search across millions of words... (e.g., 'artificial intelligence')" 
+                   class="w-full bg-slate-50 border border-slate-200 text-slate-900 text-base rounded-xl focus:ring-indigo-500 focus:border-indigo-500 block py-3 pl-12 pr-4 outline-none transition-shadow hover:shadow-sm"
+                   hx-post="/api/articles/search" 
+                   hx-trigger="input changed delay:500ms, search" 
+                   hx-target="#article-results"
+                   hx-indicator="#search-indicator"
+                   autofocus>
+          </div>
+        </div>
+        <div id="search-indicator" class="htmx-indicator flex justify-center py-4">
+          <svg class="animate-spin h-6 w-6 text-indigo-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+        </div>
+        <div id="article-results" class="p-4 space-y-4">
+          <div class="text-center text-sm text-slate-400 py-12">Enter a search query to explore the ecosystem.</div>
+        </div>
+      </div>
+    </div>
+    <style>
+      .htmx-indicator { display: none; }
+      .htmx-request .htmx-indicator { display: flex; }
+      .htmx-request.htmx-indicator { display: flex; }
+    </style>
+  `;
+
+  return c.html(renderLayout(user, content, 'Search Articles - feeds.social'));
+});
+
+app.post('/api/articles/search', async (c) => {
+  const userId = c.get('userId');
+  const user = await getFeedUserById(userId);
+  if (!user) return c.text('Unauthorized', 401);
+
+  const body = await c.req.parseBody();
+  const q = typeof body.q === 'string' ? body.q.trim() : '';
+
+  if (!q) {
+    return c.html(`<div class="text-center text-sm text-slate-400 py-12">Enter a search query to explore the ecosystem.</div>`);
+  }
+
+  try {
+    const hits = await searchSiteStandardArticles(q);
+
+    if (!hits.hits || hits.hits.length === 0) {
+      return c.html(`<div class="text-center text-sm text-slate-500 py-12">No articles found matching "${escapeHtml(q)}".</div>`);
+    }
+
+    const resultsHtml = hits.hits.map((hit: any) => {
+      const source = hit._source;
+      const highlight = hit.highlight;
+      
+      // Attempt to find highlighted text content from any matched sub-field
+      let snippetHtml = '';
+      if (highlight) {
+        const textHighlights = Object.keys(highlight)
+          .filter(k => k.startsWith('text_content'))
+          .flatMap(k => highlight[k]);
+        
+        if (textHighlights.length > 0) {
+          snippetHtml = \`<div class="mt-3 text-sm text-slate-600 leading-relaxed border-l-2 border-indigo-200 pl-3 italic">"\${textHighlights[0]}"</div>\`;
+        }
+      }
+
+      // If we don't have a highlight, we just won't show a snippet
+      
+      const publishedDate = source.published_at ? new Date(source.published_at).toLocaleDateString() : 'Unknown Date';
+      const langBadge = source.language ? \`<span class="bg-slate-100 text-slate-500 text-[10px] uppercase font-bold px-1.5 py-0.5 rounded">\${escapeHtml(source.language)}</span>\` : '';
+      
+      // Decide destination URL
+      let destUrl = \`https://bsky.app/profile/\${source.did}\`;
+      if (source.site && source.path) {
+        destUrl = \`\${source.site}\${source.path}\`;
+      }
+
+      return \`
+        <a href="\${destUrl}" target="_blank" rel="noopener noreferrer" class="block bg-white border border-slate-200 hover:border-indigo-300 rounded-xl p-5 transition-all hover:shadow-md group no-underline">
+          <div class="flex justify-between items-start gap-4">
+            <div class="min-w-0 flex-1">
+              <h3 class="text-lg font-bold text-slate-900 group-hover:text-indigo-600 transition-colors break-words">\${escapeHtml(source.title || 'Untitled Article')}</h3>
+              <div class="flex items-center gap-2 mt-1.5 flex-wrap">
+                <span class="text-xs font-medium text-slate-500">\${publishedDate}</span>
+                <span class="text-slate-300">•</span>
+                <span class="text-xs text-slate-500 truncate font-mono bg-slate-50 px-1 rounded">\${escapeHtml(source.did)}</span>
+                \${langBadge}
+              </div>
+              \${snippetHtml}
+            </div>
+            <div class="shrink-0 text-slate-400 group-hover:text-indigo-500 transition-colors">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
+            </div>
+          </div>
+        </a>
+      \`;
+    }).join('');
+
+    return c.html(resultsHtml);
+  } catch (err) {
+    logger.error({ err, q }, 'Failed to search articles');
+    return c.html(`<div class="text-center text-sm text-red-500 py-6">An error occurred while searching.</div>`);
   }
 });
 

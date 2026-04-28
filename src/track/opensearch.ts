@@ -219,3 +219,34 @@ export async function percolatePost(
     })
     .filter((id: number | null): id is number => id !== null);
 }
+
+/**
+ * Searches the site.standard.document index using multi-language fields and highlighting.
+ */
+export async function searchSiteStandardArticles(query: string, limit: number = 20) {
+  const os = getOsClient();
+  const res = await os.search({
+    index: SITE_STANDARD_INDEX,
+    body: {
+      size: limit,
+      query: {
+        multi_match: {
+          query: query,
+          fields: ['title^2', 'title.*^2', 'text_content', 'text_content.*'],
+          type: 'most_fields',
+        },
+      },
+      highlight: {
+        fields: {
+          'text_content': {},
+          'text_content.*': {}
+        },
+        pre_tags: ['<em class="bg-indigo-100 text-indigo-900 font-bold px-0.5 rounded">'],
+        post_tags: ['</em>'],
+      },
+      _source: ['title', 'did', 'site', 'path', 'language', 'published_at', 'uri'],
+    },
+  });
+
+  return res.body.hits;
+}
