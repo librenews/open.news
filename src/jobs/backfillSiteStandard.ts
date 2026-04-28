@@ -11,8 +11,34 @@ export async function backfillSiteStandardJob(job: Job<BackfillSiteStandardData>
   const { did } = job.data;
   
   try {
-    // We can use the public AppView to fetch all records for a DID
-    const agent = new BskyAgent({ service: 'https://public.api.bsky.app' });
+    let pdsEndpoint = 'https://public.api.bsky.app'; // Fallback
+    
+    // 1. Resolve DID to PDS endpoint
+    if (did.startsWith('did:plc:')) {
+      const plcRes = await fetch(`https://plc.directory/${did}`);
+      if (plcRes.ok) {
+        const plcDoc = await plcRes.json();
+        const pdsService = plcDoc.service?.find((s: any) => s.id === '#atproto_pds' || s.type === 'AtprotoPersonalDataServer');
+        if (pdsService && pdsService.serviceEndpoint) {
+          pdsEndpoint = pdsService.serviceEndpoint;
+        }
+      }
+    } else if (did.startsWith('did:web:')) {
+      const domain = did.slice(8);
+      const webRes = await fetch(`https://${domain}/.well-known/did.json`);
+      if (webRes.ok) {
+        const webDoc = await webRes.json();
+        const pdsService = webDoc.service?.find((s: any) => s.id === '#atproto_pds' || s.type === 'AtprotoPersonalDataServer');
+        if (pdsService && pdsService.serviceEndpoint) {
+          pdsEndpoint = pdsService.serviceEndpoint;
+        }
+      }
+    }
+    
+    logger.info({ did, pdsEndpoint }, 'Resolved PDS endpoint for backfill');
+
+    // 2. Query the actual PDS instead of the central AppView
+    const agent = new BskyAgent({ service: pdsEndpoint });
     
     let cursor: string | undefined = undefined;
     let totalFound = 0;
