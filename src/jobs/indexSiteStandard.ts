@@ -58,9 +58,11 @@ export async function indexSiteStandardJob(job: Job<IndexSiteStandardData>) {
     const title = record.title || null;
     const description = record.description || null;
     const publishedAt = record.publishedAt ? new Date(record.publishedAt) : (record.createdAt ? new Date(record.createdAt) : new Date());
+    const site = record.site || null;
+    const path = record.path || null;
     
     // 1. Save core metadata to Postgres
-    await upsertSiteStandardArticle(postUri, did, title, description, publishedAt);
+    await upsertSiteStandardArticle(postUri, did, title, description, publishedAt, site, path, record);
     
     // 2. Extract full text
     const textContent = extractTextFromSiteStandard(record);
@@ -75,7 +77,9 @@ export async function indexSiteStandardJob(job: Job<IndexSiteStandardData>) {
         did: did,
         title: title,
         text_content: textContent,
-        published_at: publishedAt.toISOString()
+        published_at: publishedAt.toISOString(),
+        site: site,
+        path: path
       }
     });
     

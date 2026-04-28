@@ -104,6 +104,8 @@ export async function ensureSiteStandardIndex(): Promise<void> {
           title: { type: 'text' },
           text_content: { type: 'text' },
           published_at: { type: 'date' },
+          site: { type: 'keyword' },
+          path: { type: 'keyword' },
         },
       },
     },

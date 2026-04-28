@@ -21,17 +21,23 @@ export async function upsertSiteStandardArticle(
   authorDid: string,
   title: string | null,
   description: string | null,
-  publishedAt: Date | null
+  publishedAt: Date | null,
+  site: string | null,
+  path: string | null,
+  rawRecord: any
 ): Promise<void> {
   try {
     await db.query(
-      `INSERT INTO site_standard_articles (uri, author_did, title, description, published_at)
-       VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO site_standard_articles (uri, author_did, title, description, published_at, site, path, raw_record)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        ON CONFLICT (uri) DO UPDATE SET
          title = EXCLUDED.title,
          description = EXCLUDED.description,
-         published_at = EXCLUDED.published_at`,
-      [uri, authorDid, title, description, publishedAt]
+         published_at = EXCLUDED.published_at,
+         site = EXCLUDED.site,
+         path = EXCLUDED.path,
+         raw_record = EXCLUDED.raw_record`,
+      [uri, authorDid, title, description, publishedAt, site, path, rawRecord]
     );
   } catch (err) {
     logger.error({ err, uri }, 'Failed to upsert site_standard_article');
