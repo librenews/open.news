@@ -92,25 +92,51 @@ export async function dropArticleIndex(): Promise<void> {
 export async function ensureSiteStandardIndex(): Promise<void> {
   const os = getOsClient();
   const exists = await os.indices.exists({ index: SITE_STANDARD_INDEX });
-  if (exists.body) return;
-
-  await os.indices.create({
-    index: SITE_STANDARD_INDEX,
-    body: {
-      mappings: {
-        properties: {
-          uri: { type: 'keyword' },
-          did: { type: 'keyword' },
-          title: { type: 'text' },
-          text_content: { type: 'text' },
-          published_at: { type: 'date' },
-          site: { type: 'keyword' },
-          path: { type: 'keyword' },
-        },
+  
+  const mapping = {
+    properties: {
+      uri: { type: 'keyword' },
+      did: { type: 'keyword' },
+      title: { 
+        type: 'text',
+        fields: {
+          en: { type: 'text', analyzer: 'english' },
+          es: { type: 'text', analyzer: 'spanish' },
+          fr: { type: 'text', analyzer: 'french' },
+          de: { type: 'text', analyzer: 'german' },
+          cjk: { type: 'text', analyzer: 'cjk' }
+        }
       },
+      text_content: { 
+        type: 'text',
+        fields: {
+          en: { type: 'text', analyzer: 'english' },
+          es: { type: 'text', analyzer: 'spanish' },
+          fr: { type: 'text', analyzer: 'french' },
+          de: { type: 'text', analyzer: 'german' },
+          cjk: { type: 'text', analyzer: 'cjk' }
+        }
+      },
+      published_at: { type: 'date' },
+      site: { type: 'keyword' },
+      path: { type: 'keyword' },
+      language: { type: 'keyword' },
     },
-  });
-  logger.info('OpenSearch site_standard_docs index created');
+  };
+
+  if (!exists.body) {
+    await os.indices.create({
+      index: SITE_STANDARD_INDEX,
+      body: { mappings: mapping },
+    });
+  } else {
+    // Safely add new multi-fields to existing index
+    await os.indices.putMapping({
+      index: SITE_STANDARD_INDEX,
+      body: mapping,
+    });
+  }
+  logger.info('OpenSearch site_standard_docs index ensured');
 }
 
 /**

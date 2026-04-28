@@ -1,4 +1,5 @@
 import { Job } from 'pg-boss';
+import { franc } from 'franc';
 import { logger } from '../lib/logger.js';
 import { getOsClient, SITE_STANDARD_INDEX } from '../track/opensearch.js';
 import { upsertSiteStandardArticle } from '../db/queries/siteStandard.js';
@@ -61,11 +62,19 @@ export async function indexSiteStandardJob(job: Job<IndexSiteStandardData>) {
     const site = record.site || null;
     const path = record.path || null;
     
-    // 1. Save core metadata to Postgres
-    await upsertSiteStandardArticle(postUri, did, title, description, publishedAt, site, path, record);
-    
     // 2. Extract full text
     const textContent = extractTextFromSiteStandard(record);
+
+    // 3. Detect language
+    let language = 'und';
+    if (record.langs && Array.isArray(record.langs) && record.langs.length > 0) {
+      language = record.langs[0];
+    } else if (textContent) {
+      language = franc(textContent, { minLength: 5 });
+    }
+    
+    // 4. Save core metadata to Postgres
+    await upsertSiteStandardArticle(postUri, did, title, description, publishedAt, site, path, record, language);
     
     // 3. Index to OpenSearch
     const os = getOsClient();
@@ -79,7 +88,8 @@ export async function indexSiteStandardJob(job: Job<IndexSiteStandardData>) {
         text_content: textContent,
         published_at: publishedAt.toISOString(),
         site: site,
-        path: path
+        path: path,
+        language: language
       }
     });
     

@@ -46,6 +46,7 @@
     "body-parser": "^2.2.2",
     "cheerio": "^1.0.0",
     "express": "^5.2.1",
+    "franc": "^6.2.0",
     "hono": "^4.7.4",
     "ioredis": "^5.10.1",
     "jsdom": "^26.0.0",
