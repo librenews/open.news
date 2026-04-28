@@ -731,40 +731,40 @@ app.post('/api/articles/search', async (c) => {
           .flatMap(k => highlight[k]);
         
         if (textHighlights.length > 0) {
-          snippetHtml = \`<div class="mt-3 text-sm text-slate-600 leading-relaxed border-l-2 border-indigo-200 pl-3 italic">"\${textHighlights[0]}"</div>\`;
+          snippetHtml = `<div class="mt-3 text-sm text-slate-600 leading-relaxed border-l-2 border-indigo-200 pl-3 italic">"${textHighlights[0]}"</div>`;
         }
       }
 
       // If we don't have a highlight, we just won't show a snippet
       
       const publishedDate = source.published_at ? new Date(source.published_at).toLocaleDateString() : 'Unknown Date';
-      const langBadge = source.language ? \`<span class="bg-slate-100 text-slate-500 text-[10px] uppercase font-bold px-1.5 py-0.5 rounded">\${escapeHtml(source.language)}</span>\` : '';
+      const langBadge = source.language ? `<span class="bg-slate-100 text-slate-500 text-[10px] uppercase font-bold px-1.5 py-0.5 rounded">${escapeHtml(source.language)}</span>` : '';
       
       // Decide destination URL
-      let destUrl = \`https://bsky.app/profile/\${source.did}\`;
+      let destUrl = `https://bsky.app/profile/${source.did}`;
       if (source.site && source.path) {
-        destUrl = \`\${source.site}\${source.path}\`;
+        destUrl = `${source.site}${source.path}`;
       }
 
-      return \`
-        <a href="\${destUrl}" target="_blank" rel="noopener noreferrer" class="block bg-white border border-slate-200 hover:border-indigo-300 rounded-xl p-5 transition-all hover:shadow-md group no-underline">
+      return `
+        <a href="${destUrl}" target="_blank" rel="noopener noreferrer" class="block bg-white border border-slate-200 hover:border-indigo-300 rounded-xl p-5 transition-all hover:shadow-md group no-underline">
           <div class="flex justify-between items-start gap-4">
             <div class="min-w-0 flex-1">
-              <h3 class="text-lg font-bold text-slate-900 group-hover:text-indigo-600 transition-colors break-words">\${escapeHtml(source.title || 'Untitled Article')}</h3>
+              <h3 class="text-lg font-bold text-slate-900 group-hover:text-indigo-600 transition-colors break-words">${escapeHtml(source.title || 'Untitled Article')}</h3>
               <div class="flex items-center gap-2 mt-1.5 flex-wrap">
-                <span class="text-xs font-medium text-slate-500">\${publishedDate}</span>
+                <span class="text-xs font-medium text-slate-500">${publishedDate}</span>
                 <span class="text-slate-300">•</span>
-                <span class="text-xs text-slate-500 truncate font-mono bg-slate-50 px-1 rounded">\${escapeHtml(source.did)}</span>
-                \${langBadge}
+                <span class="text-xs text-slate-500 truncate font-mono bg-slate-50 px-1 rounded">${escapeHtml(source.did)}</span>
+                ${langBadge}
               </div>
-              \${snippetHtml}
+              ${snippetHtml}
             </div>
             <div class="shrink-0 text-slate-400 group-hover:text-indigo-500 transition-colors">
               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
             </div>
           </div>
         </a>
-      \`;
+      `;
     }).join('');
 
     return c.html(resultsHtml);
