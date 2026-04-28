@@ -57,7 +57,7 @@ export async function indexSiteStandardJob(job: Job<IndexSiteStandardData>) {
   try {
     const title = record.title || null;
     const description = record.description || null;
-    const publishedAt = record.createdAt ? new Date(record.createdAt) : new Date();
+    const publishedAt = record.publishedAt ? new Date(record.publishedAt) : (record.createdAt ? new Date(record.createdAt) : new Date());
     
     // 1. Save core metadata to Postgres
     await upsertSiteStandardArticle(postUri, did, title, description, publishedAt);
