@@ -6,10 +6,13 @@ import { syncFollowsJob } from '../jobs/syncFollows.js';
 import { botReplyJob } from '../jobs/botReply.js';
 import { botPostJob } from '../jobs/botPost.js';
 import { deliverWebhookJob } from '../jobs/deliverWebhook.js';
-import { ensureArticleIndex } from '../track/opensearch.js';
+import { ensureArticleIndex, ensureSiteStandardIndex } from '../track/opensearch.js';
+import { indexSiteStandardJob } from '../jobs/indexSiteStandard.js';
+import { backfillSiteStandardJob } from '../jobs/backfillSiteStandard.js';
 
 async function start() {
   await ensureArticleIndex().catch(err => logger.error({ err }, 'Failed to ensure OpenSearch article index'));
+  await ensureSiteStandardIndex().catch(err => logger.error({ err }, 'Failed to ensure OpenSearch site_standard_docs index'));
 
   const boss = new PgBoss({
     connectionString: config.DATABASE_URL,
@@ -26,7 +29,7 @@ async function start() {
 
   // pg-boss v10 requires explicit queue creation before send/work.
   // Must be sequential — parallel ALTER TABLE calls deadlock on the FK constraint.
-  const queues = ['fetchArticle', 'syncFollows', 'botReply', 'botPost', 'followSignup', 'deliverWebhook'];
+  const queues = ['fetchArticle', 'syncFollows', 'botReply', 'botPost', 'followSignup', 'deliverWebhook', 'indexSiteStandard', 'backfillSiteStandard'];
   for (const q of queues) await boss.createQueue(q);
   logger.info({ queues }, 'Queues created');
 
@@ -57,6 +60,18 @@ async function start() {
   await boss.work('deliverWebhook', { batchSize: 20 }, async (jobs) => {
     for (const job of jobs) {
       await deliverWebhookJob(job.data as Parameters<typeof deliverWebhookJob>[0]);
+    }
+  });
+
+  await boss.work('indexSiteStandard', { batchSize: 5 }, async (jobs) => {
+    for (const job of jobs) {
+      await indexSiteStandardJob(job as Parameters<typeof indexSiteStandardJob>[0]);
+    }
+  });
+
+  await boss.work('backfillSiteStandard', { batchSize: 2 }, async (jobs) => {
+    for (const job of jobs) {
+      await backfillSiteStandardJob(job as Parameters<typeof backfillSiteStandardJob>[0]);
     }
   });
 

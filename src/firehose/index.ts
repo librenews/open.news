@@ -1,5 +1,6 @@
 import WebSocket from 'ws';
 import { db } from '../db/client.js';
+import { isSiteStandardDidKnown, markSiteStandardDidKnown } from '../db/queries/siteStandard.js';
 import { getAllSourceDids } from '../db/queries/sources.js';
 import { deleteTrackMatchByPostUri } from '../db/queries/tracks.js';
 import { normalizeArticleUrl, extractUrlsFromPost } from '../lib/urls.js';
@@ -183,6 +184,31 @@ function handleEvent(event: JetstreamEvent): void {
     if (subject === BOT_DID) {
       enqueueJob('followSignup', { followerDid: did });
     }
+    return;
+  }
+
+  // ── site.standard.document ingestion ──────────────────────────────────────────
+  if (commit.collection === 'site.standard.document' && commit.record) {
+    // 1. Enqueue indexing job for this specific post
+    enqueueJob('indexSiteStandard', {
+      postUri,
+      did,
+      record: commit.record
+    });
+
+    // 2. Check if we've seen this author before. If not, trigger a full backfill.
+    // (We use a fire-and-forget catch to avoid blocking the firehose loop)
+    isSiteStandardDidKnown(did).then(isKnown => {
+      if (!isKnown) {
+        markSiteStandardDidKnown(did).then(() => {
+          logger.info({ did }, 'Discovered new site.standard.document author, triggering backfill');
+          enqueueJob('backfillSiteStandard', { did });
+        });
+      }
+    }).catch(err => {
+      logger.error({ err, did }, 'Failed to check known site standard DIDs');
+    });
+
     return;
   }
 

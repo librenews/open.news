@@ -39,6 +39,7 @@ export async function ensureIndex(): Promise<void> {
 }
 
 export const ARTICLE_INDEX = 'article_chunks';
+export const SITE_STANDARD_INDEX = 'site_standard_docs';
 
 /** Ensure the articles index exists with knn vector mapping. */
 export async function ensureArticleIndex(): Promise<void> {
@@ -85,6 +86,29 @@ export async function dropArticleIndex(): Promise<void> {
   } catch (err) {
     logger.warn({ err }, 'Failed to drop article index (it may not exist)');
   }
+}
+
+/** Ensure the site.standard.document index exists. */
+export async function ensureSiteStandardIndex(): Promise<void> {
+  const os = getOsClient();
+  const exists = await os.indices.exists({ index: SITE_STANDARD_INDEX });
+  if (exists.body) return;
+
+  await os.indices.create({
+    index: SITE_STANDARD_INDEX,
+    body: {
+      mappings: {
+        properties: {
+          uri: { type: 'keyword' },
+          did: { type: 'keyword' },
+          title: { type: 'text' },
+          text_content: { type: 'text' },
+          published_at: { type: 'date' },
+        },
+      },
+    },
+  });
+  logger.info('OpenSearch site_standard_docs index created');
 }
 
 /**
