@@ -11,11 +11,17 @@ interface IndexSiteStandardData {
 
 function extractTextFromBlocks(blocks: any[]): string {
   let text = '';
-  for (const block of blocks) {
-    if (block.$type === 'pub.leaflet.blocks.text') {
+  for (const wrapper of blocks) {
+    // Leaflet blocks are wrapped in a union type, usually inside the `block` property
+    const block = wrapper.block || wrapper;
+    
+    if (block.$type === 'pub.leaflet.blocks.text' || 
+        block.$type === 'pub.leaflet.blocks.header' || 
+        block.$type === 'pub.leaflet.blocks.blockquote' || 
+        block.$type === 'pub.leaflet.blocks.code') {
       text += (block.plaintext || '') + '\n\n';
-    } else if (block.$type === 'pub.leaflet.blocks.website') {
-      text += (block.url || '') + '\n\n';
+    } else if (block.$type === 'pub.leaflet.blocks.website' || block.$type === 'pub.leaflet.blocks.iframe') {
+      text += (block.url || block.src || '') + '\n\n';
     } else if (block.$type === 'pub.leaflet.blocks.image') {
       text += (block.alt || '') + '\n\n';
     }
