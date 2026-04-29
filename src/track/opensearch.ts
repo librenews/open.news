@@ -244,7 +244,7 @@ export async function searchSiteStandardArticles(query: string, limit: number = 
         pre_tags: ['<em class="bg-indigo-100 text-indigo-900 font-bold px-0.5 rounded">'],
         post_tags: ['</em>'],
       },
-      _source: ['title', 'did', 'site', 'path', 'language', 'published_at', 'uri'],
+      _source: ['title', 'did', 'site', 'path', 'language', 'published_at', 'uri', 'bsky_post_uri'],
     },
   });
 

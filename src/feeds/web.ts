@@ -747,10 +747,24 @@ app.post('/api/articles/search', async (c) => {
         destUrl = `${source.site}${source.path}`;
       }
 
+      let bskyLinkHtml = '';
+      if (source.bsky_post_uri) {
+        const parts = source.bsky_post_uri.replace('at://', '').split('/');
+        if (parts.length >= 3) {
+          const bskyUrl = `https://bsky.app/profile/${parts[0]}/post/${parts[2]}`;
+          bskyLinkHtml = `
+            <a href="${bskyUrl}" target="_blank" class="text-xs font-semibold text-blue-500 hover:text-blue-700 bg-blue-50 px-2 py-1 rounded-md transition-colors inline-flex items-center gap-1 mt-3">
+              <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M12 10.8c-1.087-2.114-4.046-6.053-6.798-7.995C2.566.944 1.561 1.266.902 1.565.139 1.908 0 3.08 0 3.768c0 .69.378 5.65.624 6.479.815 2.736 3.713 3.66 6.383 3.364.136-.02.275-.039.415-.056-.415.656-.658 1.487-.658 2.443 0 3.997 3.394 6 5.236 6 1.842 0 5.236-2.003 5.236-6 0-.956-.243-1.787-.658-2.443.14.017.279.036.415.056 2.67.297 5.568-.628 6.383-3.364.246-.828.624-5.789.624-6.479 0-.69-.139-1.861-.902-2.206-.659-.298-1.664-.62-4.3 1.24C16.046 4.748 13.087 8.687 12 10.8z"/></svg>
+              View Conversation
+            </a>
+          `;
+        }
+      }
+
       const elementId = 'raw-' + Math.random().toString(36).substring(7);
 
       return `
-        <div class="block bg-white border border-slate-200 hover:border-indigo-300 rounded-xl p-5 transition-all hover:shadow-md group">
+        <div class="block bg-white border border-slate-200 hover:border-indigo-300 rounded-xl p-5 transition-all hover:shadow-md group relative">
           <a href="${destUrl}" target="_blank" rel="noopener noreferrer" class="no-underline block">
             <div class="flex justify-between items-start gap-4">
               <div class="min-w-0 flex-1">
@@ -768,6 +782,8 @@ app.post('/api/articles/search', async (c) => {
               </div>
             </div>
           </a>
+          
+          ${bskyLinkHtml}
           
           <div class="mt-4 pt-4 border-t border-slate-100 flex justify-end">
             <button class="text-xs font-mono text-slate-500 hover:text-indigo-600 transition-colors flex items-center gap-1.5"

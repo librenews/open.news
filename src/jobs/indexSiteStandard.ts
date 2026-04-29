@@ -104,7 +104,8 @@ export async function indexSiteStandardJob(job: Job<IndexSiteStandardData>) {
         published_at: publishedAt.toISOString(),
         site: site,
         path: path,
-        language: language
+        language: language,
+        bsky_post_uri: record.bskyPostRef?.uri || null
       }
     });
     
