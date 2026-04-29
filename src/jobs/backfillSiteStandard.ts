@@ -11,7 +11,7 @@ export async function backfillSiteStandardJob(job: Job<BackfillSiteStandardData>
   const { did } = job.data;
   
   try {
-    let pdsEndpoint = 'https://public.api.bsky.app'; // Fallback
+    let pdsEndpoint = ''; // We must resolve the actual PDS. AppView doesn't index custom lexicons reliably.
     
     // 1. Resolve DID to PDS endpoint
     if (did.startsWith('did:plc:')) {
@@ -22,6 +22,10 @@ export async function backfillSiteStandardJob(job: Job<BackfillSiteStandardData>
         if (pdsService && pdsService.serviceEndpoint) {
           pdsEndpoint = pdsService.serviceEndpoint;
         }
+      } else if (plcRes.status === 429) {
+        throw new Error('Rate limited by plc.directory');
+      } else {
+        throw new Error(`Failed to resolve DID on plc.directory: ${plcRes.status}`);
       }
     } else if (did.startsWith('did:web:')) {
       const domain = did.slice(8);
@@ -33,6 +37,10 @@ export async function backfillSiteStandardJob(job: Job<BackfillSiteStandardData>
           pdsEndpoint = pdsService.serviceEndpoint;
         }
       }
+    }
+    
+    if (!pdsEndpoint || pdsEndpoint === 'https://public.api.bsky.app') {
+      throw new Error(`Could not resolve a valid PDS endpoint for DID: ${did}`);
     }
     
     logger.info({ did, pdsEndpoint }, 'Resolved PDS endpoint for backfill');
@@ -53,7 +61,7 @@ export async function backfillSiteStandardJob(job: Job<BackfillSiteStandardData>
       
       for (const record of res.data.records) {
         // Enqueue an index job for each document
-        enqueueJob('indexSiteStandard', {
+        await enqueueJob('indexSiteStandard', {
           postUri: record.uri,
           did: did,
           record: record.value
