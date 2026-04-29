@@ -9,7 +9,7 @@ import type { FeedUser, FeedColumn } from './db.js';
 import { upsertUser } from '../db/queries/users.js';
 import { createTrack, updateTrackKeywords, updateTrack, getTrackByUuid, getMatchesByTrackId, updateTrackQueryEmbedding, getTracksByUserId, deleteTrack } from '../db/queries/tracks.js';
 import { upsertTrackQuery, searchSiteStandardArticles } from '../track/opensearch.js';
-import { db } from '../db/index.js';
+import { db } from '../db/client.js';
 import { embedText } from '../track/embedClient.js';
 
 type Variables = {
