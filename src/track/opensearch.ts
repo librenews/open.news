@@ -223,18 +223,35 @@ export async function percolatePost(
 /**
  * Searches the site.standard.document index using multi-language fields and highlighting.
  */
-export async function searchSiteStandardArticles(query: string, limit: number = 20) {
+export async function searchSiteStandardArticles(query: string, len: 'all' | 'long' = 'all', limit: number = 20) {
   const os = getOsClient();
+  
+  const must: any[] = [
+    {
+      multi_match: {
+        query: query,
+        fields: ['title^2', 'title.*^2', 'text_content', 'text_content.*'],
+        type: 'most_fields',
+      }
+    }
+  ];
+
+  if (len === 'long') {
+    must.push({
+      range: {
+        word_count: { gte: 100 }
+      }
+    });
+  }
+
   const res = await os.search({
     index: SITE_STANDARD_INDEX,
     body: {
       size: limit,
       query: {
-        multi_match: {
-          query: query,
-          fields: ['title^2', 'title.*^2', 'text_content', 'text_content.*'],
-          type: 'most_fields',
-        },
+        bool: {
+          must: must
+        }
       },
       highlight: {
         fields: {
