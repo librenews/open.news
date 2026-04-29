@@ -9,6 +9,7 @@ import type { FeedUser, FeedColumn } from './db.js';
 import { upsertUser } from '../db/queries/users.js';
 import { createTrack, updateTrackKeywords, updateTrack, getTrackByUuid, getMatchesByTrackId, updateTrackQueryEmbedding, getTracksByUserId, deleteTrack } from '../db/queries/tracks.js';
 import { upsertTrackQuery, searchSiteStandardArticles } from '../track/opensearch.js';
+import { db } from '../db/index.js';
 import { embedText } from '../track/embedClient.js';
 
 type Variables = {
@@ -746,24 +747,39 @@ app.post('/api/articles/search', async (c) => {
         destUrl = `${source.site}${source.path}`;
       }
 
+      const elementId = 'raw-' + Math.random().toString(36).substring(7);
+
       return `
-        <a href="${destUrl}" target="_blank" rel="noopener noreferrer" class="block bg-white border border-slate-200 hover:border-indigo-300 rounded-xl p-5 transition-all hover:shadow-md group no-underline">
-          <div class="flex justify-between items-start gap-4">
-            <div class="min-w-0 flex-1">
-              <h3 class="text-lg font-bold text-slate-900 group-hover:text-indigo-600 transition-colors break-words">${escapeHtml(source.title || 'Untitled Article')}</h3>
-              <div class="flex items-center gap-2 mt-1.5 flex-wrap">
-                <span class="text-xs font-medium text-slate-500">${publishedDate}</span>
-                <span class="text-slate-300">•</span>
-                <span class="text-xs text-slate-500 truncate font-mono bg-slate-50 px-1 rounded">${escapeHtml(source.did)}</span>
-                ${langBadge}
+        <div class="block bg-white border border-slate-200 hover:border-indigo-300 rounded-xl p-5 transition-all hover:shadow-md group">
+          <a href="${destUrl}" target="_blank" rel="noopener noreferrer" class="no-underline block">
+            <div class="flex justify-between items-start gap-4">
+              <div class="min-w-0 flex-1">
+                <h3 class="text-lg font-bold text-slate-900 group-hover:text-indigo-600 transition-colors break-words">${escapeHtml(source.title || 'Untitled Article')}</h3>
+                <div class="flex items-center gap-2 mt-1.5 flex-wrap">
+                  <span class="text-xs font-medium text-slate-500">${publishedDate}</span>
+                  <span class="text-slate-300">•</span>
+                  <span class="text-xs text-slate-500 truncate font-mono bg-slate-50 px-1 rounded">${escapeHtml(source.did)}</span>
+                  ${langBadge}
+                </div>
+                ${snippetHtml}
               </div>
-              ${snippetHtml}
+              <div class="shrink-0 text-slate-400 group-hover:text-indigo-500 transition-colors">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
+              </div>
             </div>
-            <div class="shrink-0 text-slate-400 group-hover:text-indigo-500 transition-colors">
-              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
-            </div>
+          </a>
+          
+          <div class="mt-4 pt-4 border-t border-slate-100 flex justify-end">
+            <button class="text-xs font-mono text-slate-500 hover:text-indigo-600 transition-colors flex items-center gap-1.5"
+                    hx-get="/api/articles/raw?uri=${encodeURIComponent(source.uri)}"
+                    hx-target="#${elementId}"
+                    hx-swap="innerHTML">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path></svg>
+              View Source JSON
+            </button>
           </div>
-        </a>
+          <div id="${elementId}" class="mt-2"></div>
+        </div>
       `;
     }).join('');
 
@@ -771,6 +787,35 @@ app.post('/api/articles/search', async (c) => {
   } catch (err) {
     logger.error({ err, q }, 'Failed to search articles');
     return c.html(`<div class="text-center text-sm text-red-500 py-6">An error occurred while searching.</div>`);
+  }
+});
+
+app.get('/api/articles/raw', async (c) => {
+  const userId = c.get('userId');
+  const user = await getFeedUserById(userId);
+  if (!user) return c.text('Unauthorized', 401);
+
+  const uri = c.req.query('uri');
+  if (!uri) return c.html(`<div class="text-xs text-red-500">Missing URI</div>`);
+
+  try {
+    const res = await db.query('SELECT raw_record FROM site_standard_articles WHERE uri = $1', [uri]);
+    if (res.rowCount === 0) {
+      return c.html(`<div class="text-xs text-red-500">Record not found in local database.</div>`);
+    }
+
+    const rawJson = JSON.stringify(res.rows[0].raw_record, null, 2);
+    return c.html(`
+      <div class="relative group mt-3">
+        <pre class="text-[10px] font-mono leading-tight bg-slate-900 text-green-400 p-4 rounded-xl overflow-x-auto whitespace-pre-wrap max-h-96 overflow-y-auto">${escapeHtml(rawJson)}</pre>
+        <button onclick="this.parentElement.innerHTML=''" class="absolute top-2 right-2 p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+        </button>
+      </div>
+    `);
+  } catch (err) {
+    logger.error({ err, uri }, 'Failed to fetch raw article record');
+    return c.html(`<div class="text-xs text-red-500">Failed to fetch record data.</div>`);
   }
 });
 
