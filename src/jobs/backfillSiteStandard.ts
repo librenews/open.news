@@ -2,6 +2,7 @@ import { Job } from 'pg-boss';
 import { BskyAgent } from '@atproto/api';
 import { logger } from '../lib/logger.js';
 import { enqueueJob } from '../web/jobEnqueue.js';
+import { resolvePds } from '../lib/pds.js';
 
 interface BackfillSiteStandardData {
   did: string;
@@ -11,37 +12,7 @@ export async function backfillSiteStandardJob(job: Job<BackfillSiteStandardData>
   const { did } = job.data;
   
   try {
-    let pdsEndpoint = ''; // We must resolve the actual PDS. AppView doesn't index custom lexicons reliably.
-    
-    // 1. Resolve DID to PDS endpoint
-    if (did.startsWith('did:plc:')) {
-      const plcRes = await fetch(`https://plc.directory/${did}`);
-      if (plcRes.ok) {
-        const plcDoc = await plcRes.json();
-        const pdsService = plcDoc.service?.find((s: any) => s.id === '#atproto_pds' || s.type === 'AtprotoPersonalDataServer');
-        if (pdsService && pdsService.serviceEndpoint) {
-          pdsEndpoint = pdsService.serviceEndpoint;
-        }
-      } else if (plcRes.status === 429) {
-        throw new Error('Rate limited by plc.directory');
-      } else {
-        throw new Error(`Failed to resolve DID on plc.directory: ${plcRes.status}`);
-      }
-    } else if (did.startsWith('did:web:')) {
-      const domain = did.slice(8);
-      const webRes = await fetch(`https://${domain}/.well-known/did.json`);
-      if (webRes.ok) {
-        const webDoc = await webRes.json();
-        const pdsService = webDoc.service?.find((s: any) => s.id === '#atproto_pds' || s.type === 'AtprotoPersonalDataServer');
-        if (pdsService && pdsService.serviceEndpoint) {
-          pdsEndpoint = pdsService.serviceEndpoint;
-        }
-      }
-    }
-    
-    if (!pdsEndpoint || pdsEndpoint === 'https://public.api.bsky.app') {
-      throw new Error(`Could not resolve a valid PDS endpoint for DID: ${did}`);
-    }
+    const pdsEndpoint = await resolvePds(did);
     
     logger.info({ did, pdsEndpoint }, 'Resolved PDS endpoint for backfill');
 

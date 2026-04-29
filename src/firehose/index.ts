@@ -6,6 +6,7 @@ import { deleteTrackMatchByPostUri } from '../db/queries/tracks.js';
 import { normalizeArticleUrl, extractUrlsFromPost } from '../lib/urls.js';
 import { config } from '../lib/config.js';
 import { logger } from '../lib/logger.js';
+import { db } from '../db/client.js';
 import { enqueueJob } from '../web/jobEnqueue.js';
 import { xaddPost } from '../lib/redis.js';
 import { logModeration } from '../db/queries/moderation.js';
@@ -188,8 +189,20 @@ function handleEvent(event: JetstreamEvent): void {
   }
 
   // ── Long-form Document Ingestion (Leaflet, WhiteWind, etc) ────────────────
-  const longformCollections = ['site.standard.document', 'com.whtwnd.blog.entry', 'pub.leaflet.document'];
+  const longformCollections = ['site.standard.document', 'com.whtwnd.blog.entry', 'pub.leaflet.document', 'site.standard.publication'];
   if (longformCollections.includes(commit.collection) && commit.record) {
+    // For publication records, we just want to cache them if we don't have them
+    if (commit.collection === 'site.standard.publication') {
+      if (commit.record.url && typeof commit.record.url === 'string') {
+        const pubUri = `at://${did}/site.standard.publication/${rkey}`;
+        db.query(
+          'INSERT INTO site_publications (uri, url, raw_record) VALUES ($1, $2, $3) ON CONFLICT (uri) DO NOTHING',
+          [pubUri, commit.record.url, commit.record]
+        ).catch(err => logger.error({ err, uri: pubUri }, 'Failed to cache site.standard.publication'));
+      }
+      return;
+    }
+
     // 1. Enqueue indexing job for this specific post
     enqueueJob('indexSiteStandard', {
       postUri,

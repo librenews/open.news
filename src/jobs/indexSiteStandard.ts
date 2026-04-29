@@ -2,6 +2,9 @@ import { Job } from 'pg-boss';
 import { franc } from 'franc';
 import { logger } from '../lib/logger.js';
 import { getOsClient, SITE_STANDARD_INDEX } from '../track/opensearch.js';
+import { db } from '../db/client.js';
+import { BskyAgent } from '@atproto/api';
+import { resolvePds } from '../lib/pds.js';
 import { upsertSiteStandardArticle } from '../db/queries/siteStandard.js';
 
 interface IndexSiteStandardData {
@@ -74,8 +77,38 @@ export async function indexSiteStandardJob(job: Job<IndexSiteStandardData>) {
     const title = record.title || null;
     const description = record.description || null;
     const publishedAt = record.publishedAt ? new Date(record.publishedAt) : (record.createdAt ? new Date(record.createdAt) : new Date());
-    const site = record.site || null;
+    let site = record.site || null;
     const path = record.path || null;
+    
+    // Resolve AT URI site to HTTP URL via publication cache/fetch
+    if (site && site.startsWith('at://') && site.includes('site.standard.publication')) {
+      try {
+        const cacheRes = await db.query('SELECT url FROM site_publications WHERE uri = $1', [site]);
+        if (cacheRes.rowCount !== null && cacheRes.rowCount > 0) {
+          site = cacheRes.rows[0].url;
+        } else {
+          // Fallback to fetch from PDS
+          const [siteDid, , rkey] = site.replace('at://', '').split('/');
+          const pdsEndpoint = await resolvePds(siteDid);
+          const agent = new BskyAgent({ service: pdsEndpoint });
+          const pdsRes = await agent.com.atproto.repo.getRecord({
+            repo: siteDid,
+            collection: 'site.standard.publication',
+            rkey
+          });
+          const pubUrl = pdsRes.data.value.url;
+          if (pubUrl && typeof pubUrl === 'string') {
+            site = pubUrl;
+            await db.query(
+              'INSERT INTO site_publications (uri, url, raw_record) VALUES ($1, $2, $3) ON CONFLICT (uri) DO NOTHING',
+              [record.site, pubUrl, pdsRes.data.value]
+            );
+          }
+        }
+      } catch (err) {
+        logger.warn({ err, site }, 'Failed to resolve site.standard.publication for AT URI');
+      }
+    }
     
     // 2. Extract full text
     const textContent = extractTextFromSiteStandard(record);

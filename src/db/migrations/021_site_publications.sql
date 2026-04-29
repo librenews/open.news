@@ -1,0 +1,6 @@
+CREATE TABLE IF NOT EXISTS site_publications (
+  uri TEXT PRIMARY KEY,
+  url TEXT NOT NULL,
+  raw_record JSONB NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
