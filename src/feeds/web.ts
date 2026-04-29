@@ -743,7 +743,7 @@ app.post('/api/articles/search', async (c) => {
       
       // Decide destination URL
       let destUrl = `https://bsky.app/profile/${source.did}`;
-      if (source.site && source.path) {
+      if (source.site && source.path && source.site.startsWith('http')) {
         destUrl = `${source.site}${source.path}`;
       }
 
