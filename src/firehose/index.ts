@@ -187,8 +187,8 @@ function handleEvent(event: JetstreamEvent): void {
     return;
   }
 
-  // ── site.standard.document ingestion ──────────────────────────────────────────
-  if (commit.collection === 'site.standard.document' && commit.record) {
+  // ── Long-form Document Ingestion (Leaflet, WhiteWind, etc) ────────────────
+  if ((commit.collection === 'site.standard.document' || commit.collection === 'com.whtwnd.blog.entry') && commit.record) {
     // 1. Enqueue indexing job for this specific post
     enqueueJob('indexSiteStandard', {
       postUri,
@@ -201,7 +201,7 @@ function handleEvent(event: JetstreamEvent): void {
     isSiteStandardDidKnown(did).then(isKnown => {
       if (!isKnown) {
         markSiteStandardDidKnown(did).then(() => {
-          logger.info({ did }, 'Discovered new site.standard.document author, triggering backfill');
+          logger.info({ did, collection: commit.collection }, 'Discovered new longform author, triggering backfill');
           enqueueJob('backfillSiteStandard', { did });
         });
       }

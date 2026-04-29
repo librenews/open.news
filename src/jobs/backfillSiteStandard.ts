@@ -51,28 +51,37 @@ export async function backfillSiteStandardJob(job: Job<BackfillSiteStandardData>
     let cursor: string | undefined = undefined;
     let totalFound = 0;
     
-    do {
-      const res = await agent.com.atproto.repo.listRecords({
-        repo: did,
-        collection: 'site.standard.document',
-        cursor: cursor,
-        limit: 50
-      });
-      
-      for (const record of res.data.records) {
-        // Enqueue an index job for each document
-        await enqueueJob('indexSiteStandard', {
-          postUri: record.uri,
-          did: did,
-          record: record.value
-        });
-        totalFound++;
-      }
-      
-      cursor = res.data.cursor;
-    } while (cursor);
+    const collections = ['site.standard.document', 'com.whtwnd.blog.entry'];
     
-    logger.info({ did, totalFound }, 'Finished backfilling site.standard.document records for author');
+    for (const coll of collections) {
+      let cursor: string | undefined = undefined;
+      try {
+        do {
+          const res = await agent.com.atproto.repo.listRecords({
+            repo: did,
+            collection: coll,
+            cursor: cursor,
+            limit: 50
+          });
+          
+          for (const record of res.data.records) {
+            // Enqueue an index job for each document
+            await enqueueJob('indexSiteStandard', {
+              postUri: record.uri,
+              did: did,
+              record: record.value
+            });
+            totalFound++;
+          }
+          
+          cursor = res.data.cursor;
+        } while (cursor);
+      } catch (err: any) {
+        logger.warn({ err: err.message, did, collection: coll }, 'Failed or unsupported collection during backfill, skipping');
+      }
+    }
+    
+    logger.info({ did, totalFound }, 'Finished backfilling longform records for author');
   } catch (err) {
     logger.error({ err, did }, 'Failed to backfill site.standard.document records');
     throw err;

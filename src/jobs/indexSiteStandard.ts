@@ -41,6 +41,12 @@ function extractTextFromSiteStandard(record: any): string {
     text += record.description + '\n\n';
   }
 
+  // WhiteWind / standard string-based markdown content
+  if (record.content && typeof record.content === 'string') {
+    text += record.content + '\n\n';
+  }
+
+  // Leaflet block-based content union
   if (record.content?.pages && Array.isArray(record.content.pages)) {
     for (const page of record.content.pages) {
       if (page.blocks && Array.isArray(page.blocks)) {
