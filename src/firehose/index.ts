@@ -188,7 +188,8 @@ function handleEvent(event: JetstreamEvent): void {
   }
 
   // ── Long-form Document Ingestion (Leaflet, WhiteWind, etc) ────────────────
-  if ((commit.collection === 'site.standard.document' || commit.collection === 'com.whtwnd.blog.entry') && commit.record) {
+  const longformCollections = ['site.standard.document', 'com.whtwnd.blog.entry', 'pub.leaflet.document'];
+  if (longformCollections.includes(commit.collection) && commit.record) {
     // 1. Enqueue indexing job for this specific post
     enqueueJob('indexSiteStandard', {
       postUri,

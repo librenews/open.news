@@ -51,7 +51,7 @@ export async function backfillSiteStandardJob(job: Job<BackfillSiteStandardData>
     let cursor: string | undefined = undefined;
     let totalFound = 0;
     
-    const collections = ['site.standard.document', 'com.whtwnd.blog.entry'];
+    const collections = ['site.standard.document', 'com.whtwnd.blog.entry', 'pub.leaflet.document'];
     
     for (const coll of collections) {
       let cursor: string | undefined = undefined;

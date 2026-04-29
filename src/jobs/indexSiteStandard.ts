@@ -54,6 +54,15 @@ function extractTextFromSiteStandard(record: any): string {
       }
     }
   }
+
+  // Legacy Leaflet standalone document
+  if (record.pages && Array.isArray(record.pages)) {
+    for (const page of record.pages) {
+      if (page.blocks && Array.isArray(page.blocks)) {
+        text += extractTextFromBlocks(page.blocks) + '\n\n';
+      }
+    }
+  }
   
   return text.trim();
 }
