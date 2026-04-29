@@ -112,6 +112,7 @@ export async function indexSiteStandardJob(job: Job<IndexSiteStandardData>) {
     
     // 2. Extract full text
     const textContent = extractTextFromSiteStandard(record);
+    const wordCount = textContent ? textContent.trim().split(/\s+/).length : 0;
 
     // 3. Detect language
     let language = 'und';
@@ -122,7 +123,7 @@ export async function indexSiteStandardJob(job: Job<IndexSiteStandardData>) {
     }
     
     // 4. Save core metadata to Postgres
-    await upsertSiteStandardArticle(postUri, did, title, description, publishedAt, site, path, record, language);
+    await upsertSiteStandardArticle(postUri, did, title, description, publishedAt, site, path, record, language, wordCount);
     
     // 3. Index to OpenSearch
     const os = getOsClient();
@@ -138,6 +139,7 @@ export async function indexSiteStandardJob(job: Job<IndexSiteStandardData>) {
         site: site,
         path: path,
         language: language,
+        word_count: wordCount,
         bsky_post_uri: record.bskyPostRef?.uri || null
       }
     });

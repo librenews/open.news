@@ -741,6 +741,10 @@ app.post('/api/articles/search', async (c) => {
       const publishedDate = source.published_at ? new Date(source.published_at).toLocaleDateString() : 'Unknown Date';
       const langBadge = source.language ? `<span class="bg-slate-100 text-slate-500 text-[10px] uppercase font-bold px-1.5 py-0.5 rounded">${escapeHtml(source.language)}</span>` : '';
       
+      const words = source.word_count || 0;
+      const minRead = Math.max(1, Math.ceil(words / 200));
+      const lengthBadge = `<span class="bg-indigo-50 text-indigo-600 text-[10px] uppercase font-bold px-1.5 py-0.5 rounded border border-indigo-100" title="${words} words">${minRead} min read</span>`;
+      
       // Decide destination URL
       let destUrl = `https://bsky.app/profile/${source.did}`;
       if (source.site && source.path && source.site.startsWith('http')) {
@@ -774,6 +778,7 @@ app.post('/api/articles/search', async (c) => {
                   <span class="text-slate-300">•</span>
                   <span class="text-xs text-slate-500 truncate font-mono bg-slate-50 px-1 rounded">${escapeHtml(source.did)}</span>
                   ${langBadge}
+                  ${lengthBadge}
                 </div>
                 ${snippetHtml}
               </div>
