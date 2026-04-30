@@ -1,6 +1,5 @@
 import { db } from '../db/client.js';
-import { getOsClient } from '../track/os-client.js';
-import { SITE_STANDARD_INDEX } from '../track/opensearch.js';
+import { getOsClient, SITE_STANDARD_INDEX } from '../track/opensearch.js';
 import { extractTextFromSiteStandard } from '../jobs/indexSiteStandard.js';
 
 async function main() {
