@@ -33,7 +33,7 @@ function extractTextFromBlocks(blocks: any[]): string {
   return text.trim();
 }
 
-function extractTextFromSiteStandard(record: any): string {
+export function extractTextFromSiteStandard(record: any): string {
   let text = '';
   
   if (record.title) {
