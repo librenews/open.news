@@ -96,7 +96,7 @@ export async function indexSiteStandardJob(job: Job<IndexSiteStandardData>) {
             collection: 'site.standard.publication',
             rkey
           });
-          const pubUrl = pdsRes.data.value.url;
+          const pubUrl = (pdsRes.data.value as any).url;
           if (pubUrl && typeof pubUrl === 'string') {
             site = pubUrl;
             await db.query(
