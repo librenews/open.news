@@ -75,6 +75,7 @@ app.get('/', async (c) => {
 
   return c.html((
     <Layout title={`Draft - ${config.LONGFORM_DOMAIN}`} profile={profile} headerAction={headerAction}>
+      <script>window.SESSION_DID = ${JSON.stringify(sessionDid)};</script>
       <EditorPage />
     </Layout>
   ) as unknown as string);
@@ -419,8 +420,21 @@ app.get('/api/stats', async (c) => {
 const collabServer = HocuspocusServer.configure({
   name: 'longform-collab',
   extensions: [hocuspocusDb],
-  // TODO (Phase 2): Implement onAuthenticate to verify DID against social.longform.acl
-  // async onAuthenticate(data) { ... }
+  async onAuthenticate(data) {
+    const cookieHeader = data.request.headers.cookie || '';
+    const match = cookieHeader.match(/lf_session=([^;]+)/);
+    const did = match ? decodeURIComponent(match[1]) : 'anonymous';
+
+    const docName = data.documentName;
+    if (docName.startsWith('at://')) {
+      const ownerDid = docName.split('/')[2];
+      if (did !== ownerDid) {
+        throw new Error('Access denied: You are not the owner of this document');
+      }
+    }
+
+    return { user: { id: did } };
+  }
 });
 
 const wss = new WebSocketServer({ noServer: true });

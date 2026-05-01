@@ -101,7 +101,8 @@ export function EditorPage() {
           const urlParams = new URLSearchParams(window.location.search);
           let docId = urlParams.get('doc');
           if (!docId) {
-            docId = Math.random().toString(36).substring(2, 15);
+            const rkey = Math.random().toString(36).substring(2, 15);
+            docId = window.SESSION_DID ? `at://${window.SESSION_DID}/site.standard.document/${rkey}` : rkey;
             const newUrl = new URL(window.location);
             newUrl.searchParams.set('doc', docId);
             window.history.replaceState({}, '', newUrl);
@@ -139,8 +140,8 @@ export function EditorPage() {
               CollaborationCursor.configure({
                 provider: provider,
                 user: {
-                  name: 'Anonymous',
-                  color: '#f02050',
+                  name: window.SESSION_DID || 'Anonymous',
+                  color: '#118156',
                 },
               }),
               BubbleMenu.configure({
@@ -414,6 +415,32 @@ export function EditorPage() {
        @media (prefers-color-scheme: dark) { 
          .prose blockquote { border-left-color: rgba(255,255,255,0.8); } 
          .prose .embed-placeholder { background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.2); }
+       }
+       
+       /* Collaboration cursor styles */
+       .collaboration-cursor__caret {
+         position: relative;
+         margin-left: -1px;
+         margin-right: -1px;
+         border-left: 2px solid;
+         border-right: 2px solid transparent;
+         word-break: normal;
+         pointer-events: none;
+       }
+       .collaboration-cursor__label {
+         position: absolute;
+         top: -1.4em;
+         left: -1px;
+         font-size: 12px;
+         font-style: normal;
+         font-weight: 600;
+         line-height: normal;
+         user-select: none;
+         color: #fff;
+         padding: 0.1rem 0.3rem;
+         border-radius: 3px 3px 3px 0;
+         white-space: nowrap;
+         pointer-events: none;
        }
     </style>
   `;
