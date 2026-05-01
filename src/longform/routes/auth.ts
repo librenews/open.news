@@ -103,7 +103,7 @@ authRouter.get('/oauth/login', async (c) => {
 
   try {
     const client = await getLongformAuthClient();
-    const url = await client.authorize(handle, { scope: 'atproto repo:site.standard.document blob:image/jpeg' });
+    const url = await client.authorize(handle, { scope: 'atproto' });
     return c.redirect(url.toString());
   } catch (err) {
     logger.error({ err, handle }, 'Longform OAuth initiation failed');
