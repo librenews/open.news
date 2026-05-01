@@ -137,7 +137,7 @@ export function ReaderPage(doc: LeafletDocument, authorDid: string, profile: any
     </article>
     
     <div id="comments-container" style="margin-top: 4rem; padding-top: 2rem; border-top: 1px solid rgba(0,0,0,0.1); max-width: var(--container-width);">
-      <h3 style="font-family: var(--font-sans); font-size: 20px; font-weight: 600; margin-bottom: 1.5rem; letter-spacing: -0.01em;">Discussion on Bluesky</h3>
+      <h3 style="font-family: var(--font-sans); font-size: 20px; font-weight: 600; margin-bottom: 1.5rem; letter-spacing: -0.01em;">Discussion in the ATmosphere</h3>
       <div id="comments-list">
         <div style="color: var(--text-muted); font-size: 14px; font-family: var(--font-sans);">Loading comments...</div>
       </div>
@@ -152,7 +152,7 @@ export function ReaderPage(doc: LeafletDocument, authorDid: string, profile: any
           
           const container = document.getElementById('comments-list');
           if (!data.posts || data.posts.length === 0) {
-            container.innerHTML = '<div style="color: var(--text-muted); font-size: 14px; font-family: var(--font-sans);">Be the first to discuss this article on Bluesky!</div>';
+            container.innerHTML = '<div style="color: var(--text-muted); font-size: 14px; font-family: var(--font-sans);">Be the first to discuss this article in the ATmosphere!</div>';
             return;
           }
           
