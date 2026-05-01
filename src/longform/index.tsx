@@ -288,6 +288,76 @@ app.get('/api/comments', async (c) => {
   }
 });
 
+app.post('/api/like', async (c) => {
+  const sessionDid = await getSession(c);
+  if (!sessionDid) return c.json({ error: 'Unauthorized' }, 401);
+  
+  try {
+    const { rkey, authorDid } = await c.req.json();
+    const client = await getLongformAuthClient();
+    const oauthSession = await client.restore(sessionDid);
+    const agent = new Agent(oauthSession);
+    
+    // Construct the AT URI
+    const uri = `at://${authorDid}/site.standard.document/${rkey}`;
+    // We need the CID to like it. Fetch the record from author's PDS to get CID
+    const pdsUrl = await resolvePds(authorDid);
+    const fetchAgent = new BskyAgent({ service: pdsUrl });
+    const record = await fetchAgent.com.atproto.repo.getRecord({
+      repo: authorDid,
+      collection: 'site.standard.document',
+      rkey
+    });
+    
+    await agent.com.atproto.repo.createRecord({
+      repo: sessionDid,
+      collection: 'app.bsky.feed.like',
+      record: {
+        subject: { uri, cid: record.data.cid },
+        createdAt: new Date().toISOString()
+      }
+    });
+    return c.json({ success: true });
+  } catch (err: any) {
+    logger.error({ err }, 'Failed to like article');
+    return c.json({ error: err.message }, 500);
+  }
+});
+
+app.post('/api/repost', async (c) => {
+  const sessionDid = await getSession(c);
+  if (!sessionDid) return c.json({ error: 'Unauthorized' }, 401);
+  
+  try {
+    const { rkey, authorDid } = await c.req.json();
+    const client = await getLongformAuthClient();
+    const oauthSession = await client.restore(sessionDid);
+    const agent = new Agent(oauthSession);
+    
+    const uri = `at://${authorDid}/site.standard.document/${rkey}`;
+    const pdsUrl = await resolvePds(authorDid);
+    const fetchAgent = new BskyAgent({ service: pdsUrl });
+    const record = await fetchAgent.com.atproto.repo.getRecord({
+      repo: authorDid,
+      collection: 'site.standard.document',
+      rkey
+    });
+    
+    await agent.com.atproto.repo.createRecord({
+      repo: sessionDid,
+      collection: 'app.bsky.feed.repost',
+      record: {
+        subject: { uri, cid: record.data.cid },
+        createdAt: new Date().toISOString()
+      }
+    });
+    return c.json({ success: true });
+  } catch (err: any) {
+    logger.error({ err }, 'Failed to repost article');
+    return c.json({ error: err.message }, 500);
+  }
+});
+
 // Startup hook
 async function start() {
   serve({ fetch: app.fetch, port: config.LONGFORM_PORT }, (info) => {

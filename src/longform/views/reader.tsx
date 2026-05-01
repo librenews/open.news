@@ -122,11 +122,24 @@ export function ReaderPage(doc: LeafletDocument, authorDid: string, profile: any
           ${doc.title}
         </h1>
         
-        <div style="display: flex; align-items: center; gap: 1rem; border-top: 1px solid rgba(0,0,0,0.1); border-bottom: 1px solid rgba(0,0,0,0.1); padding: 1rem 0;">
-          ${avatar ? html`<img src="${avatar}" style="width: 44px; height: 44px; border-radius: 50%; object-fit: cover;" />` : ''}
-          <div style="display: flex; flex-direction: column;">
-            <span style="font-family: var(--font-sans); font-weight: 600; font-size: 15px;">${displayName}</span>
-            <span style="color: var(--text-muted); font-size: 14px; font-family: var(--font-sans);">${formattedDate}</span>
+        <div style="display: flex; align-items: center; justify-content: space-between; border-top: 1px solid rgba(0,0,0,0.1); border-bottom: 1px solid rgba(0,0,0,0.1); padding: 1rem 0;">
+          <div style="display: flex; align-items: center; gap: 1rem;">
+            ${avatar ? html`<img src="${avatar}" style="width: 44px; height: 44px; border-radius: 50%; object-fit: cover;" />` : ''}
+            <div style="display: flex; flex-direction: column;">
+              <span style="font-family: var(--font-sans); font-weight: 600; font-size: 15px;">${displayName}</span>
+              <span style="color: var(--text-muted); font-size: 14px; font-family: var(--font-sans);">${formattedDate}</span>
+            </div>
+          </div>
+          
+          <div style="display: flex; align-items: center; gap: 1rem; color: var(--text-muted);">
+            <button onclick="handleArticleAction('like', '${authorDid}', '${doc.title}')" style="background: none; border: none; cursor: pointer; color: inherit; display: flex; align-items: center; gap: 0.4rem; font-family: var(--font-sans); font-size: 14px; transition: color 0.2s;" onmouseover="this.style.color='#f02050'" onmouseout="this.style.color='inherit'">
+              <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
+              Like
+            </button>
+            <button onclick="handleArticleAction('repost', '${authorDid}', '${doc.title}')" style="background: none; border: none; cursor: pointer; color: inherit; display: flex; align-items: center; gap: 0.4rem; font-family: var(--font-sans); font-size: 14px; transition: color 0.2s;" onmouseover="this.style.color='#20d070'" onmouseout="this.style.color='inherit'">
+              <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none"><path d="M17 1l4 4-4 4"></path><path d="M3 11V9a4 4 0 0 1 4-4h14"></path><path d="M7 23l-4-4 4-4"></path><path d="M21 13v2a4 4 0 0 1-4 4H3"></path></svg>
+              Repost
+            </button>
           </div>
         </div>
       </header>
@@ -182,11 +195,11 @@ export function ReaderPage(doc: LeafletDocument, authorDid: string, profile: any
                       <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
                       Reply
                     </a>
-                    <span style="display: flex; align-items: center; gap: 0.25rem; cursor: pointer; transition: color 0.2s;" onmouseover="this.style.color='#20d070'" onmouseout="this.style.color='inherit'">
+                    <span style="display: flex; align-items: center; gap: 0.25rem;">
                       <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><path d="M17 1l4 4-4 4"></path><path d="M3 11V9a4 4 0 0 1 4-4h14"></path><path d="M7 23l-4-4 4-4"></path><path d="M21 13v2a4 4 0 0 1-4 4H3"></path></svg>
                       \${post.repostCount || 0}
                     </span>
-                    <span style="display: flex; align-items: center; gap: 0.25rem; cursor: pointer; transition: color 0.2s;" onmouseover="this.style.color='#f02050'" onmouseout="this.style.color='inherit'">
+                    <span style="display: flex; align-items: center; gap: 0.25rem;">
                       <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
                       \${post.likeCount || 0}
                     </span>
@@ -200,6 +213,29 @@ export function ReaderPage(doc: LeafletDocument, authorDid: string, profile: any
           document.getElementById('comments-list').innerHTML = '<div style="color: red; font-size: 14px; font-family: var(--font-sans);">Failed to load comments from Bluesky</div>';
         }
       })();
+
+      async function handleArticleAction(action, authorDid, title) {
+        const parts = window.location.pathname.split('/');
+        const rkey = parts[parts.length - 1];
+        
+        try {
+          const res = await fetch(\`/api/\${action}\`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ rkey, authorDid, title })
+          });
+          const data = await res.json();
+          if (res.status === 401) {
+            alert('Please sign in to interact with articles.');
+          } else if (data.success) {
+            alert(\`Successfully \${action}d!\`);
+          } else {
+            alert(\`Failed to \${action}: \${data.error}\`);
+          }
+        } catch (err) {
+          alert('Network error occurred.');
+        }
+      }
     </script>
   `;
 }
