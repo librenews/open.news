@@ -9,7 +9,7 @@ import { PostsPage } from './views/posts.js';
 import { ReaderPage } from './views/reader.js';
 import { Layout } from './views/layout.js';
 import { authRouter, getSession, getLongformAuthClient } from './routes/auth.js';
-import { Agent } from '@atproto/api';
+import { Agent, BskyAgent } from '@atproto/api';
 import { serializeTiptapToLeaflet } from './lib/leafletExporter.js';
 import { resolvePds } from '../lib/pds.js';
 import { announcePublication } from './bot.js';
@@ -127,9 +127,9 @@ app.get('/post/:did/:rkey', async (c) => {
       // Resolve the author's specific PDS for unauthenticated fetching
       try {
         const pdsUrl = await resolvePds(did);
-        agentToUse = new Agent({ service: pdsUrl });
+        agentToUse = new BskyAgent({ service: pdsUrl }) as any;
       } catch (e) {
-        agentToUse = new Agent({ service: 'https://public.api.bsky.app' });
+        agentToUse = new BskyAgent({ service: 'https://public.api.bsky.app' }) as any;
       }
     }
     
@@ -192,9 +192,9 @@ app.get('/blob/:did/:cid', async (c) => {
     } else {
       try {
         const pdsUrl = await resolvePds(did);
-        agentToUse = new Agent({ service: pdsUrl });
+        agentToUse = new BskyAgent({ service: pdsUrl }) as any;
       } catch (e) {
-        agentToUse = new Agent({ service: 'https://public.api.bsky.app' });
+        agentToUse = new BskyAgent({ service: 'https://public.api.bsky.app' }) as any;
       }
     }
     
