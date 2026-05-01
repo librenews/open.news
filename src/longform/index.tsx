@@ -261,6 +261,22 @@ app.post('/api/publish', async (c) => {
    }
 });
 
+app.get('/api/comments', async (c) => {
+  const url = c.req.query('url');
+  if (!url) return c.json({ error: 'Missing url parameter' }, 400);
+  
+  try {
+    const agent = await getLongformBot();
+    if (!agent) return c.json({ posts: [] });
+    
+    const res = await agent.app.bsky.feed.searchPosts({ q: url, limit: 15 });
+    return c.json(res.data);
+  } catch (err: any) {
+    logger.error({ err, url }, 'Failed to fetch comments');
+    return c.json({ error: 'Search failed' }, 500);
+  }
+});
+
 // Startup hook
 async function start() {
   serve({ fetch: app.fetch, port: config.LONGFORM_PORT }, (info) => {

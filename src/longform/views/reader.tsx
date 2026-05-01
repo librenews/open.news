@@ -147,7 +147,7 @@ export function ReaderPage(doc: LeafletDocument, authorDid: string, profile: any
       (async function() {
         try {
           const url = encodeURIComponent(window.location.href);
-          const res = await fetch('https://public.api.bsky.app/xrpc/app.bsky.feed.searchPosts?q=' + url + '&limit=15');
+          const res = await fetch('/api/comments?url=' + url);
           const data = await res.json();
           
           const container = document.getElementById('comments-list');
