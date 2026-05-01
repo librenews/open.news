@@ -42,7 +42,7 @@ export function EditorPage() {
       import Image from 'https://esm.sh/@tiptap/extension-image@2.2.4';
       import Collaboration from 'https://esm.sh/@tiptap/extension-collaboration@2.2.4';
       import CollaborationCursor from 'https://esm.sh/@tiptap/extension-collaboration-cursor@2.2.4';
-      import { HocuspocusProvider } from 'https://esm.sh/@hocuspocus/provider@2.14.3';
+      import { HocuspocusProvider } from 'https://esm.sh/@hocuspocus/provider@2';
       import { Node, mergeAttributes } from 'https://esm.sh/@tiptap/core@2.2.4';
 
       const EmbedNode = Node.create({
