@@ -114,6 +114,7 @@ export function EditorPage() {
             url: 'wss://' + window.location.host + '/collab/',
             name: docId,
             document: ydoc,
+            token: 'cookie',
             onSynced() {
               const statusEl = document.getElementById('draft-status');
               if (statusEl) {

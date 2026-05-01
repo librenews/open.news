@@ -75,7 +75,7 @@ app.get('/', async (c) => {
 
   return c.html((
     <Layout title={`Draft - ${config.LONGFORM_DOMAIN}`} profile={profile} headerAction={headerAction}>
-      <script>window.SESSION_DID = ${JSON.stringify(sessionDid)};</script>
+      <script dangerouslySetInnerHTML={{ __html: `window.SESSION_DID = ${JSON.stringify(sessionDid)};` }} />
       <EditorPage />
     </Layout>
   ) as unknown as string);
