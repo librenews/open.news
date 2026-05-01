@@ -299,7 +299,7 @@ async function start() {
     const lagMs = lastEventTimeUs
       ? Number(BigInt(Date.now()) * 1000n - lastEventTimeUs) / 1000
       : null;
-    const lagDisplay = lagMs != null ? `${(lagMs / 1000).toFixed(1)}s` : 'n/a';
+    const lagDisplay = lagMs != null ? ((lagMs / 1000).toFixed(1) + 's') : 'n/a';
 
     logger.info(
       { ...stats, watchedDids: watchedDids.size, lruSize: recentUrls.size, cursor: currentCursor?.toString(), lagMs: lagMs != null ? Math.round(lagMs) : null, lag: lagDisplay },
