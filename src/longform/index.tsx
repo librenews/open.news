@@ -15,6 +15,7 @@ import { resolvePds } from '../lib/pds.js';
 import { announcePublication, getLongformBot } from './bot.js';
 import { Server as HocuspocusServer } from '@hocuspocus/server';
 import { hocuspocusDb } from './lib/hocuspocusDb.js';
+import { WebSocketServer } from 'ws';
 
 process.on('unhandledRejection', (err) => {
   logger.warn({ err }, 'Caught unhandled promise rejection in Longform (likely a background OAuth token getter)');
@@ -426,6 +427,8 @@ const collabServer = HocuspocusServer.configure({
   }
 });
 
+const wss = new WebSocketServer({ noServer: true });
+
 // Startup hook
 async function start() {
   const server = serve({ fetch: app.fetch, port: config.LONGFORM_PORT }, (info) => {
@@ -436,7 +439,9 @@ async function start() {
     if (request.url?.startsWith('/collab/')) {
       // Strip /collab/ so the room name is just what follows
       request.url = request.url.replace('/collab', '');
-      collabServer.handleConnection(request, socket, head);
+      wss.handleUpgrade(request, socket, head, (ws) => {
+        collabServer.handleConnection(ws, request);
+      });
     }
   });
 }
