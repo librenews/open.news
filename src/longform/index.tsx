@@ -436,9 +436,8 @@ async function start() {
   });
   
   server.on('upgrade', (request, socket, head) => {
-    if (request.url?.startsWith('/collab/')) {
-      // Strip /collab/ so the room name is just what follows
-      request.url = request.url.replace('/collab', '');
+    if (request.url === '/collab' || request.url?.startsWith('/collab/')) {
+      // Pass the upgrade to ws server
       wss.handleUpgrade(request, socket, head, (ws) => {
         collabServer.handleConnection(ws, request);
       });
