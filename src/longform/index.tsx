@@ -358,6 +358,57 @@ app.post('/api/repost', async (c) => {
   }
 });
 
+app.get('/api/stats', async (c) => {
+  const { authorDid, rkey } = c.req.query();
+  if (!authorDid || !rkey) return c.json({ error: 'Missing parameters' }, 400);
+  
+  const sessionDid = await getSession(c);
+  
+  try {
+    const botAgent = await getLongformBot();
+    if (!botAgent) return c.json({ likes: 0, reposts: 0, liked: false, reposted: false });
+    
+    // Resolve PDS to get CID
+    const pdsUrl = await resolvePds(authorDid);
+    const fetchAgent = new BskyAgent({ service: pdsUrl });
+    const record = await fetchAgent.com.atproto.repo.getRecord({
+      repo: authorDid,
+      collection: 'site.standard.document',
+      rkey
+    });
+    
+    const uri = `at://${authorDid}/site.standard.document/${rkey}`;
+    const cid = record.data.cid;
+    
+    const [likesRes, repostsRes] = await Promise.all([
+      botAgent.app.bsky.feed.getLikes({ uri, cid }).catch(() => null),
+      botAgent.app.bsky.feed.getReposts({ uri, cid }).catch(() => null)
+    ]);
+    
+    let liked = false;
+    let reposted = false;
+    
+    if (sessionDid) {
+      if (likesRes?.data?.likes) {
+        liked = likesRes.data.likes.some(l => l.actor.did === sessionDid);
+      }
+      if (repostsRes?.data?.reposts) {
+        reposted = repostsRes.data.reposts.some(r => r.actor.did === sessionDid);
+      }
+    }
+    
+    return c.json({
+      likes: likesRes?.data?.likes?.length || 0,
+      reposts: repostsRes?.data?.reposts?.length || 0,
+      liked,
+      reposted
+    });
+  } catch (err: any) {
+    logger.error({ err }, 'Failed to get stats');
+    return c.json({ likes: 0, reposts: 0, liked: false, reposted: false });
+  }
+});
+
 // Startup hook
 async function start() {
   serve({ fetch: app.fetch, port: config.LONGFORM_PORT }, (info) => {

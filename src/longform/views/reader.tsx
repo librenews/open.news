@@ -132,13 +132,13 @@ export function ReaderPage(doc: LeafletDocument, authorDid: string, profile: any
           </div>
           
           <div style="display: flex; align-items: center; gap: 1rem; color: var(--text-muted);">
-            <button onclick="handleArticleAction('like', '${authorDid}', '${doc.title}')" style="background: none; border: none; cursor: pointer; color: inherit; display: flex; align-items: center; gap: 0.4rem; font-family: var(--font-sans); font-size: 14px; transition: color 0.2s;" onmouseover="this.style.color='#f02050'" onmouseout="this.style.color='inherit'">
-              <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
-              Like
+            <button id="btn-like" onclick="handleArticleAction('like', '${authorDid}', '${doc.title}')" style="background: none; border: none; cursor: pointer; color: inherit; display: flex; align-items: center; gap: 0.4rem; font-family: var(--font-sans); font-size: 14px; transition: color 0.2s;" onmouseover="if(!this.dataset.active) this.style.color='#f02050'" onmouseout="if(!this.dataset.active) this.style.color='inherit'">
+              <svg id="icon-like" viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
+              <span id="count-like">Like</span>
             </button>
-            <button onclick="handleArticleAction('repost', '${authorDid}', '${doc.title}')" style="background: none; border: none; cursor: pointer; color: inherit; display: flex; align-items: center; gap: 0.4rem; font-family: var(--font-sans); font-size: 14px; transition: color 0.2s;" onmouseover="this.style.color='#20d070'" onmouseout="this.style.color='inherit'">
-              <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none"><path d="M17 1l4 4-4 4"></path><path d="M3 11V9a4 4 0 0 1 4-4h14"></path><path d="M7 23l-4-4 4-4"></path><path d="M21 13v2a4 4 0 0 1-4 4H3"></path></svg>
-              Repost
+            <button id="btn-repost" onclick="handleArticleAction('repost', '${authorDid}', '${doc.title}')" style="background: none; border: none; cursor: pointer; color: inherit; display: flex; align-items: center; gap: 0.4rem; font-family: var(--font-sans); font-size: 14px; transition: color 0.2s;" onmouseover="if(!this.dataset.active) this.style.color='#20d070'" onmouseout="if(!this.dataset.active) this.style.color='inherit'">
+              <svg id="icon-repost" viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none"><path d="M17 1l4 4-4 4"></path><path d="M3 11V9a4 4 0 0 1 4-4h14"></path><path d="M7 23l-4-4 4-4"></path><path d="M21 13v2a4 4 0 0 1-4 4H3"></path></svg>
+              <span id="count-repost">Repost</span>
             </button>
           </div>
         </div>
@@ -228,7 +228,15 @@ export function ReaderPage(doc: LeafletDocument, authorDid: string, profile: any
           if (res.status === 401) {
             alert('Please sign in to interact with articles.');
           } else if (data.success) {
-            alert(\`Successfully \${action}d!\`);
+            // Optimistic update
+            const btn = document.getElementById(\`btn-\${action}\`);
+            const icon = document.getElementById(\`icon-\${action}\`);
+            const count = document.getElementById(\`count-\${action}\`);
+            btn.dataset.active = "true";
+            btn.style.color = action === 'like' ? '#f02050' : '#20d070';
+            if (action === 'like') icon.setAttribute('fill', 'currentColor');
+            let currentCount = parseInt(count.innerText) || 0;
+            count.innerText = (currentCount + 1).toString();
           } else {
             alert(\`Failed to \${action}: \${data.error}\`);
           }
@@ -236,6 +244,39 @@ export function ReaderPage(doc: LeafletDocument, authorDid: string, profile: any
           alert('Network error occurred.');
         }
       }
+
+      // Fetch stats on load
+      (async function() {
+        try {
+          const parts = window.location.pathname.split('/');
+          const rkey = parts[parts.length - 1];
+          const authorDid = '${authorDid}';
+          
+          const res = await fetch(\`/api/stats?authorDid=\${authorDid}&rkey=\${rkey}\`);
+          const data = await res.json();
+          
+          if (data.likes > 0 || data.liked) {
+            document.getElementById('count-like').innerText = data.likes.toString();
+          }
+          if (data.liked) {
+            const btn = document.getElementById('btn-like');
+            btn.dataset.active = "true";
+            btn.style.color = '#f02050';
+            document.getElementById('icon-like').setAttribute('fill', 'currentColor');
+          }
+          
+          if (data.reposts > 0 || data.reposted) {
+            document.getElementById('count-repost').innerText = data.reposts.toString();
+          }
+          if (data.reposted) {
+            const btn = document.getElementById('btn-repost');
+            btn.dataset.active = "true";
+            btn.style.color = '#20d070';
+          }
+        } catch (err) {
+          console.error('Failed to fetch article stats');
+        }
+      })();
     </script>
   `;
 }
