@@ -90,7 +90,7 @@ authRouter.get('/client-metadata.json', async (c) => {
     grant_types: ['authorization_code', 'refresh_token'],
     response_types: ['code'],
     token_endpoint_auth_method: 'none',
-    scope: 'atproto repo:site.standard.document blob:image/jpeg',
+    scope: 'atproto repo:site.standard.document blob:image/jpeg repo:app.bsky.feed.like repo:app.bsky.feed.repost',
     dpop_bound_access_tokens: true,
   });
 });
