@@ -12,7 +12,7 @@ import { authRouter, getSession, getLongformAuthClient } from './routes/auth.js'
 import { Agent, BskyAgent } from '@atproto/api';
 import { serializeTiptapToLeaflet } from './lib/leafletExporter.js';
 import { resolvePds } from '../lib/pds.js';
-import { announcePublication } from './bot.js';
+import { announcePublication, getLongformBot } from './bot.js';
 
 process.on('unhandledRejection', (err) => {
   logger.warn({ err }, 'Caught unhandled promise rejection in Longform (likely a background OAuth token getter)');
