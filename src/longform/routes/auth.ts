@@ -9,7 +9,7 @@ const locks = new Map<string, Promise<unknown>>();
 function requestLock<T>(key: string, fn: () => T | PromiseLike<T>): Promise<T> {
   const prev = locks.get(key) ?? Promise.resolve();
   const next = prev.then(() => fn()) as Promise<T>;
-  locks.set(key, next.catch(() => {}));
+  locks.set(key, next.catch(() => { }));
   next.finally(() => { if (locks.get(key) === next) locks.delete(key); });
   return next;
 }
@@ -21,13 +21,13 @@ let _oauthClient: NodeOAuthClient | null = null;
 
 export async function getLongformAuthClient(): Promise<NodeOAuthClient> {
   if (_oauthClient) return _oauthClient;
-  
+
   const clientUri = `https://${config.LONGFORM_DOMAIN}`;
-  
+
   _oauthClient = new NodeOAuthClient({
     clientMetadata: {
       client_name: 'Longform Publishing (open.news)',
-      client_id: `${clientUri}/client-metadata.json?v=2`,
+      client_id: `${clientUri}/client-metadata.json`,
       client_uri: clientUri,
       redirect_uris: [`${clientUri}/oauth/callback`],
       grant_types: ['authorization_code', 'refresh_token'],
@@ -59,7 +59,7 @@ export async function getLongformAuthClient(): Promise<NodeOAuthClient> {
     sessionStore: {
       async set(sub: string, value: Record<string, unknown>) {
         await pool.query(
-           `INSERT INTO longform_oauth_sessions (sub, value) VALUES ($1, $2)
+          `INSERT INTO longform_oauth_sessions (sub, value) VALUES ($1, $2)
            ON CONFLICT (sub) DO UPDATE SET value = $2, updated_at = NOW()`,
           [sub, JSON.stringify(value)]
         );
@@ -83,7 +83,7 @@ export async function getLongformAuthClient(): Promise<NodeOAuthClient> {
 authRouter.get('/client-metadata.json', async (c) => {
   const clientUri = `https://${config.LONGFORM_DOMAIN}`;
   return c.json({
-    client_id: `${clientUri}/client-metadata.json?v=2`,
+    client_id: `${clientUri}/client-metadata.json`,
     client_name: 'Longform Publishing (open.news)',
     client_uri: clientUri,
     redirect_uris: [`${clientUri}/oauth/callback`],
@@ -117,7 +117,7 @@ authRouter.get('/oauth/callback', async (c) => {
     const client = await getLongformAuthClient();
     const { session } = await client.callback(new URLSearchParams(params));
     const did = session.did;
-    
+
     // Cookie specifically targeting longform domain sessions
     setCookie(c, 'lf_session', did, {
       path: '/',
@@ -125,9 +125,9 @@ authRouter.get('/oauth/callback', async (c) => {
       httpOnly: true,
       maxAge: 60 * 60 * 24 * 30
     });
-    
+
     logger.info({ event: 'longform_login', did }, 'User successfully authenticated via AT Protocol');
-    
+
     return c.redirect('/');
   } catch (err) {
     logger.error({ err }, 'Longform OAuth callback parsing failed');
@@ -141,5 +141,5 @@ authRouter.get('/logout', async (c) => {
 });
 
 export async function getSession(c: any): Promise<string | null> {
-    return getCookie(c, 'lf_session') || null;
+  return getCookie(c, 'lf_session') || null;
 }
