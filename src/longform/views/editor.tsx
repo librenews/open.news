@@ -3,7 +3,7 @@ import { html } from 'hono/html';
 export function EditorPage() {
   return html`
     <div id="editor-container"></div>
-    <div id="draft-status" style="position: fixed; bottom: 20px; right: 20px; background: rgba(0,0,0,0.8); color: white; padding: 6px 12px; border-radius: 6px; font-size: 13px; font-family: var(--font-sans); opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 50;">Draft saved locally</div>
+    <div id="draft-status" style="position: fixed; bottom: 20px; right: 20px; background: rgba(0,0,0,0.8); color: white; padding: 6px 12px; border-radius: 6px; font-size: 13px; font-family: var(--font-sans); opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 50;">Synced to network</div>
     
     <!-- Floating 'New Block' Context Menu (Medium '+') -->
     <div class="floating-menu" id="floating-menu" style="visibility: hidden;">
@@ -40,6 +40,9 @@ export function EditorPage() {
       import { BubbleMenu } from 'https://esm.sh/@tiptap/extension-bubble-menu@2.2.4';
       import { FloatingMenu } from 'https://esm.sh/@tiptap/extension-floating-menu@2.2.4';
       import Image from 'https://esm.sh/@tiptap/extension-image@2.2.4';
+      import Collaboration from 'https://esm.sh/@tiptap/extension-collaboration@2.2.4';
+      import CollaborationCursor from 'https://esm.sh/@tiptap/extension-collaboration-cursor@2.2.4';
+      import { HocuspocusProvider } from 'https://esm.sh/@hocuspocus/provider@2.14.3';
       import { Node, mergeAttributes } from 'https://esm.sh/@tiptap/core@2.2.4';
 
       const EmbedNode = Node.create({
@@ -64,56 +67,76 @@ export function EditorPage() {
         try {
           const bubbleMenuEl = document.getElementById('bubble-menu');
           const floatingMenuEl = document.getElementById('floating-menu');
-
-          window.processImageFile = function(file) {
-            if (!file || !file.type.startsWith('image/')) return;
-            const reader = new FileReader();
-            reader.onload = (event) => {
-               const img = new window.Image();
-               img.onload = () => {
-                  try {
-                    const canvas = document.createElement('canvas');
-                    let width = img.width;
-                    let height = img.height;
-                    
-                    const MAX_DIM = 1400;
-                    if (width > MAX_DIM || height > MAX_DIM) {
-                      if (width > height) {
-                        height = Math.round((height * MAX_DIM) / width);
-                        width = MAX_DIM;
-                      } else {
-                        width = Math.round((width * MAX_DIM) / height);
-                        height = MAX_DIM;
-                      }
-                    }
-                    
-                    canvas.width = width;
-                    canvas.height = height;
-                    const ctx = canvas.getContext('2d');
-                    ctx.fillStyle = '#FFFFFF';
-                    ctx.fillRect(0, 0, width, height);
-                    ctx.drawImage(img, 0, 0, width, height);
-                    
-                    const dataUrl = canvas.toDataURL('image/jpeg', 0.82);
-                    window.editor.chain().focus().setImage({ src: dataUrl }).run();
-                  } catch (err) {
-                    alert('Error compressing image: ' + err.message);
-                  }
-               };
-               img.onerror = () => alert('Invalid image file');
-               img.src = event.target.result;
-            };
-            reader.readAsDataURL(file);
+          
+          window.processImageFile = async (file) => {
+             const img = new window.Image();
+             const reader = new FileReader();
+             reader.onload = (event) => {
+                img.onload = () => {
+                   try {
+                     const canvas = document.createElement('canvas');
+                     const MAX_WIDTH = 1200;
+                     const MAX_HEIGHT = 1200;
+                     let width = img.width;
+                     let height = img.height;
+                     if (width > height) { if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; } }
+                     else { if (height > MAX_HEIGHT) { width *= MAX_HEIGHT / height; height = MAX_HEIGHT; } }
+                     canvas.width = width;
+                     canvas.height = height;
+                     const ctx = canvas.getContext('2d');
+                     ctx.drawImage(img, 0, 0, width, height);
+                     const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.8);
+                     window.editor.commands.setImage({ src: compressedDataUrl });
+                   } catch (err) {
+                     alert('Error compressing image: ' + err.message);
+                   }
+                };
+                img.onerror = () => alert('Invalid image file');
+                img.src = event.target.result;
+             };
+             reader.readAsDataURL(file);
           };
+
+          const urlParams = new URLSearchParams(window.location.search);
+          let docId = urlParams.get('doc');
+          if (!docId) {
+            docId = Math.random().toString(36).substring(2, 15);
+            const newUrl = new URL(window.location);
+            newUrl.searchParams.set('doc', docId);
+            window.history.replaceState({}, '', newUrl);
+          }
+
+          const provider = new HocuspocusProvider({
+            url: `wss://${window.location.host}/collab/`,
+            name: docId,
+            onSynced() {
+              const statusEl = document.getElementById('draft-status');
+              if (statusEl) {
+                statusEl.style.opacity = '1';
+                clearTimeout(window._draftTimeout);
+                window._draftTimeout = setTimeout(() => { statusEl.style.opacity = '0'; }, 2000);
+              }
+            }
+          });
 
           window.editor = new Editor({
           element: document.querySelector('#editor-container'),
           extensions: [
-            StarterKit.configure({ heading: { levels: [2, 3] } }),
+            StarterKit.configure({ heading: { levels: [2, 3] }, history: false }),
             Image,
             EmbedNode,
             Placeholder.configure({
               placeholder: 'Tell your story...',
+            }),
+            Collaboration.configure({
+              document: provider.document,
+            }),
+            CollaborationCursor.configure({
+              provider: provider,
+              user: {
+                name: 'Anonymous',
+                color: '#f02050',
+              },
             }),
             BubbleMenu.configure({
               element: bubbleMenuEl,
@@ -124,14 +147,7 @@ export function EditorPage() {
               tippyOptions: { duration: 150, placement: 'left-start' },
             }),
           ],
-          content: (() => {
-            try {
-              const saved = window.localStorage.getItem('longform_draft');
-              return saved ? JSON.parse(saved) : '';
-            } catch (e) {
-              return '';
-            }
-          })(),
+
           editorProps: {
             attributes: {
               class: 'prose mx-auto focus:outline-none',
@@ -168,18 +184,8 @@ export function EditorPage() {
               btn.classList.toggle('is-active', isActive);
             });
           },
-          onUpdate({ editor }) {
-             try {
-               window.localStorage.setItem('longform_draft', JSON.stringify(editor.getJSON()));
-               const statusEl = document.getElementById('draft-status');
-               if (statusEl) {
-                 statusEl.style.opacity = '1';
-                 clearTimeout(window._draftTimeout);
-                 window._draftTimeout = setTimeout(() => { statusEl.style.opacity = '0'; }, 2000);
-               }
-             } catch (e) {
-               console.error('Failed to save draft locally', e);
-             }
+          onUpdate() {
+            // Note: Hocuspocus handles sync automatically
           }
         });
 
