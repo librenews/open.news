@@ -419,12 +419,8 @@ app.get('/api/stats', async (c) => {
 const collabServer = HocuspocusServer.configure({
   name: 'longform-collab',
   extensions: [hocuspocusDb],
-  async onAuthenticate(data) {
-    // Placeholder for ACL check
-    // In Phase 2, we will decode the session cookie, resolve the PDS document AT-URI, 
-    // and verify the DID against the document's social.longform.acl
-    return { user: { id: 'anonymous' } };
-  }
+  // TODO (Phase 2): Implement onAuthenticate to verify DID against social.longform.acl
+  // async onAuthenticate(data) { ... }
 });
 
 const wss = new WebSocketServer({ noServer: true });
