@@ -352,7 +352,7 @@ async function start() {
   process.on('SIGTERM', shutdown);
   process.on('SIGINT', shutdown);
 
-  logger.info({ cursor: currentCursor, dids: watchedDids.size }, 'Firehose consumer started');
+  logger.info({ cursor: currentCursor, dids: watchedDids.size }, "Firehose consumer started");
 }
 
 start().catch((err) => {
