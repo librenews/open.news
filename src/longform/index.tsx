@@ -16,6 +16,7 @@ import { announcePublication, getLongformBot } from './bot.js';
 import { Server as HocuspocusServer } from '@hocuspocus/server';
 import { hocuspocusDb } from './lib/hocuspocusDb.js';
 import { WebSocketServer } from 'ws';
+import { db } from '../db/client.js';
 
 process.on('unhandledRejection', (err) => {
   logger.warn({ err }, 'Caught unhandled promise rejection in Longform (likely a background OAuth token getter)');
@@ -428,7 +429,7 @@ app.get('/api/acl', async (c) => {
   if (!sessionDid || !docId) return c.json({ error: 'Missing params' }, 400);
   if (!docId.startsWith(`at://${sessionDid}/`)) return c.json({ error: 'Unauthorized' }, 403);
   
-  const { rows } = await pool.query('SELECT did, permission FROM longform_yjs_acl WHERE document_name = $1', [docId]);
+  const { rows } = await db.query('SELECT did, permission FROM longform_yjs_acl WHERE document_name = $1', [docId]);
   
   const acls = await Promise.all(rows.map(async r => {
     const profile = await fetchUserProfile(r.did);
@@ -452,7 +453,7 @@ app.post('/api/acl', async (c) => {
     targetDid = data.did;
   }
 
-  await pool.query(
+  await db.query(
     `INSERT INTO longform_yjs_acl (document_name, did, permission) VALUES ($1, $2, $3)
      ON CONFLICT (document_name, did) DO UPDATE SET permission = $3`,
     [docId, targetDid, permission || 'write']
@@ -467,7 +468,7 @@ app.delete('/api/acl', async (c) => {
   if (!sessionDid || !docId || !did) return c.json({ error: 'Missing params' }, 400);
   if (!docId.startsWith(`at://${sessionDid}/`)) return c.json({ error: 'Unauthorized' }, 403);
 
-  await pool.query('DELETE FROM longform_yjs_acl WHERE document_name = $1 AND did = $2', [docId, did]);
+  await db.query('DELETE FROM longform_yjs_acl WHERE document_name = $1 AND did = $2', [docId, did]);
   return c.json({ success: true });
 });
 
@@ -484,7 +485,7 @@ const collabServer = HocuspocusServer.configure({
       const ownerDid = docName.split('/')[2];
       if (did === ownerDid) return { user: { id: did, permission: 'write' } };
       
-      const { rows } = await pool.query('SELECT permission FROM longform_yjs_acl WHERE document_name = $1 AND did = $2', [docName, did]);
+      const { rows } = await db.query('SELECT permission FROM longform_yjs_acl WHERE document_name = $1 AND did = $2', [docName, did]);
       if (rows.length === 0) {
         throw new Error('Access denied: You are not authorized to view this document');
       }
