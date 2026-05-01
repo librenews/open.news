@@ -13,6 +13,8 @@ import { Agent, BskyAgent } from '@atproto/api';
 import { serializeTiptapToLeaflet } from './lib/leafletExporter.js';
 import { resolvePds } from '../lib/pds.js';
 import { announcePublication, getLongformBot } from './bot.js';
+import { Server as HocuspocusServer } from '@hocuspocus/server';
+import { hocuspocusDb } from './lib/hocuspocusDb.js';
 
 process.on('unhandledRejection', (err) => {
   logger.warn({ err }, 'Caught unhandled promise rejection in Longform (likely a background OAuth token getter)');
@@ -413,10 +415,29 @@ app.get('/api/stats', async (c) => {
   }
 });
 
+const collabServer = HocuspocusServer.configure({
+  name: 'longform-collab',
+  extensions: [hocuspocusDb],
+  async onAuthenticate(data) {
+    // Placeholder for ACL check
+    // In Phase 2, we will decode the session cookie, resolve the PDS document AT-URI, 
+    // and verify the DID against the document's social.longform.acl
+    return { user: { id: 'anonymous' } };
+  }
+});
+
 // Startup hook
 async function start() {
-  serve({ fetch: app.fetch, port: config.LONGFORM_PORT }, (info) => {
+  const server = serve({ fetch: app.fetch, port: config.LONGFORM_PORT }, (info) => {
     logger.info({ port: info.port, domain: config.LONGFORM_DOMAIN }, 'Longform service started');
+  });
+  
+  server.on('upgrade', (request, socket, head) => {
+    if (request.url?.startsWith('/collab/')) {
+      // Strip /collab/ so the room name is just what follows
+      request.url = request.url.replace('/collab', '');
+      collabServer.handleConnection(request, socket, head);
+    }
   });
 }
 
