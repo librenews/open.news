@@ -135,5 +135,71 @@ export function ReaderPage(doc: LeafletDocument, authorDid: string, profile: any
         ${renderLeafletBlocks(blocks, authorDid)}
       </div>
     </article>
+    
+    <div id="comments-container" style="margin-top: 4rem; padding-top: 2rem; border-top: 1px solid rgba(0,0,0,0.1); max-width: var(--container-width);">
+      <h3 style="font-family: var(--font-sans); font-size: 20px; font-weight: 600; margin-bottom: 1.5rem; letter-spacing: -0.01em;">Discussion on Bluesky</h3>
+      <div id="comments-list">
+        <div style="color: var(--text-muted); font-size: 14px; font-family: var(--font-sans);">Loading comments...</div>
+      </div>
+    </div>
+    
+    <script>
+      (async function() {
+        try {
+          const url = encodeURIComponent(window.location.href);
+          const res = await fetch('https://public.api.bsky.app/xrpc/app.bsky.feed.searchPosts?q=' + url + '&limit=15');
+          const data = await res.json();
+          
+          const container = document.getElementById('comments-list');
+          if (!data.posts || data.posts.length === 0) {
+            container.innerHTML = '<div style="color: var(--text-muted); font-size: 14px; font-family: var(--font-sans);">Be the first to discuss this article on Bluesky!</div>';
+            return;
+          }
+          
+          let html = '';
+          for (const post of data.posts) {
+            const author = post.author;
+            const text = post.record.text || '';
+            const avatar = author.avatar ? \`<img src="\${author.avatar}" style="width: 36px; height: 36px; border-radius: 50%; object-fit: cover;" />\` : \`<div style="width: 36px; height: 36px; border-radius: 50%; background: rgba(0,0,0,0.1);"></div>\`;
+            
+            const postDate = new Date(post.indexedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+            const postUri = post.uri.replace('at://', '').split('/');
+            const bskyUrl = \`https://bsky.app/profile/\${author.handle}/post/\${postUri[2]}\`;
+            
+            html += \`
+              <div style="display: flex; gap: 1rem; margin-bottom: 1.5rem; padding-bottom: 1.5rem; border-bottom: 1px solid rgba(0,0,0,0.05);">
+                <a href="https://bsky.app/profile/\${author.handle}" target="_blank" style="flex-shrink: 0;">\${avatar}</a>
+                <div style="flex-grow: 1;">
+                  <div style="display: flex; align-items: baseline; gap: 0.5rem; margin-bottom: 0.25rem;">
+                    <a href="https://bsky.app/profile/\${author.handle}" target="_blank" style="font-family: var(--font-sans); font-weight: 600; color: var(--text-main); text-decoration: none; font-size: 14px;">\${author.displayName || author.handle}</a>
+                    <span style="color: var(--text-muted); font-size: 13px; font-family: var(--font-sans);">@\${author.handle} · \${postDate}</span>
+                  </div>
+                  <div style="font-family: var(--font-sans); font-size: 15px; line-height: 1.5; color: var(--text-main); margin-bottom: 0.5rem; word-break: break-word;">
+                    \${text.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\\n/g, '<br/>')}
+                  </div>
+                  <div style="display: flex; gap: 1.5rem; color: var(--text-muted); font-size: 13px; font-family: var(--font-sans);">
+                    <a href="\${bskyUrl}" target="_blank" style="color: inherit; text-decoration: none; display: flex; align-items: center; gap: 0.25rem; transition: color 0.2s;" onmouseover="this.style.color='#1185fe'" onmouseout="this.style.color='inherit'">
+                      <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
+                      Reply
+                    </a>
+                    <span style="display: flex; align-items: center; gap: 0.25rem; cursor: pointer; transition: color 0.2s;" onmouseover="this.style.color='#20d070'" onmouseout="this.style.color='inherit'">
+                      <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><path d="M17 1l4 4-4 4"></path><path d="M3 11V9a4 4 0 0 1 4-4h14"></path><path d="M7 23l-4-4 4-4"></path><path d="M21 13v2a4 4 0 0 1-4 4H3"></path></svg>
+                      \${post.repostCount || 0}
+                    </span>
+                    <span style="display: flex; align-items: center; gap: 0.25rem; cursor: pointer; transition: color 0.2s;" onmouseover="this.style.color='#f02050'" onmouseout="this.style.color='inherit'">
+                      <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
+                      \${post.likeCount || 0}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            \`;
+          }
+          container.innerHTML = html;
+        } catch (err) {
+          document.getElementById('comments-list').innerHTML = '<div style="color: red; font-size: 14px; font-family: var(--font-sans);">Failed to load comments from Bluesky</div>';
+        }
+      })();
+    </script>
   `;
 }
