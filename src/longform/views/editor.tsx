@@ -107,7 +107,7 @@ export function EditorPage() {
           }
 
           const provider = new HocuspocusProvider({
-            url: `wss://${window.location.host}/collab/`,
+            url: 'wss://' + window.location.host + '/collab/',
             name: docId,
             onSynced() {
               const statusEl = document.getElementById('draft-status');
