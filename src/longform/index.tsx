@@ -71,7 +71,12 @@ app.get('/', async (c) => {
 
   const profile = await fetchUserProfile(sessionDid);
 
-  const headerAction = html`<button onclick="publishDraft()" id="publish-btn" style="background: #118156; color: white; border: none; padding: 0.4rem 1.2rem; border-radius: 99px; cursor: pointer; font-family: var(--font-sans); font-weight: 500;">Publish</button>`;
+  const headerAction = html`
+    <div style="display: flex; gap: 0.5rem; align-items: center;">
+      <button onclick="window.openShareModal()" id="share-btn" style="display: none; background: #242424; color: white; border: none; padding: 0.4rem 1.2rem; border-radius: 99px; cursor: pointer; font-family: var(--font-sans); font-weight: 500; font-size: 14px;">Share</button>
+      <button onclick="publishDraft()" id="publish-btn" style="background: #118156; color: white; border: none; padding: 0.4rem 1.2rem; border-radius: 99px; cursor: pointer; font-family: var(--font-sans); font-weight: 500; font-size: 14px;">Publish</button>
+    </div>
+  `;
 
   return c.html((
     <Layout title={`Draft - ${config.LONGFORM_DOMAIN}`} profile={profile} headerAction={headerAction}>
@@ -417,6 +422,55 @@ app.get('/api/stats', async (c) => {
   }
 });
 
+app.get('/api/acl', async (c) => {
+  const sessionDid = await getSession(c);
+  const docId = c.req.query('docId');
+  if (!sessionDid || !docId) return c.json({ error: 'Missing params' }, 400);
+  if (!docId.startsWith(`at://${sessionDid}/`)) return c.json({ error: 'Unauthorized' }, 403);
+  
+  const { rows } = await pool.query('SELECT did, permission FROM longform_yjs_acl WHERE document_name = $1', [docId]);
+  
+  const acls = await Promise.all(rows.map(async r => {
+    const profile = await fetchUserProfile(r.did);
+    return { did: r.did, permission: r.permission, handle: profile.handle };
+  }));
+  return c.json({ acls });
+});
+
+app.post('/api/acl', async (c) => {
+  const sessionDid = await getSession(c);
+  const { docId, didOrHandle, permission } = await c.req.json();
+  if (!sessionDid || !docId || !didOrHandle) return c.json({ error: 'Missing params' }, 400);
+  if (!docId.startsWith(`at://${sessionDid}/`)) return c.json({ error: 'Unauthorized' }, 403);
+
+  let targetDid = didOrHandle.trim();
+  if (!targetDid.startsWith('did:')) {
+    targetDid = targetDid.replace(/^@/, '');
+    const res = await fetch(`https://public.api.bsky.app/xrpc/com.atproto.identity.resolveHandle?handle=${encodeURIComponent(targetDid)}`);
+    if (!res.ok) return c.json({ error: 'Handle not found' }, 404);
+    const data = await res.json();
+    targetDid = data.did;
+  }
+
+  await pool.query(
+    `INSERT INTO longform_yjs_acl (document_name, did, permission) VALUES ($1, $2, $3)
+     ON CONFLICT (document_name, did) DO UPDATE SET permission = $3`,
+    [docId, targetDid, permission || 'write']
+  );
+  const profile = await fetchUserProfile(targetDid);
+  return c.json({ success: true, did: targetDid, handle: profile.handle, permission: permission || 'write' });
+});
+
+app.delete('/api/acl', async (c) => {
+  const sessionDid = await getSession(c);
+  const { docId, did } = await c.req.json();
+  if (!sessionDid || !docId || !did) return c.json({ error: 'Missing params' }, 400);
+  if (!docId.startsWith(`at://${sessionDid}/`)) return c.json({ error: 'Unauthorized' }, 403);
+
+  await pool.query('DELETE FROM longform_yjs_acl WHERE document_name = $1 AND did = $2', [docId, did]);
+  return c.json({ success: true });
+});
+
 const collabServer = HocuspocusServer.configure({
   name: 'longform-collab',
   extensions: [hocuspocusDb],
@@ -428,9 +482,18 @@ const collabServer = HocuspocusServer.configure({
     const docName = data.documentName;
     if (docName.startsWith('at://')) {
       const ownerDid = docName.split('/')[2];
-      if (did !== ownerDid) {
-        throw new Error('Access denied: You are not the owner of this document');
+      if (did === ownerDid) return { user: { id: did, permission: 'write' } };
+      
+      const { rows } = await pool.query('SELECT permission FROM longform_yjs_acl WHERE document_name = $1 AND did = $2', [docName, did]);
+      if (rows.length === 0) {
+        throw new Error('Access denied: You are not authorized to view this document');
       }
+      
+      if (rows[0].permission === 'read') {
+        data.connection.readOnly = true;
+      }
+      
+      return { user: { id: did, permission: rows[0].permission } };
     }
 
     return { user: { id: did } };

@@ -5,6 +5,30 @@ export function EditorPage() {
     <div id="editor-container"></div>
     <div id="draft-status" style="position: fixed; bottom: 20px; right: 20px; background: rgba(0,0,0,0.8); color: white; padding: 6px 12px; border-radius: 6px; font-size: 13px; font-family: var(--font-sans); opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 50;">Synced to network</div>
     
+    <!-- Share Modal -->
+    <div id="share-modal" class="modal-overlay">
+      <div class="modal-content">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+          <h3 style="margin: 0; font-family: var(--font-body); font-weight: 600;">Share Document</h3>
+          <button onclick="window.closeShareModal()" style="background: none; border: none; cursor: pointer; font-size: 1.2rem; color: var(--text-muted);">&times;</button>
+        </div>
+        
+        <form onsubmit="window.addCollaborator(event)" style="display: flex; gap: 0.5rem; margin-bottom: 2rem;">
+          <input type="text" id="collab-input" placeholder="Bluesky Handle or DID" required style="flex: 1; padding: 0.6rem 0.8rem; border: 1px solid rgba(0,0,0,0.2); border-radius: 6px; font-family: var(--font-sans);" />
+          <select id="collab-permission" style="padding: 0.6rem; border: 1px solid rgba(0,0,0,0.2); border-radius: 6px; font-family: var(--font-sans);">
+            <option value="write">Can Edit</option>
+            <option value="read">View Only</option>
+          </select>
+          <button type="submit" style="background: #118156; color: white; border: none; padding: 0.6rem 1rem; border-radius: 6px; cursor: pointer; font-weight: 500;">Invite</button>
+        </form>
+
+        <h4 style="margin: 0 0 1rem 0; font-family: var(--font-sans); font-size: 14px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em;">People with access</h4>
+        <div id="collab-list" style="display: flex; flex-direction: column; gap: 0.8rem;">
+          <!-- Rendered via JS -->
+        </div>
+      </div>
+    </div>
+    
     <!-- Floating 'New Block' Context Menu (Medium '+') -->
     <div class="floating-menu" id="floating-menu" style="visibility: hidden;">
       <button class="add-btn" title="Add new block">
@@ -107,6 +131,93 @@ export function EditorPage() {
             newUrl.searchParams.set('doc', docId);
             window.history.replaceState({}, '', newUrl);
           }
+          
+          const isOwner = window.SESSION_DID && docId.includes(window.SESSION_DID);
+          if (isOwner) {
+             const shareBtn = document.getElementById('share-btn');
+             if (shareBtn) shareBtn.style.display = 'block';
+          }
+          
+          window.openShareModal = async () => {
+             document.getElementById('share-modal').classList.add('active');
+             await window.loadCollaborators();
+          };
+          window.closeShareModal = () => document.getElementById('share-modal').classList.remove('active');
+          
+          window.loadCollaborators = async () => {
+             const list = document.getElementById('collab-list');
+             list.innerHTML = '<div style="color: var(--text-muted); font-size: 14px;">Loading...</div>';
+             try {
+                const res = await fetch('/api/acl?docId=' + encodeURIComponent(docId));
+                if (!res.ok) throw new Error('Failed to load ACLs');
+                const data = await res.json();
+                
+                list.innerHTML = `
+                  <div style="display: flex; align-items: center; justify-content: space-between;">
+                    <div style="display: flex; flex-direction: column;">
+                      <span style="font-weight: 600; font-size: 15px;">${window.SESSION_HANDLE || window.SESSION_DID} (You)</span>
+                    </div>
+                    <span style="color: var(--text-muted); font-size: 14px;">Owner</span>
+                  </div>
+                `;
+                
+                for (const acl of data.acls) {
+                   list.innerHTML += `
+                     <div style="display: flex; align-items: center; justify-content: space-between;">
+                       <div style="display: flex; flex-direction: column;">
+                         <span style="font-weight: 600; font-size: 15px;">${acl.handle || acl.did}</span>
+                         <span style="font-size: 12px; color: var(--text-muted);">${acl.did}</span>
+                       </div>
+                       <div style="display: flex; align-items: center; gap: 1rem;">
+                         <span style="color: var(--text-muted); font-size: 14px;">${acl.permission === 'write' ? 'Can Edit' : 'View Only'}</span>
+                         <button onclick="window.removeCollaborator('${acl.did}')" style="background: none; border: none; color: #f02050; cursor: pointer; font-size: 14px;">Remove</button>
+                       </div>
+                     </div>
+                   `;
+                }
+             } catch (err) {
+                list.innerHTML = '<div style="color: #f02050; font-size: 14px;">Error loading collaborators</div>';
+             }
+          };
+          
+          window.addCollaborator = async (e) => {
+             e.preventDefault();
+             const input = document.getElementById('collab-input');
+             const perm = document.getElementById('collab-permission');
+             const val = input.value;
+             input.disabled = true;
+             try {
+                const res = await fetch('/api/acl', {
+                   method: 'POST',
+                   headers: { 'Content-Type': 'application/json' },
+                   body: JSON.stringify({ docId, didOrHandle: val, permission: perm.value })
+                });
+                if (!res.ok) {
+                   const err = await res.json();
+                   throw new Error(err.error || 'Failed to add');
+                }
+                input.value = '';
+                await window.loadCollaborators();
+             } catch (err) {
+                alert(err.message);
+             } finally {
+                input.disabled = false;
+             }
+          };
+          
+          window.removeCollaborator = async (did) => {
+             if (!confirm('Remove this collaborator?')) return;
+             try {
+                await fetch('/api/acl', {
+                   method: 'DELETE',
+                   headers: { 'Content-Type': 'application/json' },
+                   body: JSON.stringify({ docId, did })
+                });
+                await window.loadCollaborators();
+             } catch (err) {
+                alert('Failed to remove collaborator');
+             }
+          };
 
           const ydoc = new Y.Doc();
 
@@ -442,6 +553,38 @@ export function EditorPage() {
          border-radius: 3px 3px 3px 0;
          white-space: nowrap;
          pointer-events: none;
+       }
+       
+       /* Modal styles */
+       .modal-overlay {
+         position: fixed;
+         top: 0; left: 0; width: 100%; height: 100%;
+         background: rgba(0,0,0,0.5);
+         backdrop-filter: blur(4px);
+         display: flex;
+         justify-content: center;
+         align-items: center;
+         z-index: 100;
+         opacity: 0;
+         pointer-events: none;
+         transition: opacity 0.2s;
+       }
+       .modal-overlay.active {
+         opacity: 1;
+         pointer-events: auto;
+       }
+       .modal-content {
+         background: var(--bg-main);
+         padding: 2rem;
+         border-radius: 12px;
+         width: 100%;
+         max-width: 500px;
+         box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+         font-family: var(--font-sans);
+       }
+       @media (prefers-color-scheme: dark) {
+         .modal-content { border: 1px solid rgba(255,255,255,0.1); }
+         .modal-content input, .modal-content select { background: rgba(255,255,255,0.05); color: white; border-color: rgba(255,255,255,0.2) !important; }
        }
     </style>
   `;
