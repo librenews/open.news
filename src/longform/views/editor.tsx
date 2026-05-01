@@ -151,29 +151,28 @@ export function EditorPage() {
                 const res = await fetch('/api/acl?docId=' + encodeURIComponent(docId));
                 if (!res.ok) throw new Error('Failed to load ACLs');
                 const data = await res.json();
-                
-                list.innerHTML = `
-                  <div style="display: flex; align-items: center; justify-content: space-between;">
-                    <div style="display: flex; flex-direction: column;">
-                      <span style="font-weight: 600; font-size: 15px;">${window.SESSION_HANDLE || window.SESSION_DID} (You)</span>
-                    </div>
-                    <span style="color: var(--text-muted); font-size: 14px;">Owner</span>
-                  </div>
-                `;
+
+                // Owner entry
+                list.innerHTML =
+                  '<div style="display: flex; align-items: center; justify-content: space-between;">' +
+                    '<div style="display: flex; flex-direction: column;">' +
+                      '<span style="font-weight: 600; font-size: 15px;">' + (window.SESSION_HANDLE || window.SESSION_DID) + ' (You)</span>' +
+                    '</div>' +
+                    '<span style="color: var(--text-muted); font-size: 14px;">Owner</span>' +
+                  '</div>';
                 
                 for (const acl of data.acls) {
-                   list.innerHTML += `
-                     <div style="display: flex; align-items: center; justify-content: space-between;">
-                       <div style="display: flex; flex-direction: column;">
-                         <span style="font-weight: 600; font-size: 15px;">${acl.handle || acl.did}</span>
-                         <span style="font-size: 12px; color: var(--text-muted);">${acl.did}</span>
-                       </div>
-                       <div style="display: flex; align-items: center; gap: 1rem;">
-                         <span style="color: var(--text-muted); font-size: 14px;">${acl.permission === 'write' ? 'Can Edit' : 'View Only'}</span>
-                         <button onclick="window.removeCollaborator('${acl.did}')" style="background: none; border: none; color: #f02050; cursor: pointer; font-size: 14px;">Remove</button>
-                       </div>
-                     </div>
-                   `;
+                  list.innerHTML +=
+                    '<div style="display: flex; align-items: center; justify-content: space-between;">' +
+                      '<div style="display: flex; flex-direction: column;">' +
+                        '<span style="font-weight: 600; font-size: 15px;">' + (acl.handle || acl.did) + '</span>' +
+                        '<span style="font-size: 12px; color: var(--text-muted);">' + acl.did + '</span>' +
+                      '</div>' +
+                      '<div style="display: flex; align-items: center; gap: 1rem;">' +
+                        '<span style="color: var(--text-muted); font-size: 14px;">' + (acl.permission === "write" ? "Can Edit" : "View Only") + '</span>' +
+                        '<button onclick="window.removeCollaborator(\'' + acl.did + '\')" style="background: none; border: none; color: #f02050; cursor: pointer; font-size: 14px;">Remove</button>' +
+                      '</div>' +
+                    '</div>';
                 }
              } catch (err) {
                 list.innerHTML = '<div style="color: #f02050; font-size: 14px;">Error loading collaborators</div>';
