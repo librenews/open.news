@@ -102,7 +102,7 @@ export function EditorPage() {
           let docId = urlParams.get('doc');
           if (!docId) {
             const rkey = Math.random().toString(36).substring(2, 15);
-            docId = window.SESSION_DID ? `at://${window.SESSION_DID}/site.standard.document/${rkey}` : rkey;
+            docId = window.SESSION_DID ? 'at://' + window.SESSION_DID + '/site.standard.document/' + rkey : rkey;
             const newUrl = new URL(window.location);
             newUrl.searchParams.set('doc', docId);
             window.history.replaceState({}, '', newUrl);
