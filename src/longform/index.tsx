@@ -11,6 +11,7 @@ import { Layout } from './views/layout.js';
 import { authRouter, getSession, getLongformAuthClient } from './routes/auth.js';
 import { Agent } from '@atproto/api';
 import { serializeTiptapToLeaflet } from './lib/leafletExporter.js';
+import { resolvePds } from '../lib/pds.js';
 import { announcePublication } from './bot.js';
 
 process.on('unhandledRejection', (err) => {
@@ -123,8 +124,13 @@ app.get('/post/:did/:rkey', async (c) => {
       const oauthSession = await client.restore(sessionDid);
       agentToUse = new Agent(oauthSession);
     } else {
-      // Fallback to unauthenticated agent hitting the public appview
-      agentToUse = new Agent({ service: 'https://public.api.bsky.app' });
+      // Resolve the author's specific PDS for unauthenticated fetching
+      try {
+        const pdsUrl = await resolvePds(did);
+        agentToUse = new Agent({ service: pdsUrl });
+      } catch (e) {
+        agentToUse = new Agent({ service: 'https://public.api.bsky.app' });
+      }
     }
     
     const record = await agentToUse.com.atproto.repo.getRecord({
@@ -184,7 +190,12 @@ app.get('/blob/:did/:cid', async (c) => {
       const oauthSession = await client.restore(sessionDid);
       agentToUse = new Agent(oauthSession);
     } else {
-      agentToUse = new Agent({ service: 'https://public.api.bsky.app' });
+      try {
+        const pdsUrl = await resolvePds(did);
+        agentToUse = new Agent({ service: pdsUrl });
+      } catch (e) {
+        agentToUse = new Agent({ service: 'https://public.api.bsky.app' });
+      }
     }
     
     const blobRes = await agentToUse.com.atproto.sync.getBlob({ did, cid });
