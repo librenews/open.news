@@ -382,7 +382,7 @@ app.get('/api/stats', async (c) => {
     
     const [likesRes, repostsRes] = await Promise.all([
       botAgent.app.bsky.feed.getLikes({ uri, cid }).catch(() => null),
-      botAgent.app.bsky.feed.getReposts({ uri, cid }).catch(() => null)
+      botAgent.app.bsky.feed.getRepostedBy({ uri, cid }).catch(() => null)
     ]);
     
     let liked = false;
@@ -390,16 +390,16 @@ app.get('/api/stats', async (c) => {
     
     if (sessionDid) {
       if (likesRes?.data?.likes) {
-        liked = likesRes.data.likes.some(l => l.actor.did === sessionDid);
+        liked = likesRes.data.likes.some((l: any) => l.actor.did === sessionDid);
       }
-      if (repostsRes?.data?.reposts) {
-        reposted = repostsRes.data.reposts.some(r => r.actor.did === sessionDid);
+      if (repostsRes?.data?.repostedBy) {
+        reposted = repostsRes.data.repostedBy.some((r: any) => r.did === sessionDid);
       }
     }
     
     return c.json({
       likes: likesRes?.data?.likes?.length || 0,
-      reposts: repostsRes?.data?.reposts?.length || 0,
+      reposts: repostsRes?.data?.repostedBy?.length || 0,
       liked,
       reposted
     });
