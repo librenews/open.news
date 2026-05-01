@@ -141,7 +141,7 @@ export function EditorPage() {
               CollaborationCursor.configure({
                 provider: provider,
                 user: {
-                  name: window.SESSION_DID || 'Anonymous',
+                  name: window.SESSION_HANDLE || window.SESSION_DID || 'Anonymous',
                   color: '#118156',
                 },
               }),
