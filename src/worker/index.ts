@@ -63,7 +63,7 @@ async function start() {
     }
   });
 
-  await boss.work('indexSiteStandard', { batchSize: 5 }, async (jobs) => {
+  await boss.work('indexSiteStandard', { batchSize: 50 }, async (jobs) => {
     for (const job of jobs) {
       await indexSiteStandardJob(job as Parameters<typeof indexSiteStandardJob>[0]);
     }
