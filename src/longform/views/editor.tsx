@@ -34,16 +34,17 @@ export function EditorPage() {
     </div>
 
     <script type="module">
-      import { Editor } from 'https://esm.sh/@tiptap/core@2.2.4';
-      import StarterKit from 'https://esm.sh/@tiptap/starter-kit@2.2.4';
-      import Placeholder from 'https://esm.sh/@tiptap/extension-placeholder@2.2.4';
-      import { BubbleMenu } from 'https://esm.sh/@tiptap/extension-bubble-menu@2.2.4';
-      import { FloatingMenu } from 'https://esm.sh/@tiptap/extension-floating-menu@2.2.4';
-      import Image from 'https://esm.sh/@tiptap/extension-image@2.2.4';
-      import Collaboration from 'https://esm.sh/@tiptap/extension-collaboration@2.2.4';
-      import CollaborationCursor from 'https://esm.sh/@tiptap/extension-collaboration-cursor@2.2.4';
-      import { HocuspocusProvider } from 'https://esm.sh/@hocuspocus/provider@2';
-      import { Node, mergeAttributes } from 'https://esm.sh/@tiptap/core@2.2.4';
+      import { Editor } from 'https://esm.sh/@tiptap/core@2.2.4?deps=yjs@13.6.8';
+      import StarterKit from 'https://esm.sh/@tiptap/starter-kit@2.2.4?deps=yjs@13.6.8';
+      import Placeholder from 'https://esm.sh/@tiptap/extension-placeholder@2.2.4?deps=yjs@13.6.8';
+      import { BubbleMenu } from 'https://esm.sh/@tiptap/extension-bubble-menu@2.2.4?deps=yjs@13.6.8';
+      import { FloatingMenu } from 'https://esm.sh/@tiptap/extension-floating-menu@2.2.4?deps=yjs@13.6.8';
+      import Image from 'https://esm.sh/@tiptap/extension-image@2.2.4?deps=yjs@13.6.8';
+      import Collaboration from 'https://esm.sh/@tiptap/extension-collaboration@2.2.4?deps=yjs@13.6.8';
+      import CollaborationCursor from 'https://esm.sh/@tiptap/extension-collaboration-cursor@2.2.4?deps=yjs@13.6.8';
+      import { HocuspocusProvider } from 'https://esm.sh/@hocuspocus/provider@2?deps=yjs@13.6.8';
+      import { Node, mergeAttributes } from 'https://esm.sh/@tiptap/core@2.2.4?deps=yjs@13.6.8';
+      import * as Y from 'https://esm.sh/yjs@13.6.8';
 
       const EmbedNode = Node.create({
         name: 'embed',
@@ -106,9 +107,12 @@ export function EditorPage() {
             window.history.replaceState({}, '', newUrl);
           }
 
+          const ydoc = new Y.Doc();
+
           const provider = new HocuspocusProvider({
             url: 'wss://' + window.location.host + '/collab/',
             name: docId,
+            document: ydoc,
             onSynced() {
               const statusEl = document.getElementById('draft-status');
               if (statusEl) {
@@ -119,75 +123,79 @@ export function EditorPage() {
             }
           });
 
-          window.editor = new Editor({
-          element: document.querySelector('#editor-container'),
-          extensions: [
-            StarterKit.configure({ heading: { levels: [2, 3] }, history: false }),
-            Image,
-            EmbedNode,
-            Placeholder.configure({
-              placeholder: 'Tell your story...',
-            }),
-            Collaboration.configure({
-              document: provider.document,
-            }),
-            CollaborationCursor.configure({
-              provider: provider,
-              user: {
-                name: 'Anonymous',
-                color: '#f02050',
-              },
-            }),
-            BubbleMenu.configure({
-              element: bubbleMenuEl,
-              tippyOptions: { duration: 150, animation: 'shift-away' },
-            }),
-            FloatingMenu.configure({
-              element: floatingMenuEl,
-              tippyOptions: { duration: 150, placement: 'left-start' },
-            }),
-          ],
+          try {
+            window.editor = new Editor({
+            element: document.querySelector('#editor-container'),
+            extensions: [
+              StarterKit.configure({ heading: { levels: [2, 3] }, history: false }),
+              Image,
+              EmbedNode,
+              Placeholder.configure({
+                placeholder: 'Tell your story...',
+              }),
+              Collaboration.configure({
+                document: ydoc,
+              }),
+              CollaborationCursor.configure({
+                provider: provider,
+                user: {
+                  name: 'Anonymous',
+                  color: '#f02050',
+                },
+              }),
+              BubbleMenu.configure({
+                element: bubbleMenuEl,
+                tippyOptions: { duration: 150, animation: 'shift-away' },
+              }),
+              FloatingMenu.configure({
+                element: floatingMenuEl,
+                tippyOptions: { duration: 150, placement: 'left-start' },
+              }),
+            ],
 
-          editorProps: {
-            attributes: {
-              class: 'prose mx-auto focus:outline-none',
-            },
-            handleDrop: function(view, event, slice, moved) {
-              if (!moved && event.dataTransfer && event.dataTransfer.files && event.dataTransfer.files.length > 0) {
-                window.processImageFile(event.dataTransfer.files[0]);
-                event.preventDefault();
-                return true;
+            editorProps: {
+              attributes: {
+                class: 'prose mx-auto focus:outline-none',
+              },
+              handleDrop: function(view, event, slice, moved) {
+                if (!moved && event.dataTransfer && event.dataTransfer.files && event.dataTransfer.files.length > 0) {
+                  window.processImageFile(event.dataTransfer.files[0]);
+                  event.preventDefault();
+                  return true;
+                }
+                return false;
+              },
+              handlePaste: function(view, event, slice) {
+                if (event.clipboardData && event.clipboardData.files && event.clipboardData.files.length > 0) {
+                  window.processImageFile(event.clipboardData.files[0]);
+                  event.preventDefault();
+                  return true;
+                }
+                return false;
               }
-              return false;
             },
-            handlePaste: function(view, event, slice) {
-              if (event.clipboardData && event.clipboardData.files && event.clipboardData.files.length > 0) {
-                window.processImageFile(event.clipboardData.files[0]);
-                event.preventDefault();
-                return true;
-              }
-              return false;
+            onTransaction({ editor }) {
+              // Update active states
+              bubbleMenuEl.querySelectorAll('button').forEach(btn => {
+                const cmd = btn.dataset.command;
+                let isActive = false;
+                if (['bold', 'italic', 'strike', 'blockquote'].includes(cmd)) {
+                   isActive = editor.isActive(cmd);
+                } else if (cmd === 'h2') {
+                   isActive = editor.isActive('heading', { level: 2 });
+                } else if (cmd === 'h3') {
+                   isActive = editor.isActive('heading', { level: 3 });
+                }
+                btn.classList.toggle('is-active', isActive);
+              });
+            },
+            onUpdate() {
+              // Note: Hocuspocus handles sync automatically
             }
-          },
-          onTransaction({ editor }) {
-            // Update active states
-            bubbleMenuEl.querySelectorAll('button').forEach(btn => {
-              const cmd = btn.dataset.command;
-              let isActive = false;
-              if (['bold', 'italic', 'strike', 'blockquote'].includes(cmd)) {
-                 isActive = editor.isActive(cmd);
-              } else if (cmd === 'h2') {
-                 isActive = editor.isActive('heading', { level: 2 });
-              } else if (cmd === 'h3') {
-                 isActive = editor.isActive('heading', { level: 3 });
-              }
-              btn.classList.toggle('is-active', isActive);
-            });
-          },
-          onUpdate() {
-            // Note: Hocuspocus handles sync automatically
+          });
+          } catch (e) {
+            alert('Editor initialization failed: ' + e.message);
           }
-        });
 
         // Event bindings for bubble menu
         bubbleMenuEl.addEventListener('click', (e) => {
