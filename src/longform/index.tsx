@@ -439,27 +439,32 @@ app.get('/api/acl', async (c) => {
 });
 
 app.post('/api/acl', async (c) => {
-  const sessionDid = await getSession(c);
-  const { docId, didOrHandle, permission } = await c.req.json();
-  if (!sessionDid || !docId || !didOrHandle) return c.json({ error: 'Missing params' }, 400);
-  if (!docId.startsWith(`at://${sessionDid}/`)) return c.json({ error: 'Unauthorized' }, 403);
+  try {
+    const sessionDid = await getSession(c);
+    const { docId, didOrHandle, permission } = await c.req.json();
+    if (!sessionDid || !docId || !didOrHandle) return c.json({ error: 'Missing params' }, 400);
+    if (!docId.startsWith(`at://${sessionDid}/`)) return c.json({ error: 'Unauthorized' }, 403);
 
-  let targetDid = didOrHandle.trim();
-  if (!targetDid.startsWith('did:')) {
-    targetDid = targetDid.replace(/^@/, '');
-    const res = await fetch(`https://public.api.bsky.app/xrpc/com.atproto.identity.resolveHandle?handle=${encodeURIComponent(targetDid)}`);
-    if (!res.ok) return c.json({ error: 'Handle not found' }, 404);
-    const data = await res.json();
-    targetDid = data.did;
+    let targetDid = didOrHandle.trim();
+    if (!targetDid.startsWith('did:')) {
+      targetDid = targetDid.replace(/^@/, '');
+      const res = await fetch(`https://public.api.bsky.app/xrpc/com.atproto.identity.resolveHandle?handle=${encodeURIComponent(targetDid)}`);
+      if (!res.ok) return c.json({ error: 'Handle not found' }, 404);
+      const data = await res.json();
+      targetDid = data.did;
+    }
+
+    await db.query(
+      `INSERT INTO longform_yjs_acl (document_name, did, permission) VALUES ($1, $2, $3)
+       ON CONFLICT (document_name, did) DO UPDATE SET permission = $3`,
+      [docId, targetDid, permission || 'write']
+    );
+    const profile = await fetchUserProfile(targetDid);
+    return c.json({ success: true, did: targetDid, handle: profile.handle, permission: permission || 'write' });
+  } catch (err: any) {
+    logger.error({ err }, 'Failed to add collaborator');
+    return c.json({ error: err.message || 'Internal server error' }, 500);
   }
-
-  await db.query(
-    `INSERT INTO longform_yjs_acl (document_name, did, permission) VALUES ($1, $2, $3)
-     ON CONFLICT (document_name, did) DO UPDATE SET permission = $3`,
-    [docId, targetDid, permission || 'write']
-  );
-  const profile = await fetchUserProfile(targetDid);
-  return c.json({ success: true, did: targetDid, handle: profile.handle, permission: permission || 'write' });
 });
 
 app.delete('/api/acl', async (c) => {
