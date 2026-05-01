@@ -139,8 +139,23 @@ app.get('/post/:did/:rkey', async (c) => {
     
     const doc = record.data.value as any;
     
+    // Extract description from first text block if no description is provided
+    let excerpt = '';
+    if (doc.content?.pages?.[0]?.blocks) {
+      const textBlock = doc.content.pages[0].blocks.find((b: any) => b.block?.$type === 'pub.leaflet.blocks.text');
+      if (textBlock && textBlock.block?.plaintext) {
+        excerpt = textBlock.block.plaintext.substring(0, 160).trim() + '...';
+      }
+    }
+    
+    const og = {
+      title: doc.title,
+      description: excerpt || 'Read this article on Longform',
+      url: `https://${config.LONGFORM_DOMAIN}/post/${did}/${rkey}`,
+    };
+    
     return c.html((
-      <Layout title={`${doc.title} - ${config.LONGFORM_DOMAIN}`} profile={sessionProfile}>
+      <Layout title={`${doc.title} - ${config.LONGFORM_DOMAIN}`} profile={sessionProfile} og={og}>
         {ReaderPage(doc, did, authorProfile)}
       </Layout>
     ) as unknown as string);
@@ -196,7 +211,8 @@ app.post('/api/publish', async (c) => {
      
      const title = body.title || 'Untitled Draft';
      const rkey = Math.random().toString(36).substring(2, 15);
-     const leafletDoc = await serializeTiptapToLeaflet(body.document, title, sessionDid, agent, rkey);
+     const documentJson = body.document;
+     const leafletDoc = await serializeTiptapToLeaflet(documentJson, title, sessionDid, agent, rkey);
      
      const res = await agent.com.atproto.repo.createRecord({
        repo: sessionDid,
@@ -205,10 +221,11 @@ app.post('/api/publish', async (c) => {
        record: leafletDoc
      });
      
-     // Retrieve user handle for logging and announcement
+     // Retrieve user handle for logging and announcement using public AppView
      let authorHandle = sessionDid;
      try {
-       const profile = await agent.getProfile({ actor: sessionDid });
+       const publicAgent = new BskyAgent({ service: 'https://public.api.bsky.app' });
+       const profile = await publicAgent.getProfile({ actor: sessionDid });
        if (profile.data.handle) authorHandle = profile.data.handle;
      } catch (e) {
        // fallback to did
@@ -217,10 +234,25 @@ app.post('/api/publish', async (c) => {
      // Structured telemetry log
      logger.info({ event: 'longform_publish', did: sessionDid, handle: authorHandle, uri: res.data.uri }, 'User successfully published a document');
      
-     // Announce the publication via Bot asynchronously (don't await)
-     announcePublication(authorHandle, title, res.data.uri).catch(e => {
-       logger.error({ err: e }, 'Failed asynchronous bot publication announcement');
-     });
+     // Calculate word count to prevent spamming tests
+     let textContent = '';
+     if (documentJson && documentJson.content) {
+       const extractText = (node: any) => {
+         if (node.type === 'text') textContent += (node.text || '') + ' ';
+         if (node.content) node.content.forEach(extractText);
+       };
+       extractText(documentJson);
+     }
+     const wordCount = textContent.trim().split(/\s+/).length;
+
+     if (wordCount >= 100) {
+       // Announce the publication via Bot asynchronously (don't await)
+       announcePublication(authorHandle, title, res.data.uri).catch(e => {
+         logger.error({ err: e }, 'Failed asynchronous bot publication announcement');
+       });
+     } else {
+       logger.info({ uri: res.data.uri, wordCount }, 'Skipping bot announcement for short post');
+     }
      
      return c.json({ success: true, uri: res.data.uri, cid: res.data.cid });
    } catch (err: any) {

@@ -1,6 +1,6 @@
 import { html } from 'hono/html';
 
-export function Layout({ title, children, profile, headerAction }: { title: string; children: any; profile?: { displayName: string, avatar: string, handle: string }; headerAction?: any }) {
+export function Layout({ title, children, profile, headerAction, og }: { title: string; children: any; profile?: { displayName: string, avatar: string, handle: string }; headerAction?: any; og?: { title: string; description: string; url: string; image?: string } }) {
   return html`
     <!DOCTYPE html>
     <html lang="en">
@@ -8,6 +8,14 @@ export function Layout({ title, children, profile, headerAction }: { title: stri
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <title>${title}</title>
+        ${og ? html`
+          <meta property="og:title" content="${og.title}" />
+          <meta property="og:description" content="${og.description}" />
+          ${og.image ? html`<meta property="og:image" content="${og.image}" />` : ''}
+          <meta property="og:url" content="${og.url}" />
+          <meta property="og:type" content="article" />
+          <meta name="twitter:card" content="summary_large_image" />
+        ` : ''}
         <link rel="icon" type="image/png" href="/favicon.png" />
         <link rel="preconnect" href="https://fonts.googleapis.com">
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>

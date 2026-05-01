@@ -268,7 +268,12 @@ export function EditorPage() {
            if (data.success) {
              try { window.localStorage.removeItem('longform_draft'); } catch(e) {}
              window.editor.commands.setContent('');
-             alert('Published successfully to Leaflet!');
+             
+             // Redirect to the newly published post
+             const parts = data.uri.split('/');
+             const authorDid = parts[2];
+             const rkey = parts[4];
+             window.location.href = '/post/' + authorDid + '/' + rkey;
            } else {
              alert('Failed to publish: ' + data.error);
            }
