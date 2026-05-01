@@ -195,14 +195,14 @@ export function ReaderPage(doc: LeafletDocument, authorDid: string, profile: any
                       <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
                       Reply
                     </a>
-                    <span style="display: flex; align-items: center; gap: 0.25rem;">
+                    <button onclick="handleCommentAction(this, 'repost', '\${post.uri}', '\${post.cid}')" style="background: none; border: none; cursor: pointer; color: inherit; display: flex; align-items: center; gap: 0.25rem; font-family: inherit; font-size: inherit; padding: 0; transition: color 0.2s;" onmouseover="if(!this.dataset.active) this.style.color='#20d070'" onmouseout="if(!this.dataset.active) this.style.color='inherit'">
                       <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><path d="M17 1l4 4-4 4"></path><path d="M3 11V9a4 4 0 0 1 4-4h14"></path><path d="M7 23l-4-4 4-4"></path><path d="M21 13v2a4 4 0 0 1-4 4H3"></path></svg>
-                      \${post.repostCount || 0}
-                    </span>
-                    <span style="display: flex; align-items: center; gap: 0.25rem;">
-                      <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
-                      \${post.likeCount || 0}
-                    </span>
+                      <span class="count">\${post.repostCount || 0}</span>
+                    </button>
+                    <button onclick="handleCommentAction(this, 'like', '\${post.uri}', '\${post.cid}')" style="background: none; border: none; cursor: pointer; color: inherit; display: flex; align-items: center; gap: 0.25rem; font-family: inherit; font-size: inherit; padding: 0; transition: color 0.2s;" onmouseover="if(!this.dataset.active) this.style.color='#f02050'" onmouseout="if(!this.dataset.active) this.style.color='inherit'">
+                      <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none" class="icon"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
+                      <span class="count">\${post.likeCount || 0}</span>
+                    </button>
                   </div>
                 </div>
               </div>
@@ -237,6 +237,33 @@ export function ReaderPage(doc: LeafletDocument, authorDid: string, profile: any
             if (action === 'like') icon.setAttribute('fill', 'currentColor');
             let currentCount = parseInt(count.innerText) || 0;
             count.innerText = (currentCount + 1).toString();
+          } else {
+            alert(\`Failed to \${action}: \${data.error}\`);
+          }
+        } catch (err) {
+          alert('Network error occurred.');
+        }
+      }
+
+      async function handleCommentAction(btn, action, uri, cid) {
+        try {
+          const res = await fetch(\`/api/\${action}\`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ uri, cid })
+          });
+          const data = await res.json();
+          if (res.status === 401) {
+            alert('Please sign in to interact with comments.');
+          } else if (data.success) {
+            // Optimistic update
+            btn.dataset.active = "true";
+            btn.style.color = action === 'like' ? '#f02050' : '#20d070';
+            const icon = btn.querySelector('.icon');
+            if (icon && action === 'like') icon.setAttribute('fill', 'currentColor');
+            const countSpan = btn.querySelector('.count');
+            let currentCount = parseInt(countSpan.innerText) || 0;
+            countSpan.innerText = (currentCount + 1).toString();
           } else {
             alert(\`Failed to \${action}: \${data.error}\`);
           }

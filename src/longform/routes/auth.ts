@@ -27,7 +27,7 @@ export async function getLongformAuthClient(): Promise<NodeOAuthClient> {
   _oauthClient = new NodeOAuthClient({
     clientMetadata: {
       client_name: 'Longform Publishing (open.news)',
-      client_id: `${clientUri}/client-metadata.json`,
+      client_id: `${clientUri}/client-metadata.json?v=4`,
       client_uri: clientUri,
       redirect_uris: [`${clientUri}/oauth/callback`],
       grant_types: ['authorization_code', 'refresh_token'],
@@ -83,7 +83,7 @@ export async function getLongformAuthClient(): Promise<NodeOAuthClient> {
 authRouter.get('/client-metadata.json', async (c) => {
   const clientUri = `https://${config.LONGFORM_DOMAIN}`;
   return c.json({
-    client_id: `${clientUri}/client-metadata.json`,
+    client_id: `${clientUri}/client-metadata.json?v=4`,
     client_name: 'Longform Publishing (open.news)',
     client_uri: clientUri,
     redirect_uris: [`${clientUri}/oauth/callback`],
@@ -103,7 +103,7 @@ authRouter.get('/oauth/login', async (c) => {
 
   try {
     const client = await getLongformAuthClient();
-    const url = await client.authorize(handle, { scope: 'atproto' });
+    const url = await client.authorize(handle, { scope: 'atproto repo:site.standard.document blob:image/jpeg repo:app.bsky.feed.like repo:app.bsky.feed.repost' });
     return c.redirect(url.toString());
   } catch (err) {
     logger.error({ err, handle }, 'Longform OAuth initiation failed');
