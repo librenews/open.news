@@ -2,7 +2,7 @@
  * Shared pg-boss job enqueue helper.
  * Imported lazily by routes to avoid circular deps with the worker.
  */
-import PgBoss from 'pg-boss';
+import PgBoss, { SendOptions } from 'pg-boss';
 import { config } from '../lib/config.js';
 import { logger } from '../lib/logger.js';
 
@@ -21,10 +21,10 @@ async function getBoss(): Promise<PgBoss> {
   return _boss;
 }
 
-export async function enqueueJob(name: string, data: Record<string, unknown>): Promise<void> {
+export async function enqueueJob(name: string, data: Record<string, unknown>, options?: SendOptions): Promise<void> {
   const boss = await getBoss();
   // pg-boss v10: queue must exist before send
   await boss.createQueue(name);
-  const jobId = await boss.send(name, data);
+  const jobId = await boss.send(name, data, options);
   logger.info({ name, jobId }, 'Job enqueued');
 }

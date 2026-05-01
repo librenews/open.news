@@ -202,12 +202,12 @@ function handleEvent(event: JetstreamEvent): void {
       return;
     }
 
-    // 1. Enqueue indexing job for this specific post
+    // 1. Enqueue indexing job for this specific post (high priority for live events)
     enqueueJob('indexSiteStandard', {
       postUri,
       did,
       record: commit.record
-    });
+    }, { priority: 10 });
 
     // 2. Check if we've seen this author before. If not, trigger a full backfill.
     // (We use a fire-and-forget catch to avoid blocking the firehose loop)
