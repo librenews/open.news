@@ -162,17 +162,33 @@ export function EditorPage() {
                   '</div>';
                 
                 for (const acl of data.acls) {
-                  list.innerHTML +=
-                    '<div style="display: flex; align-items: center; justify-content: space-between;">' +
-                      '<div style="display: flex; flex-direction: column;">' +
-                        '<span style="font-weight: 600; font-size: 15px;">' + (acl.handle || acl.did) + '</span>' +
-                        '<span style="font-size: 12px; color: var(--text-muted);">' + acl.did + '</span>' +
-                      '</div>' +
-                      '<div style="display: flex; align-items: center; gap: 1rem;">' +
-                        '<span style="color: var(--text-muted); font-size: 14px;">' + (acl.permission === "write" ? "Can Edit" : "View Only") + '</span>' +
-                        '<button onclick="window.removeCollaborator(\'' + acl.did + '\')" style="background: none; border: none; color: #f02050; cursor: pointer; font-size: 14px;">Remove</button>' +
-                      '</div>' +
-                    '</div>';
+                  var row = document.createElement('div');
+                  row.style.cssText = 'display: flex; align-items: center; justify-content: space-between;';
+                  var info = document.createElement('div');
+                  info.style.cssText = 'display: flex; flex-direction: column;';
+                  var nameSpan = document.createElement('span');
+                  nameSpan.style.cssText = 'font-weight: 600; font-size: 15px;';
+                  nameSpan.textContent = acl.handle || acl.did;
+                  var didSpan = document.createElement('span');
+                  didSpan.style.cssText = 'font-size: 12px; color: var(--text-muted);';
+                  didSpan.textContent = acl.did;
+                  info.appendChild(nameSpan);
+                  info.appendChild(didSpan);
+                  var actions = document.createElement('div');
+                  actions.style.cssText = 'display: flex; align-items: center; gap: 1rem;';
+                  var permSpan = document.createElement('span');
+                  permSpan.style.cssText = 'color: var(--text-muted); font-size: 14px;';
+                  permSpan.textContent = acl.permission === 'write' ? 'Can Edit' : 'View Only';
+                  var removeBtn = document.createElement('button');
+                  removeBtn.style.cssText = 'background: none; border: none; color: #f02050; cursor: pointer; font-size: 14px;';
+                  removeBtn.textContent = 'Remove';
+                  removeBtn.setAttribute('data-did', acl.did);
+                  removeBtn.addEventListener('click', function() { window.removeCollaborator(this.getAttribute('data-did')); });
+                  actions.appendChild(permSpan);
+                  actions.appendChild(removeBtn);
+                  row.appendChild(info);
+                  row.appendChild(actions);
+                  list.appendChild(row);
                 }
              } catch (err) {
                 list.innerHTML = '<div style="color: #f02050; font-size: 14px;">Error loading collaborators</div>';
