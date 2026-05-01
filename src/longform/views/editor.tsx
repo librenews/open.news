@@ -6,7 +6,7 @@ export function EditorPage() {
     <div id="draft-status" style="position: fixed; bottom: 20px; right: 20px; background: rgba(0,0,0,0.8); color: white; padding: 6px 12px; border-radius: 6px; font-size: 13px; font-family: var(--font-sans); opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 50;">Synced to network</div>
     
     <!-- Share Modal -->
-    <div id="share-modal" class="modal-overlay">
+    <div id="share-modal" class="modal-overlay" onclick="if(event.target===this)window.closeShareModal()">
       <div class="modal-content">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
           <h3 style="margin: 0; font-family: var(--font-body); font-weight: 600;">Share Document</h3>
@@ -589,7 +589,7 @@ export function EditorPage() {
          pointer-events: auto;
        }
        .modal-content {
-         background: var(--bg-main);
+         background: #ffffff;
          padding: 2rem;
          border-radius: 12px;
          width: 100%;
@@ -598,7 +598,7 @@ export function EditorPage() {
          font-family: var(--font-sans);
        }
        @media (prefers-color-scheme: dark) {
-         .modal-content { border: 1px solid rgba(255,255,255,0.1); }
+         .modal-content { background: #1e1e1e; border: 1px solid rgba(255,255,255,0.1); }
          .modal-content input, .modal-content select { background: rgba(255,255,255,0.05); color: white; border-color: rgba(255,255,255,0.2) !important; }
        }
     </style>
