@@ -22,6 +22,18 @@ export function EditorPage() {
           <button type="submit" style="background: #118156; color: white; border: none; padding: 0.6rem 1rem; border-radius: 6px; cursor: pointer; font-weight: 500;">Invite</button>
         </form>
 
+        <div id="public-toggle-row" style="display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 0; border-bottom: 1px solid rgba(0,0,0,0.1); margin-bottom: 1.5rem;">
+          <div style="display: flex; flex-direction: column;">
+            <span style="font-weight: 600; font-size: 14px;">Anyone with the link can view</span>
+            <span style="font-size: 12px; color: var(--text-muted);">Public read-only access</span>
+          </div>
+          <label style="position: relative; display: inline-block; width: 44px; height: 24px; cursor: pointer;">
+            <input type="checkbox" id="public-toggle" onchange="window.togglePublicAccess(this.checked)" style="opacity: 0; width: 0; height: 0;" />
+            <span style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.2); border-radius: 24px; transition: background 0.2s;"></span>
+            <span id="public-toggle-knob" style="position: absolute; top: 2px; left: 2px; width: 20px; height: 20px; background: white; border-radius: 50%; transition: transform 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.2);"></span>
+          </label>
+        </div>
+
         <h4 style="margin: 0 0 1rem 0; font-family: var(--font-sans); font-size: 14px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em;">People with access</h4>
         <div id="collab-list" style="display: flex; flex-direction: column; gap: 0.8rem;">
           <!-- Rendered via JS -->
@@ -144,56 +156,91 @@ export function EditorPage() {
           };
           window.closeShareModal = () => document.getElementById('share-modal').classList.remove('active');
           
-          window.loadCollaborators = async () => {
-             const list = document.getElementById('collab-list');
-             list.innerHTML = '<div style="color: var(--text-muted); font-size: 14px;">Loading...</div>';
-             try {
-                const res = await fetch('/api/acl?docId=' + encodeURIComponent(docId));
-                if (!res.ok) throw new Error('Failed to load ACLs');
-                const data = await res.json();
+           window.loadCollaborators = async () => {
+              const list = document.getElementById('collab-list');
+              list.innerHTML = '<div style="color: var(--text-muted); font-size: 14px;">Loading...</div>';
+              try {
+                 const res = await fetch('/api/acl?docId=' + encodeURIComponent(docId));
+                 if (!res.ok) throw new Error('Failed to load ACLs');
+                 const data = await res.json();
 
-                // Owner entry
-                list.innerHTML =
-                  '<div style="display: flex; align-items: center; justify-content: space-between;">' +
-                    '<div style="display: flex; flex-direction: column;">' +
-                      '<span style="font-weight: 600; font-size: 15px;">' + (window.SESSION_HANDLE || window.SESSION_DID) + ' (You)</span>' +
-                    '</div>' +
-                    '<span style="color: var(--text-muted); font-size: 14px;">Owner</span>' +
-                  '</div>';
-                
-                for (const acl of data.acls) {
-                  var row = document.createElement('div');
-                  row.style.cssText = 'display: flex; align-items: center; justify-content: space-between;';
-                  var info = document.createElement('div');
-                  info.style.cssText = 'display: flex; flex-direction: column;';
-                  var nameSpan = document.createElement('span');
-                  nameSpan.style.cssText = 'font-weight: 600; font-size: 15px;';
-                  nameSpan.textContent = acl.handle || acl.did;
-                  var didSpan = document.createElement('span');
-                  didSpan.style.cssText = 'font-size: 12px; color: var(--text-muted);';
-                  didSpan.textContent = acl.did;
-                  info.appendChild(nameSpan);
-                  info.appendChild(didSpan);
-                  var actions = document.createElement('div');
-                  actions.style.cssText = 'display: flex; align-items: center; gap: 1rem;';
-                  var permSpan = document.createElement('span');
-                  permSpan.style.cssText = 'color: var(--text-muted); font-size: 14px;';
-                  permSpan.textContent = acl.permission === 'write' ? 'Can Edit' : 'View Only';
-                  var removeBtn = document.createElement('button');
-                  removeBtn.style.cssText = 'background: none; border: none; color: #f02050; cursor: pointer; font-size: 14px;';
-                  removeBtn.textContent = 'Remove';
-                  removeBtn.setAttribute('data-did', acl.did);
-                  removeBtn.addEventListener('click', function() { window.removeCollaborator(this.getAttribute('data-did')); });
-                  actions.appendChild(permSpan);
-                  actions.appendChild(removeBtn);
-                  row.appendChild(info);
-                  row.appendChild(actions);
-                  list.appendChild(row);
-                }
-             } catch (err) {
-                list.innerHTML = '<div style="color: #f02050; font-size: 14px;">Error loading collaborators</div>';
-             }
-          };
+                 // Update public toggle
+                 var publicEntry = data.acls.find(function(a) { return a.did === '*'; });
+                 var toggle = document.getElementById('public-toggle');
+                 var knob = document.getElementById('public-toggle-knob');
+                 var track = toggle ? toggle.nextElementSibling : null;
+                 if (toggle) {
+                    toggle.checked = !!publicEntry;
+                    if (knob) knob.style.transform = publicEntry ? 'translateX(20px)' : 'translateX(0)';
+                    if (track) track.style.background = publicEntry ? '#118156' : 'rgba(0,0,0,0.2)';
+                 }
+
+                 // Owner entry
+                 list.innerHTML =
+                   '<div style="display: flex; align-items: center; justify-content: space-between;">' +
+                     '<div style="display: flex; flex-direction: column;">' +
+                       '<span style="font-weight: 600; font-size: 15px;">' + (window.SESSION_HANDLE || window.SESSION_DID) + ' (You)</span>' +
+                     '</div>' +
+                     '<span style="color: var(--text-muted); font-size: 14px;">Owner</span>' +
+                   '</div>';
+                 
+                 // Filter out the wildcard entry from the list
+                 var collabs = data.acls.filter(function(a) { return a.did !== '*'; });
+                 for (const acl of collabs) {
+                   var row = document.createElement('div');
+                   row.style.cssText = 'display: flex; align-items: center; justify-content: space-between;';
+                   var info = document.createElement('div');
+                   info.style.cssText = 'display: flex; flex-direction: column;';
+                   var nameSpan = document.createElement('span');
+                   nameSpan.style.cssText = 'font-weight: 600; font-size: 15px;';
+                   nameSpan.textContent = acl.handle || acl.did;
+                   var didSpan = document.createElement('span');
+                   didSpan.style.cssText = 'font-size: 12px; color: var(--text-muted);';
+                   didSpan.textContent = acl.did;
+                   info.appendChild(nameSpan);
+                   info.appendChild(didSpan);
+                   var actions = document.createElement('div');
+                   actions.style.cssText = 'display: flex; align-items: center; gap: 1rem;';
+                   var permSpan = document.createElement('span');
+                   permSpan.style.cssText = 'color: var(--text-muted); font-size: 14px;';
+                   permSpan.textContent = acl.permission === 'write' ? 'Can Edit' : 'View Only';
+                   var removeBtn = document.createElement('button');
+                   removeBtn.style.cssText = 'background: none; border: none; color: #f02050; cursor: pointer; font-size: 14px;';
+                   removeBtn.textContent = 'Remove';
+                   removeBtn.setAttribute('data-did', acl.did);
+                   removeBtn.addEventListener('click', function() { window.removeCollaborator(this.getAttribute('data-did')); });
+                   actions.appendChild(permSpan);
+                   actions.appendChild(removeBtn);
+                   row.appendChild(info);
+                   row.appendChild(actions);
+                   list.appendChild(row);
+                 }
+              } catch (err) {
+                 list.innerHTML = '<div style="color: #f02050; font-size: 14px;">Error loading collaborators</div>';
+              }
+           };
+
+           window.togglePublicAccess = async (enabled) => {
+              try {
+                 if (enabled) {
+                    await fetch('/api/acl', {
+                       method: 'POST',
+                       headers: { 'Content-Type': 'application/json' },
+                       body: JSON.stringify({ docId: docId, didOrHandle: '*', permission: 'read' })
+                    });
+                 } else {
+                    await fetch('/api/acl', {
+                       method: 'DELETE',
+                       headers: { 'Content-Type': 'application/json' },
+                       body: JSON.stringify({ docId: docId, did: '*' })
+                    });
+                 }
+                 await window.loadCollaborators();
+              } catch (err) {
+                 alert('Failed to update public access');
+                 await window.loadCollaborators();
+              }
+           };
           
           window.addCollaborator = async (e) => {
              e.preventDefault();
@@ -248,6 +295,16 @@ export function EditorPage() {
                 clearTimeout(window._draftTimeout);
                 window._draftTimeout = setTimeout(() => { statusEl.style.opacity = '0'; }, 2000);
               }
+            },
+            onAuthenticationFailed(data) {
+              var container = document.getElementById('editor-container');
+              container.innerHTML = '<div style="text-align: center; padding: 4rem 2rem;">' +
+                '<div style="font-size: 48px; margin-bottom: 1rem;">\uD83D\uDD12</div>' +
+                '<h2 style="font-family: var(--font-sans); font-weight: 700; margin-bottom: 0.5rem;">Access Denied</h2>' +
+                '<p style="color: var(--text-muted); font-family: var(--font-sans); font-size: 16px; max-width: 400px; margin: 0 auto;">You don\'t have permission to view this document. Ask the owner to share it with you.</p>' +
+                '</div>';
+              var publishBtn = document.getElementById('publish-btn');
+              if (publishBtn) publishBtn.style.display = 'none';
             }
           });
 

@@ -446,7 +446,7 @@ app.post('/api/acl', async (c) => {
     if (!docId.startsWith(`at://${sessionDid}/`)) return c.json({ error: 'Unauthorized' }, 403);
 
     let targetDid = didOrHandle.trim();
-    if (!targetDid.startsWith('did:')) {
+    if (targetDid !== '*' && !targetDid.startsWith('did:')) {
       targetDid = targetDid.replace(/^@/, '');
       const res = await fetch(`https://public.api.bsky.app/xrpc/com.atproto.identity.resolveHandle?handle=${encodeURIComponent(targetDid)}`);
       if (!res.ok) return c.json({ error: 'Handle not found' }, 404);
@@ -490,7 +490,11 @@ const collabServer = HocuspocusServer.configure({
       const ownerDid = docName.split('/')[2];
       if (did === ownerDid) return { user: { id: did, permission: 'write' } };
       
-      const { rows } = await db.query('SELECT permission FROM longform_yjs_acl WHERE document_name = $1 AND did = $2', [docName, did]);
+      // Check specific DID permission first, then wildcard '*' (public access)
+      const { rows } = await db.query(
+        'SELECT permission FROM longform_yjs_acl WHERE document_name = $1 AND did IN ($2, $3) ORDER BY CASE WHEN did = $2 THEN 0 ELSE 1 END LIMIT 1',
+        [docName, did, '*']
+      );
       if (rows.length === 0) {
         throw new Error('Access denied: You are not authorized to view this document');
       }
