@@ -44,8 +44,8 @@ export function PostsPage(
           <button class="filter-btn" data-filter="published" onclick="filterItems('published')" style="background: rgba(0,0,0,0.06); color: var(--text-main); border: none; padding: 0.35rem 0.9rem; border-radius: 99px; cursor: pointer; font-family: var(--font-sans); font-size: 13px; font-weight: 500;">Published</button>
         </div>
 
-        <div id="items-list" style="display: flex; flex-direction: column; gap: 0;">
-          ${items.length === 0 ? html`<p style="color: var(--text-muted); font-family: var(--font-sans); text-align: center; padding: 3rem 0;">No posts yet. Click <strong>+ New Draft</strong> to get started.</p>` : ''}
+        <div id="items-list" style="display: flex; flex-direction: column; gap: 0; min-height: 120px;">
+          ${items.length === 0 ? html`<p style="color: var(--text-muted); font-family: var(--font-sans); text-align: center; padding: 3rem 0; margin: 0;">No posts yet. Click <strong>+ New Draft</strong> to get started.</p>` : ''}
           ${items.map(item => html`
             <div data-status="${item.status}" class="post-item" style="display: flex; align-items: center; justify-content: space-between; padding: 1rem 0; border-bottom: 1px solid rgba(0,0,0,0.06);">
               <a href="${item.status === 'draft' ? '/?doc=' + encodeURIComponent(item.documentName) : '/post/' + item.did + '/' + item.rkey}" style="text-decoration: none; color: inherit; display: flex; align-items: center; justify-content: space-between; flex: 1; min-width: 0; transition: opacity 0.15s;" onmouseover="this.style.opacity='0.7'" onmouseout="this.style.opacity='1'">
@@ -64,9 +64,9 @@ export function PostsPage(
       </div>
 
       <!-- Shared with me Tab -->
-      <div id="tab-shared" style="display: none;">
+      <div id="tab-shared" style="display: none; min-height: 120px;">
         <div style="display: flex; flex-direction: column; gap: 0;">
-          ${sharedItems.length === 0 ? html`<p style="color: var(--text-muted); font-family: var(--font-sans); text-align: center; padding: 3rem 0;">No documents have been shared with you yet.</p>` : ''}
+          ${sharedItems.length === 0 ? html`<p style="color: var(--text-muted); font-family: var(--font-sans); text-align: center; padding: 3rem 0; margin: 0;">No documents have been shared with you yet.</p>` : ''}
           ${sharedItems.map(item => html`
             <a href="/?doc=${encodeURIComponent(item.documentName)}" class="post-item" style="text-decoration: none; color: inherit; display: flex; align-items: center; justify-content: space-between; padding: 1rem 0; border-bottom: 1px solid rgba(0,0,0,0.06); transition: opacity 0.15s;" onmouseover="this.style.opacity='0.7'" onmouseout="this.style.opacity='1'">
               <div style="display: flex; flex-direction: column; gap: 0.3rem; min-width: 0; flex: 1;">
