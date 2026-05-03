@@ -25,7 +25,13 @@ export async function serializeTiptapToLeaflet(tiptapJson: any, title: string, d
     };
   }
 
+  let titleSkipped = false;
   for (const node of tiptapJson.content) {
+    // Skip the first H1 heading since it becomes the document title
+    if (!titleSkipped && node.type === "heading" && node.attrs?.level === 1) {
+      titleSkipped = true;
+      continue;
+    }
     if (node.type === 'paragraph' || node.type === 'heading' || node.type === 'blockquote' || node.type === 'codeBlock') {
       let plaintext = '';
       const facets: any[] = [];

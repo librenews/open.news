@@ -292,6 +292,10 @@ export function EditorPage() {
                 clearTimeout(window._draftTimeout);
                 window._draftTimeout = setTimeout(() => { statusEl.style.opacity = '0'; }, 2000);
               }
+              // If document is empty after sync, insert an H1 for the title
+              if (window.editor && window.editor.isEmpty) {
+                window.editor.commands.setContent({ type: 'doc', content: [{ type: 'heading', attrs: { level: 1 } }, { type: 'paragraph' }] });
+              }
             },
             onAuthenticationFailed(data) {
               var container = document.getElementById('editor-container');
@@ -309,11 +313,19 @@ export function EditorPage() {
             window.editor = new Editor({
             element: document.querySelector('#editor-container'),
             extensions: [
-              StarterKit.configure({ heading: { levels: [2, 3] }, history: false }),
+              StarterKit.configure({ heading: { levels: [1, 2, 3] }, history: false }),
               Image,
               EmbedNode,
               Placeholder.configure({
-                placeholder: 'Tell your story...',
+                placeholder: function(opts) {
+                  if (opts.node.type.name === 'heading' && opts.node.attrs.level === 1) {
+                    return 'Your title';
+                  }
+                  if (opts.editor.isEmpty) {
+                    return 'Start with a heading for your title...';
+                  }
+                  return '';
+                },
               }),
               Collaboration.configure({
                 document: ydoc,

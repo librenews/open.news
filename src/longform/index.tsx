@@ -310,6 +310,46 @@ app.post('/api/drafts', async (c) => {
   }
 });
 
+app.delete('/api/drafts', async (c) => {
+  const sessionDid = await getSession(c);
+  if (!sessionDid) return c.json({ error: 'Unauthorized' }, 401);
+
+  try {
+    const { docId, rkey } = await c.req.json();
+    if (!docId && !rkey) return c.json({ error: 'Missing docId or rkey' }, 400);
+
+    // If it is a published post (has rkey but no draft entry), delete from PDS
+    if (rkey) {
+      try {
+        const client = await getLongformAuthClient();
+        const oauthSession = await client.restore(sessionDid);
+        const agent = new Agent(oauthSession);
+        await agent.com.atproto.repo.deleteRecord({
+          repo: sessionDid,
+          collection: 'site.standard.document',
+          rkey: rkey
+        });
+      } catch (pdsErr: any) {
+        logger.warn({ err: pdsErr, rkey }, 'Failed to delete PDS record (may not exist)');
+      }
+    }
+
+    // Clean up local data if docId provided
+    if (docId) {
+      if (!docId.startsWith("at://" + sessionDid + "/")) return c.json({ error: 'Unauthorized' }, 403);
+      await db.query('DELETE FROM longform_yjs_acl WHERE document_name = ', [docId]);
+      await db.query('DELETE FROM longform_yjs_documents WHERE name = ', [docId]);
+      await db.query('DELETE FROM longform_drafts WHERE document_name =  AND owner_did = ', [docId, sessionDid]);
+    }
+
+    return c.json({ success: true });
+  } catch (err: any) {
+    logger.error({ err }, 'Failed to delete post');
+    return c.json({ error: err.message || 'Internal server error' }, 500);
+  }
+});
+
+
 app.post('/api/publish', async (c) => {
    const sessionDid = await getSession(c);
    if (!sessionDid) return c.json({ error: 'Unauthorized' }, 401);
