@@ -135,13 +135,10 @@ export function EditorPage() {
           };
 
           const urlParams = new URLSearchParams(window.location.search);
-          let docId = urlParams.get('doc');
+          var docId = urlParams.get('doc');
           if (!docId) {
-            const rkey = Math.random().toString(36).substring(2, 15);
-            docId = window.SESSION_DID ? 'at://' + window.SESSION_DID + '/site.standard.document/' + rkey : rkey;
-            const newUrl = new URL(window.location);
-            newUrl.searchParams.set('doc', docId);
-            window.history.replaceState({}, '', newUrl);
+            window.location.href = '/posts';
+            return;
           }
           
           const isOwner = window.SESSION_DID && docId.includes(window.SESSION_DID);
@@ -447,20 +444,39 @@ export function EditorPage() {
          btn.innerText = 'Publishing...';
          btn.disabled = true;
          
-         const title = window.prompt("Enter a title for your post:");
-         if (!title) {
-            btn.innerText = defaultTxt;
-            btn.disabled = false;
-            return;
+         // Extract title from first heading in the document
+         var editorJson = window.editor.getJSON();
+         var title = 'Untitled';
+         if (editorJson && editorJson.content) {
+           for (var i = 0; i < editorJson.content.length; i++) {
+             var node = editorJson.content[i];
+             if (node.type === 'heading' && node.content) {
+               var headingText = node.content.map(function(s) { return s.text || ''; }).join('').trim();
+               if (headingText) { title = headingText; break; }
+             }
+           }
          }
+         
+         if (title === 'Untitled') {
+           title = window.prompt('No heading found. Enter a title for your post:') || 'Untitled';
+           if (title === 'Untitled') {
+             btn.innerText = defaultTxt;
+             btn.disabled = false;
+             return;
+           }
+         }
+
+         // Get the docId from the URL
+         var publishDocId = new URLSearchParams(window.location.search).get('doc');
 
          try {
            const res = await fetch('/api/publish', {
              method: 'POST',
              headers: { 'Content-Type': 'application/json' },
              body: JSON.stringify({
-               title,
-               document: window.editor.getJSON()
+               title: title,
+               docId: publishDocId,
+               document: editorJson
              })
            });
            const data = await res.json();

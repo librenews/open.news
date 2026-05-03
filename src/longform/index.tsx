@@ -50,7 +50,7 @@ app.get('/', async (c) => {
     return c.html((
       <Layout title={`Login to Longform - Write securely on the AT Protocol`}>
         <div style="text-align: center; padding-top: 20vh;">
-          <img src="/logo.png" alt="Longform" style="height: 64px; margin-bottom: 0.5rem;" onerror="this.outerHTML='<h1 style=\\'font-family: var(--font-body); font-weight: 700; font-size: 54px; color: var(--text-main); letter-spacing: -0.03em; margin-bottom: 0.5rem;\\'>Longform</h1>'" />
+          <img src="/logo.png" alt="Longform" style="height: 64px; margin-bottom: 0.5rem;" onerror="this.outerHTML='<h1 style=\'font-family: var(--font-body); font-weight: 700; font-size: 54px; color: var(--text-main); letter-spacing: -0.03em; margin-bottom: 0.5rem;\'>Longform</h1>'" />
           <p style="color: var(--text-muted); font-family: var(--font-sans); margin-bottom: 3rem; font-size: 18px;">Sign in to your ATproto PDS to write.</p>
           <form action="/oauth/login" method="get">
             <input 
@@ -69,6 +69,10 @@ app.get('/', async (c) => {
       </Layout>
     ) as unknown as string);
   }
+
+  // If no doc param, redirect to posts/drafts listing
+  const docId = c.req.query('doc');
+  if (!docId) return c.redirect('/posts');
 
   const profile = await fetchUserProfile(sessionDid);
 
@@ -92,27 +96,93 @@ app.get('/posts', async (c) => {
   if (!sessionDid) return c.redirect('/');
   
   try {
+    const profile = await fetchUserProfile(sessionDid);
+
+    // Fetch drafts from DB
+    const { rows: drafts } = await db.query(
+      'SELECT document_name, title, published_uri, created_at, updated_at FROM longform_drafts WHERE owner_did = $1 ORDER BY updated_at DESC',
+      [sessionDid]
+    );
+
+    // Fetch published posts from PDS
     const client = await getLongformAuthClient();
     const oauthSession = await client.restore(sessionDid);
     const agent = new Agent(oauthSession);
-    
-    // Fetch all site.standard.document records for the user
-    const res = await agent.com.atproto.repo.listRecords({
+    const pdsRes = await agent.com.atproto.repo.listRecords({
       repo: sessionDid,
       collection: 'site.standard.document',
       limit: 100
     });
-    
-    const profile = await fetchUserProfile(sessionDid);
-    
+
+    // Build a set of published document names (at:// URIs) from drafts table
+    const publishedDraftNames = new Set(drafts.filter((d: any) => d.published_uri).map((d: any) => d.document_name));
+
+    // Combine: drafts (unpublished) + published posts from PDS
+    const items: any[] = [];
+
+    // Add unpublished drafts
+    for (const draft of drafts) {
+      if (!draft.published_uri) {
+        const parts = draft.document_name.split('/');
+        items.push({
+          documentName: draft.document_name,
+          title: draft.title || 'Untitled',
+          status: 'draft',
+          date: new Date(draft.updated_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+          rkey: parts[parts.length - 1],
+          did: sessionDid,
+          sortDate: new Date(draft.updated_at),
+        });
+      }
+    }
+
+    // Add published posts from PDS
+    for (const record of pdsRes.data.records as any[]) {
+      const rkey = record.uri.split('/').pop();
+      items.push({
+        documentName: record.uri,
+        title: record.value.title || 'Untitled',
+        status: 'published',
+        date: new Date(record.value.publishedAt || Date.now()).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+        rkey,
+        did: sessionDid,
+        sortDate: new Date(record.value.publishedAt || Date.now()),
+      });
+    }
+
+    // Sort by most recent first
+    items.sort((a: any, b: any) => b.sortDate.getTime() - a.sortDate.getTime());
+
+    // Fetch shared-with-me docs
+    const { rows: sharedRows } = await db.query(
+      `SELECT d.document_name, d.title, d.updated_at, a.permission, d.owner_did
+       FROM longform_drafts d
+       JOIN longform_yjs_acl a ON d.document_name = a.document_name
+       WHERE a.did = $1 AND a.did != '*' AND d.owner_did != $1
+       ORDER BY d.updated_at DESC`,
+      [sessionDid]
+    );
+
+    const sharedItems = [];
+    for (const row of sharedRows) {
+      const ownerProfile = await fetchUserProfile(row.owner_did);
+      sharedItems.push({
+        documentName: row.document_name,
+        title: row.title || 'Untitled',
+        permission: row.permission,
+        ownerHandle: ownerProfile.handle,
+        date: new Date(row.updated_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+      });
+    }
+
     return c.html((
-      <Layout title={`My Posts - ${config.LONGFORM_DOMAIN}`} profile={profile}>
-        {PostsPage(res.data.records as any, sessionDid)}
+      <Layout title={`My Work - ${config.LONGFORM_DOMAIN}`} profile={profile}>
+        {PostsPage(items, sharedItems, sessionDid)}
       </Layout>
     ) as unknown as string);
   } catch (err: any) {
     logger.error({ err }, 'Failed to fetch posts for dashboard');
-    return c.html((<Layout title="Error"><h1>Error loading posts</h1><p>${err.message}</p></Layout>) as unknown as string);
+    return c.html((<Layout title="Error"><h1>Error loading posts</h1><p>{err.message}</p></Layout>) as unknown as string);
   }
 });
 
@@ -220,6 +290,26 @@ app.get('/blob/:did/:cid', async (c) => {
   }
 });
 
+app.post('/api/drafts', async (c) => {
+  const sessionDid = await getSession(c);
+  if (!sessionDid) return c.json({ error: 'Unauthorized' }, 401);
+
+  try {
+    const rkey = Math.random().toString(36).substring(2, 15);
+    const docId = `at://${sessionDid}/site.standard.document/${rkey}`;
+    
+    await db.query(
+      'INSERT INTO longform_drafts (document_name, owner_did, title) VALUES ($1, $2, $3)',
+      [docId, sessionDid, 'Untitled']
+    );
+
+    return c.json({ docId });
+  } catch (err: any) {
+    logger.error({ err }, 'Failed to create draft');
+    return c.json({ error: err.message || 'Internal server error' }, 500);
+  }
+});
+
 app.post('/api/publish', async (c) => {
    const sessionDid = await getSession(c);
    if (!sessionDid) return c.json({ error: 'Unauthorized' }, 401);
@@ -230,9 +320,26 @@ app.post('/api/publish', async (c) => {
      const oauthSession = await client.restore(sessionDid);
      const agent = new Agent(oauthSession);
      
-     const title = body.title || 'Untitled Draft';
-     const rkey = Math.random().toString(36).substring(2, 15);
-     const documentJson = body.document;
+      // Extract title from first heading in the document, fallback to body.title
+      let title = body.title || 'Untitled Draft';
+      const documentJson = body.document;
+      if (documentJson && documentJson.content) {
+        for (const node of documentJson.content) {
+          if (node.type === 'heading' && node.content) {
+            const headingText = node.content.map((s: any) => s.text || '').join('').trim();
+            if (headingText) { title = headingText; break; }
+          }
+        }
+      }
+      
+      // Use rkey from docId if this is an existing draft, otherwise generate new
+      const docId = body.docId;
+      let rkey: string;
+      if (docId && docId.startsWith('at://')) {
+        rkey = docId.split('/').pop()!;
+      } else {
+        rkey = Math.random().toString(36).substring(2, 15);
+      }
      const leafletDoc = await serializeTiptapToLeaflet(documentJson, title, sessionDid, agent, rkey);
      
      const res = await agent.com.atproto.repo.createRecord({
@@ -275,7 +382,15 @@ app.post('/api/publish', async (c) => {
        logger.info({ uri: res.data.uri, wordCount }, 'Skipping bot announcement for short post');
      }
      
-     return c.json({ success: true, uri: res.data.uri, cid: res.data.cid });
+     // Mark draft as published
+      if (docId) {
+        await db.query(
+          'UPDATE longform_drafts SET published_uri = $1, title = $2, updated_at = NOW() WHERE document_name = $3',
+          [res.data.uri, title, docId]
+        );
+      }
+      
+      return c.json({ success: true, uri: res.data.uri, cid: res.data.cid });
    } catch (err: any) {
      logger.error({ err }, 'Failed to publish Leaflet document from Longform');
      return c.json({ error: err.message }, 500);

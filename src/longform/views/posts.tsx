@@ -1,27 +1,133 @@
 import { html } from 'hono/html';
-import { LeafletDocument } from '../../weblog/lexicons.js';
 
-export function PostsPage(records: { uri: string, cid: string, value: LeafletDocument }[], did: string) {
+interface DraftItem {
+  documentName: string;
+  title: string;
+  status: 'draft' | 'published';
+  date: string;
+  rkey: string;
+  did: string;
+}
+
+interface SharedItem {
+  documentName: string;
+  title: string;
+  permission: string;
+  ownerHandle: string;
+  date: string;
+}
+
+export function PostsPage(
+  items: DraftItem[],
+  sharedItems: SharedItem[],
+  sessionDid: string
+) {
   return html`
     <div style="margin-top: 2rem;">
-      <h1 style="font-family: var(--font-sans); letter-spacing: -0.03em; margin-bottom: 2rem;">My Posts</h1>
-      
-      ${records.length === 0 ? html`<p style="color: var(--text-muted)">No posts published yet.</p>` : ''}
-      
-      <div style="display: flex; flex-direction: column; gap: 1.5rem;">
-        ${records.map(r => {
-          const rkey = r.uri.split('/').pop();
-          const date = new Date(r.value.publishedAt || Date.now());
-          const formattedDate = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-          
-          return html`
-            <a href="/post/${did}/${rkey}" style="text-decoration: none; color: inherit; display: block; border-bottom: 1px solid rgba(0,0,0,0.1); padding-bottom: 1.5rem; transition: opacity 0.2s;" onmouseover="this.style.opacity='0.7'" onmouseout="this.style.opacity='1'">
-              <h2 style="font-family: var(--font-sans); margin: 0 0 0.5rem 0; font-size: 22px;">${r.value.title}</h2>
-              <span style="color: var(--text-muted); font-size: 14px; font-family: var(--font-sans);">${formattedDate}</span>
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+        <h1 style="font-family: var(--font-sans); letter-spacing: -0.03em; margin: 0;">My Work</h1>
+        <button onclick="window.createNewDraft()" id="new-draft-btn" style="background: #118156; color: white; border: none; padding: 0.5rem 1.2rem; border-radius: 99px; cursor: pointer; font-family: var(--font-sans); font-weight: 500; font-size: 14px;">+ New Draft</button>
+      </div>
+
+      <!-- Tabs -->
+      <div style="display: flex; gap: 0; border-bottom: 1px solid rgba(0,0,0,0.1); margin-bottom: 2rem; font-family: var(--font-sans);">
+        <button class="tab-btn active" data-tab="mine" onclick="switchTab('mine')" style="background: none; border: none; border-bottom: 2px solid #242424; padding: 0.75rem 1.5rem; cursor: pointer; font-weight: 600; font-size: 14px; color: var(--text-main);">My Work</button>
+        <button class="tab-btn" data-tab="shared" onclick="switchTab('shared')" style="background: none; border: none; border-bottom: 2px solid transparent; padding: 0.75rem 1.5rem; cursor: pointer; font-weight: 500; font-size: 14px; color: var(--text-muted);">Shared with me</button>
+      </div>
+
+      <!-- My Work Tab -->
+      <div id="tab-mine">
+        <!-- Filters -->
+        <div style="display: flex; gap: 0.5rem; margin-bottom: 1.5rem;">
+          <button class="filter-btn active" data-filter="all" onclick="filterItems('all')" style="background: #242424; color: white; border: none; padding: 0.35rem 0.9rem; border-radius: 99px; cursor: pointer; font-family: var(--font-sans); font-size: 13px; font-weight: 500;">All</button>
+          <button class="filter-btn" data-filter="draft" onclick="filterItems('draft')" style="background: rgba(0,0,0,0.06); color: var(--text-main); border: none; padding: 0.35rem 0.9rem; border-radius: 99px; cursor: pointer; font-family: var(--font-sans); font-size: 13px; font-weight: 500;">Drafts</button>
+          <button class="filter-btn" data-filter="published" onclick="filterItems('published')" style="background: rgba(0,0,0,0.06); color: var(--text-main); border: none; padding: 0.35rem 0.9rem; border-radius: 99px; cursor: pointer; font-family: var(--font-sans); font-size: 13px; font-weight: 500;">Published</button>
+        </div>
+
+        <div id="items-list" style="display: flex; flex-direction: column; gap: 0;">
+          ${items.length === 0 ? html`<p style="color: var(--text-muted); font-family: var(--font-sans); text-align: center; padding: 3rem 0;">No posts yet. Click <strong>+ New Draft</strong> to get started.</p>` : ''}
+          ${items.map(item => html`
+            <a href="${item.status === 'draft' ? '/?doc=' + encodeURIComponent(item.documentName) : '/post/' + item.did + '/' + item.rkey}" data-status="${item.status}" class="post-item" style="text-decoration: none; color: inherit; display: flex; align-items: center; justify-content: space-between; padding: 1rem 0; border-bottom: 1px solid rgba(0,0,0,0.06); transition: opacity 0.15s;" onmouseover="this.style.opacity='0.7'" onmouseout="this.style.opacity='1'">
+              <div style="display: flex; flex-direction: column; gap: 0.3rem; min-width: 0; flex: 1;">
+                <span style="font-family: var(--font-sans); font-weight: 600; font-size: 17px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${item.title}</span>
+                <span style="color: var(--text-muted); font-size: 13px; font-family: var(--font-sans);">${item.date}</span>
+              </div>
+              <span style="font-family: var(--font-sans); font-size: 12px; font-weight: 500; padding: 0.2rem 0.6rem; border-radius: 99px; white-space: nowrap; margin-left: 1rem; ${item.status === 'draft' ? 'background: #fff3cd; color: #856404;' : 'background: #d4edda; color: #155724;'}">${item.status === 'draft' ? 'Draft' : 'Published'}</span>
             </a>
-          `;
-        })}
+          `)}
+        </div>
+      </div>
+
+      <!-- Shared with me Tab -->
+      <div id="tab-shared" style="display: none;">
+        <div style="display: flex; flex-direction: column; gap: 0;">
+          ${sharedItems.length === 0 ? html`<p style="color: var(--text-muted); font-family: var(--font-sans); text-align: center; padding: 3rem 0;">No documents have been shared with you yet.</p>` : ''}
+          ${sharedItems.map(item => html`
+            <a href="/?doc=${encodeURIComponent(item.documentName)}" class="post-item" style="text-decoration: none; color: inherit; display: flex; align-items: center; justify-content: space-between; padding: 1rem 0; border-bottom: 1px solid rgba(0,0,0,0.06); transition: opacity 0.15s;" onmouseover="this.style.opacity='0.7'" onmouseout="this.style.opacity='1'">
+              <div style="display: flex; flex-direction: column; gap: 0.3rem; min-width: 0; flex: 1;">
+                <span style="font-family: var(--font-sans); font-weight: 600; font-size: 17px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${item.title}</span>
+                <span style="color: var(--text-muted); font-size: 13px; font-family: var(--font-sans);">by ${item.ownerHandle} · ${item.permission === 'write' ? 'Can Edit' : 'View Only'}</span>
+              </div>
+            </a>
+          `)}
+        </div>
       </div>
     </div>
+
+    <script>
+      function switchTab(tab) {
+        document.getElementById('tab-mine').style.display = tab === 'mine' ? 'block' : 'none';
+        document.getElementById('tab-shared').style.display = tab === 'shared' ? 'block' : 'none';
+        document.querySelectorAll('.tab-btn').forEach(function(btn) {
+          var isActive = btn.getAttribute('data-tab') === tab;
+          btn.style.borderBottomColor = isActive ? '#242424' : 'transparent';
+          btn.style.fontWeight = isActive ? '600' : '500';
+          btn.style.color = isActive ? 'var(--text-main)' : 'var(--text-muted)';
+        });
+      }
+
+      function filterItems(filter) {
+        document.querySelectorAll('.filter-btn').forEach(function(btn) {
+          var isActive = btn.getAttribute('data-filter') === filter;
+          btn.style.background = isActive ? '#242424' : 'rgba(0,0,0,0.06)';
+          btn.style.color = isActive ? 'white' : 'var(--text-main)';
+        });
+        document.querySelectorAll('#items-list .post-item').forEach(function(item) {
+          if (filter === 'all') {
+            item.style.display = 'flex';
+          } else {
+            item.style.display = item.getAttribute('data-status') === filter ? 'flex' : 'none';
+          }
+        });
+      }
+
+      window.createNewDraft = async function() {
+        var btn = document.getElementById('new-draft-btn');
+        btn.disabled = true;
+        btn.innerText = 'Creating...';
+        try {
+          var res = await fetch('/api/drafts', { method: 'POST' });
+          var data = await res.json();
+          if (data.docId) {
+            window.location.href = '/?doc=' + encodeURIComponent(data.docId);
+          } else {
+            alert(data.error || 'Failed to create draft');
+          }
+        } catch (e) {
+          alert('Failed to create draft');
+        }
+        btn.disabled = false;
+        btn.innerText = '+ New Draft';
+      };
+    </script>
+
+    <style>
+      @media (prefers-color-scheme: dark) {
+        .filter-btn { background: rgba(255,255,255,0.1) !important; }
+        .filter-btn.active, .filter-btn[style*="background: #242424"] { background: #e0e0e0 !important; color: #121212 !important; }
+        .tab-btn { border-bottom-color: transparent !important; }
+        .tab-btn.active, .tab-btn[style*="border-bottom: 2px solid #242424"] { border-bottom-color: white !important; }
+      }
+    </style>
   `;
 }
