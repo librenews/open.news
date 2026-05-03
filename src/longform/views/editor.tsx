@@ -145,6 +145,9 @@ export function EditorPage() {
           if (isOwner) {
              const shareBtn = document.getElementById('share-btn');
              if (shareBtn) shareBtn.style.display = 'block';
+          } else {
+             const publishBtn = document.getElementById('publish-btn');
+             if (publishBtn) publishBtn.style.display = 'none';
           }
           
           window.openShareModal = async () => {
