@@ -298,7 +298,7 @@ export function EditorPage() {
               container.innerHTML = '<div style="text-align: center; padding: 4rem 2rem;">' +
                 '<div style="font-size: 48px; margin-bottom: 1rem;">\uD83D\uDD12</div>' +
                 '<h2 style="font-family: var(--font-sans); font-weight: 700; margin-bottom: 0.5rem;">Access Denied</h2>' +
-                '<p style="color: var(--text-muted); font-family: var(--font-sans); font-size: 16px; max-width: 400px; margin: 0 auto;">You don\'t have permission to view this document. Ask the owner to share it with you.</p>' +
+                '<p style="color: var(--text-muted); font-family: var(--font-sans); font-size: 16px; max-width: 400px; margin: 0 auto;">You do not have permission to view this document. Ask the owner to share it with you.</p>' +
                 '</div>';
               var publishBtn = document.getElementById('publish-btn');
               if (publishBtn) publishBtn.style.display = 'none';
