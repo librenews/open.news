@@ -317,6 +317,7 @@ export function EditorPage() {
               Image,
               EmbedNode,
               Placeholder.configure({
+                showOnlyCurrent: false,
                 includeChildren: true,
                 placeholder: function(opts) {
                   if (opts.node.type.name === 'heading' && opts.node.attrs.level === 1) {

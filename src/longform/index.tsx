@@ -91,6 +91,15 @@ app.get('/', async (c) => {
   ) as unknown as string);
 });
 
+app.get('/new', async (c) => {
+  const sessionDid = await getSession(c);
+  if (!sessionDid) return c.redirect('/');
+  const rkey = Math.random().toString(36).substring(2, 15);
+  const docId = "at://" + sessionDid + "/site.standard.document/" + rkey;
+  await db.query('INSERT INTO longform_drafts (document_name, owner_did, title) VALUES ($1, $2, $3)', [docId, sessionDid, 'Untitled']);
+  return c.redirect('/?doc=' + encodeURIComponent(docId));
+});
+
 app.get('/posts', async (c) => {
   const sessionDid = await getSession(c);
   if (!sessionDid) return c.redirect('/');
