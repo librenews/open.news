@@ -299,6 +299,21 @@ export function EditorPage() {
               if (window.editor && window.editor.isEmpty) {
                 window.editor.commands.setContent({ type: 'doc', content: [{ type: 'heading', attrs: { level: 1 } }, { type: 'paragraph' }] });
               }
+              // Check permission and lock editor for read-only users
+              if (!isOwner && window.editor) {
+                fetch('/api/my-permission?docId=' + encodeURIComponent(docId))
+                  .then(function(r) { return r.json(); })
+                  .then(function(data) {
+                    if (data.permission === 'read') {
+                      window.editor.setEditable(false);
+                      var bar = document.createElement('div');
+                      bar.style.cssText = 'background: rgba(0,0,0,0.04); border-radius: 6px; padding: 0.5rem 1rem; margin-bottom: 1rem; font-family: var(--font-sans); font-size: 13px; color: var(--text-muted); display: flex; align-items: center; gap: 0.5rem;';
+                      bar.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg> View only';
+                      var editorEl = document.getElementById('editor-container');
+                      if (editorEl) editorEl.parentNode.insertBefore(bar, editorEl);
+                    }
+                  });
+              }
             },
             onAuthenticationFailed(data) {
               var container = document.getElementById('editor-container');

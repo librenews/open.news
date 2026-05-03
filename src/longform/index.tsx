@@ -299,6 +299,21 @@ app.get('/blob/:did/:cid', async (c) => {
   }
 });
 
+app.get('/api/my-permission', async (c) => {
+  const sessionDid = await getSession(c);
+  if (!sessionDid) return c.json({ permission: null });
+  const docId = c.req.query('docId');
+  if (!docId) return c.json({ error: 'Missing docId' }, 400);
+  // Owner always has write
+  if (docId.startsWith("at://" + sessionDid + "/")) return c.json({ permission: 'owner' });
+  // Check specific ACL, then wildcard
+  const { rows } = await db.query(
+    'SELECT permission FROM longform_yjs_acl WHERE document_name = $1 AND did IN ($2, $3) ORDER BY CASE WHEN did = $2 THEN 0 ELSE 1 END LIMIT 1',
+    [docId, sessionDid, '*']
+  );
+  return c.json({ permission: rows.length > 0 ? rows[0].permission : null });
+});
+
 app.post('/api/drafts', async (c) => {
   const sessionDid = await getSession(c);
   if (!sessionDid) return c.json({ error: 'Unauthorized' }, 401);
