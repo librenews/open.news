@@ -317,12 +317,17 @@ export function EditorPage() {
               Image,
               EmbedNode,
               Placeholder.configure({
+                includeChildren: true,
                 placeholder: function(opts) {
                   if (opts.node.type.name === 'heading' && opts.node.attrs.level === 1) {
-                    return 'Your title';
+                    return 'Title';
                   }
-                  if (opts.editor.isEmpty) {
-                    return 'Start with a heading for your title...';
+                  if (opts.node.type.name === 'paragraph') {
+                    var docFirstChild = opts.editor.state.doc.firstChild;
+                    var isSecondNode = docFirstChild && docFirstChild.type.name === 'heading';
+                    if (isSecondNode && opts.editor.state.doc.childCount <= 2 && opts.node.content.size === 0) {
+                      return 'Tell your story...';
+                    }
                   }
                   return '';
                 },
@@ -515,6 +520,16 @@ export function EditorPage() {
 
     <style>
        .prose { min-height: 500px; width: 100%; position: relative; }
+       .tiptap .is-empty::before {
+         content: attr(data-placeholder);
+         float: left;
+         color: rgba(0, 0, 0, 0.25);
+         pointer-events: none;
+         height: 0;
+       }
+       .tiptap h1.is-empty::before {
+         font-style: normal;
+       }
        .prose:focus { outline: none; }
        
        /* Medium style bubble menu */
