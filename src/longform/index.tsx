@@ -337,9 +337,9 @@ app.delete('/api/drafts', async (c) => {
     // Clean up local data if docId provided
     if (docId) {
       if (!docId.startsWith("at://" + sessionDid + "/")) return c.json({ error: 'Unauthorized' }, 403);
-      await db.query('DELETE FROM longform_yjs_acl WHERE document_name = ', [docId]);
-      await db.query('DELETE FROM longform_yjs_documents WHERE name = ', [docId]);
-      await db.query('DELETE FROM longform_drafts WHERE document_name =  AND owner_did = ', [docId, sessionDid]);
+      await db.query('DELETE FROM longform_yjs_acl WHERE document_name = $1', [docId]);
+      await db.query('DELETE FROM longform_yjs_documents WHERE name = $1', [docId]);
+      await db.query('DELETE FROM longform_drafts WHERE document_name = $1 AND owner_did = $2', [docId, sessionDid]);
     }
 
     return c.json({ success: true });
