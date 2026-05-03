@@ -38,6 +38,10 @@ export function Layout({ title, children, profile, headerAction, og }: { title: 
             }
           }
 
+          html {
+            overflow-y: scroll;
+          }
+
           body {
             margin: 0;
             padding: 0;
