@@ -797,6 +797,15 @@ app.get('/articles', async (c) => {
               <input type="radio" name="len" value="long" ${len === 'long' ? 'checked' : ''} class="w-4 h-4 text-indigo-600 focus:ring-indigo-500" hx-trigger="change" hx-indicator="#search-indicator">
               Longform Only (>100 words)
             </label>
+            <span class="text-slate-300">|</span>
+            <label class="flex items-center gap-2 cursor-pointer hover:text-indigo-600 transition-colors">
+              <input type="radio" name="sort" value="relevant" ${sortBy !== 'recent' ? 'checked' : ''} class="w-4 h-4 text-indigo-600 focus:ring-indigo-500" hx-trigger="change" hx-indicator="#search-indicator">
+              Relevant
+            </label>
+            <label class="flex items-center gap-2 cursor-pointer hover:text-indigo-600 transition-colors">
+              <input type="radio" name="sort" value="recent" ${sortBy === 'recent' ? 'checked' : ''} class="w-4 h-4 text-indigo-600 focus:ring-indigo-500" hx-trigger="change" hx-indicator="#search-indicator">
+              Recent
+            </label>
           </div>
         </form>
         <div id="search-indicator" class="htmx-indicator flex justify-center py-4">
