@@ -749,12 +749,13 @@ app.get('/articles', async (c) => {
 
   const q = c.req.query('q') || '';
   const len = c.req.query('len') || 'all';
+  const sortBy = c.req.query('sort') || 'relevant';
 
   let resultsHtml = `<div id="article-results" class="p-4 space-y-4"><div class="text-center text-sm text-slate-400 py-12">Enter a search query to explore the ecosystem.</div></div>`;
   
   if (q) {
     try {
-      const hits = await searchSiteStandardArticles(q, len as 'all' | 'long');
+      const hits = await searchSiteStandardArticles(q, len as 'all' | 'long', sortBy as 'relevant' | 'recent');
       resultsHtml = renderArticleHits(hits.hits, q);
     } catch (err) {
       logger.error({ err, q }, 'Failed to search articles');

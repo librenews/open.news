@@ -223,7 +223,7 @@ export async function percolatePost(
 /**
  * Searches the site.standard.document index using multi-language fields and highlighting.
  */
-export async function searchSiteStandardArticles(query: string, len: 'all' | 'long' = 'all', limit: number = 20) {
+export async function searchSiteStandardArticles(query: string, len: 'all' | 'long' = 'all', sortBy: 'relevant' | 'recent' = 'relevant', limit: number = 20) {
   const os = getOsClient();
   
   const must: any[] = [
@@ -244,25 +244,34 @@ export async function searchSiteStandardArticles(query: string, len: 'all' | 'lo
     });
   }
 
+  const body: any = {
+    size: limit,
+    query: {
+      bool: {
+        must: must
+      }
+    },
+    highlight: {
+      fields: {
+        'text_content': {},
+        'text_content.*': {}
+      },
+      pre_tags: ['<em class="bg-indigo-100 text-indigo-900 font-bold px-0.5 rounded">'],
+      post_tags: ['</em>'],
+    },
+    _source: ['title', 'did', 'site', 'path', 'language', 'published_at', 'uri', 'bsky_post_uri', 'word_count'],
+  };
+
+  if (sortBy === 'recent') {
+    body.sort = [
+      { published_at: { order: 'desc', unmapped_type: 'date' } },
+      '_score'
+    ];
+  }
+
   const res = await os.search({
     index: SITE_STANDARD_INDEX,
-    body: {
-      size: limit,
-      query: {
-        bool: {
-          must: must
-        }
-      },
-      highlight: {
-        fields: {
-          'text_content': {},
-          'text_content.*': {}
-        },
-        pre_tags: ['<em class="bg-indigo-100 text-indigo-900 font-bold px-0.5 rounded">'],
-        post_tags: ['</em>'],
-      },
-      _source: ['title', 'did', 'site', 'path', 'language', 'published_at', 'uri', 'bsky_post_uri', 'word_count'],
-    },
+    body,
   });
 
   return res.body.hits;
