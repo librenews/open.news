@@ -41,7 +41,7 @@ const niche: SystemFeedDef[] = [
     category: 'niche',
   },
   {
-    name: 'Data Privacy & Digital Rights',
+    name: 'Data Privacy & Rights',
     query: 'data privacy legislation, digital rights, surveillance, GDPR enforcement, right to encryption',
     keywords: ['privacy', 'GDPR', 'surveillance', 'digital rights', 'encryption', 'data protection', 'EFF', 'ACLU', 'right to privacy', 'end-to-end encryption', 'metadata'],
     threshold: 0.70,
