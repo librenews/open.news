@@ -91,7 +91,7 @@ export function FrontPage({
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />
         <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
-        <style>{`
+        <style dangerouslySetInnerHTML={{__html: `
           :root {
             --bg: #fafaf9;
             --text: #1a1a1a;
@@ -337,7 +337,7 @@ export function FrontPage({
             .article-thumb { width: 88px; height: 60px; }
             .stats-bar { gap: 1rem; flex-wrap: wrap; }
           }
-        `}</style>
+        `}} />
       </head>
       <body>
         <header class="site-header">
