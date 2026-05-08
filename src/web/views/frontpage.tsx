@@ -47,6 +47,11 @@ function ArticleCard({ article, featured }: { article: ConvergenceArticle; featu
 
   return (
     <a href={article.url} target="_blank" rel="noopener noreferrer" class="article-card">
+      {article.image_url && (
+        <div class="article-thumb">
+          <img src={article.image_url} alt="" loading="lazy" />
+        </div>
+      )}
       <div class="article-text">
         <h3 class="article-title">{article.title || 'Untitled'}</h3>
         <div class="article-meta">
@@ -59,11 +64,6 @@ function ArticleCard({ article, featured }: { article: ConvergenceArticle; featu
           )}
         </div>
       </div>
-      {article.image_url && (
-        <div class="article-thumb">
-          <img src={article.image_url} alt="" loading="lazy" />
-        </div>
-      )}
     </a>
   );
 }
@@ -89,7 +89,7 @@ export function FrontPage({
         <meta name="description" content="News surfaced by the collective intelligence of community topic trackers on the AT Protocol network." />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />
-        <link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;0,6..72,700;1,6..72,400&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+        <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
         <style>{`
           :root {
             --bg: #fafaf9;
@@ -100,7 +100,7 @@ export function FrontPage({
             --accent: #0f766e;
             --accent-light: #f0fdfa;
             --card-hover: #f5f5f4;
-            --font-serif: 'Newsreader', Georgia, 'Times New Roman', serif;
+            --font-heading: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
             --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
           }
 
@@ -127,7 +127,7 @@ export function FrontPage({
             align-items: center;
           }
           .site-logo {
-            font-family: var(--font-serif);
+            font-family: var(--font-heading);
             font-size: 1.5rem;
             font-weight: 700;
             color: var(--text);
@@ -220,7 +220,7 @@ export function FrontPage({
             object-fit: cover;
           }
           .featured-title {
-            font-family: var(--font-serif);
+            font-family: var(--font-heading);
             font-size: 2rem;
             font-weight: 700;
             line-height: 1.25;
@@ -255,7 +255,7 @@ export function FrontPage({
           .article-card:hover { background: var(--card-hover); margin: 0 -0.75rem; padding: 1.25rem 0.75rem; border-radius: 8px; border-color: transparent; }
           .article-text { flex: 1; min-width: 0; }
           .article-title {
-            font-family: var(--font-serif);
+            font-family: var(--font-heading);
             font-size: 1.125rem;
             font-weight: 600;
             line-height: 1.35;
@@ -310,7 +310,7 @@ export function FrontPage({
             color: var(--text-muted);
           }
           .empty-state h3 {
-            font-family: var(--font-serif);
+            font-family: var(--font-heading);
             font-size: 1.25rem;
             color: var(--text-secondary);
             margin-bottom: 0.5rem;
