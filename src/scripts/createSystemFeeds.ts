@@ -68,6 +68,38 @@ async function main() {
 
   for (const def of SYSTEM_FEEDS) {
     if (existingNames.has(def.name)) {
+      // If --publish, check if this existing track needs publishing
+      if (PUBLISH) {
+        const existing = existingTracks.find(t => t.name === def.name);
+        if (existing && !existing.feed_published) {
+          try {
+            const { getAgent } = await import('../track/auth.js');
+            const agent = await getAgent(SYSTEM_DID);
+
+            await agent.com.atproto.repo.putRecord({
+              repo: SYSTEM_DID,
+              collection: 'app.bsky.feed.generator',
+              rkey: existing.uuid,
+              record: {
+                did: 'did:web:track.social',
+                displayName: def.name,
+                description: def.description,
+                createdAt: new Date().toISOString(),
+              }
+            });
+
+            await updateTrack(existing.id, { feed_published: true });
+            console.log(`  📡 [${def.category}] ${def.name} — published existing track`);
+            published++;
+            await new Promise(r => setTimeout(r, 200));
+          } catch (err) {
+            logger.error({ err, name: def.name }, 'Failed to publish existing feed to PDS');
+            console.log(`  ⚠️  [${def.category}] ${def.name} — failed to publish`);
+            errors++;
+          }
+          continue;
+        }
+      }
       console.log(`  ⏭  [${def.category}] ${def.name} — already exists, skipping`);
       skipped++;
       continue;
