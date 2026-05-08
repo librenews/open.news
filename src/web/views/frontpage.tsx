@@ -4,6 +4,7 @@ import type { ConvergenceArticle } from '../../db/queries/convergence.js';
 function timeAgo(dateStr: string | null): string {
   if (!dateStr) return '';
   const diff = Date.now() - new Date(dateStr).getTime();
+  if (diff < 0) return 'Upcoming';
   const mins = Math.floor(diff / 60000);
   if (mins < 60) return `${mins}m ago`;
   const hrs = Math.floor(mins / 60);
