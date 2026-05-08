@@ -17,10 +17,12 @@ import { logger } from '../lib/logger.js';
 import { getUserById } from '../db/queries/users.js';
 import { getArticlesForUser } from '../db/queries/articles.js';
 import { getOrCreateDefaultConversation, getMessages } from '../db/queries/conversations.js';
+import { getConvergenceArticles, getRecentArticles, getConvergenceStats } from '../db/queries/convergence.js';
 import { sseRegistry } from './sseRegistry.js';
 import { LoginPage } from './views/login.js';
 import { FeedPage } from './views/feed.js';
 import { ChatPage } from './views/chat.js';
+import { FrontPage } from './views/frontpage.js';
 import { Layout } from './views/layout.js';
 import { PrivacyPage } from './views/privacy.js';
 import { TosPage } from './views/tos.js';
@@ -62,10 +64,14 @@ app.get('/api/stream', sessionRequired, (c) => {
 
 // ─── Page Routes ────────────────────────────────────────────────────────────
 
-// GET / → redirect to chat or login
-app.get('/', (c) => {
-  const userId = c.get('userId' as never) as bigint | undefined;
-  return c.redirect(userId ? '/chat' : '/login');
+// GET / → public convergence-driven front page
+app.get('/', async (c) => {
+  const view = (c.req.query('view') || 'convergence') as 'convergence' | 'latest';
+  const [articles, stats] = await Promise.all([
+    view === 'latest' ? getRecentArticles(48, 30) : getConvergenceArticles(48, 30),
+    getConvergenceStats(),
+  ]);
+  return c.html((<FrontPage articles={articles} stats={stats} view={view} />) as unknown as string);
 });
 
 // GET /login
