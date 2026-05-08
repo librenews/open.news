@@ -14,6 +14,7 @@ import { createTrack, getTracksByUserId, updateTrack } from '../db/queries/track
 import { upsertTrackQuery } from '../track/opensearch.js';
 import { updateTrackKeywords, updateTrackQueryEmbedding } from '../db/queries/tracks.js';
 import { embedText } from '../track/embedClient.js';
+import { AtpAgent } from '@atproto/api';
 import { logger } from '../lib/logger.js';
 
 const SYSTEM_DID = 'did:web:track.social';
@@ -66,6 +67,22 @@ async function main() {
   let published = 0;
   let errors = 0;
 
+  // Authenticate with Bluesky using app password for publishing
+  let agent: AtpAgent | null = null;
+  let repoDid: string = '';
+  if (PUBLISH) {
+    const handle = process.env.TRACK_BSKY_HANDLE;
+    const password = process.env.TRACK_BSKY_PASSWORD;
+    if (!handle || !password) {
+      console.error('  ❌ TRACK_BSKY_HANDLE and TRACK_BSKY_PASSWORD required for --publish');
+      process.exit(1);
+    }
+    agent = new AtpAgent({ service: 'https://bsky.social' });
+    await agent.login({ identifier: handle, password });
+    repoDid = agent.session!.did;
+    console.log(`   Authenticated as: ${handle} (${repoDid})\n`);
+  }
+
   for (const def of SYSTEM_FEEDS) {
     if (existingNames.has(def.name)) {
       // If --publish, check if this existing track needs publishing
@@ -73,11 +90,8 @@ async function main() {
         const existing = existingTracks.find(t => t.name === def.name);
         if (existing && !existing.feed_published) {
           try {
-            const { getAgent } = await import('../track/auth.js');
-            const agent = await getAgent(SYSTEM_DID);
-
-            await agent.com.atproto.repo.putRecord({
-              repo: SYSTEM_DID,
+            await agent!.com.atproto.repo.putRecord({
+              repo: repoDid,
               collection: 'app.bsky.feed.generator',
               rkey: existing.uuid,
               record: {
@@ -128,12 +142,8 @@ async function main() {
       // 4. Optionally publish to PDS
       if (PUBLISH) {
         try {
-          const { getAgent } = await import('../track/auth.js');
-          const agent = await getAgent(SYSTEM_DID);
-          const { Agent } = await import('@atproto/api');
-
-          await agent.com.atproto.repo.putRecord({
-            repo: SYSTEM_DID,
+          await agent!.com.atproto.repo.putRecord({
+            repo: repoDid,
             collection: 'app.bsky.feed.generator',
             rkey: track.uuid,
             record: {
