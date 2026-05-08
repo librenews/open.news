@@ -17,7 +17,7 @@ import { logger } from '../lib/logger.js';
 import { getUserById } from '../db/queries/users.js';
 import { getArticlesForUser } from '../db/queries/articles.js';
 import { getOrCreateDefaultConversation, getMessages } from '../db/queries/conversations.js';
-import { getConvergenceArticles, getRecentArticles, getConvergenceStats } from '../db/queries/convergence.js';
+import { getConvergenceArticles, getRecentArticles, getConvergenceStats, getTopicClusters, getArticlesByTopic } from '../db/queries/convergence.js';
 import { sseRegistry } from './sseRegistry.js';
 import { LoginPage } from './views/login.js';
 import { FeedPage } from './views/feed.js';
@@ -67,11 +67,24 @@ app.get('/api/stream', sessionRequired, (c) => {
 // GET / → public convergence-driven front page
 app.get('/', async (c) => {
   const view = (c.req.query('view') || 'convergence') as 'convergence' | 'latest';
-  const [articles, stats] = await Promise.all([
-    view === 'latest' ? getRecentArticles(48, 30) : getConvergenceArticles(48, 30),
+  const topicParam = c.req.query('topic');
+  const activeTopic = topicParam ? Number(topicParam) : null;
+
+  const [topics, stats] = await Promise.all([
+    getTopicClusters(),
     getConvergenceStats(),
   ]);
-  return c.html((<FrontPage articles={articles} stats={stats} view={view} />) as unknown as string);
+
+  let articles;
+  if (activeTopic) {
+    articles = await getArticlesByTopic(activeTopic, 30);
+  } else if (view === 'latest') {
+    articles = await getRecentArticles(48, 30);
+  } else {
+    articles = await getConvergenceArticles(48, 30);
+  }
+
+  return c.html((<FrontPage articles={articles} stats={stats} view={view} topics={topics} activeTopic={activeTopic} />) as unknown as string);
 });
 
 // GET /login

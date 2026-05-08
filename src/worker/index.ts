@@ -9,6 +9,7 @@ import { deliverWebhookJob } from '../jobs/deliverWebhook.js';
 import { ensureArticleIndex, ensureSiteStandardIndex } from '../track/opensearch.js';
 import { indexSiteStandardJob } from '../jobs/indexSiteStandard.js';
 import { backfillSiteStandardJob } from '../jobs/backfillSiteStandard.js';
+import { refreshTopicClusters } from '../jobs/refreshTopicClusters.js';
 
 async function start() {
   await ensureArticleIndex().catch(err => logger.error({ err }, 'Failed to ensure OpenSearch article index'));
@@ -29,7 +30,7 @@ async function start() {
 
   // pg-boss v10 requires explicit queue creation before send/work.
   // Must be sequential — parallel ALTER TABLE calls deadlock on the FK constraint.
-  const queues = ['fetchArticle', 'syncFollows', 'botReply', 'botPost', 'followSignup', 'deliverWebhook', 'indexSiteStandard', 'backfillSiteStandard'];
+  const queues = ['fetchArticle', 'syncFollows', 'botReply', 'botPost', 'followSignup', 'deliverWebhook', 'indexSiteStandard', 'backfillSiteStandard', 'refreshTopicClusters'];
   for (const q of queues) await boss.createQueue(q);
   logger.info({ queues }, 'Queues created');
 
@@ -90,6 +91,13 @@ async function start() {
   });
 
   logger.info('All workers registered');
+
+  // Schedule hourly topic cluster refresh
+  await boss.schedule('refreshTopicClusters', '0 * * * *', {}, { tz: 'UTC' });
+  await boss.work('refreshTopicClusters', async () => {
+    await refreshTopicClusters();
+  });
+  logger.info('Topic cluster refresh scheduled (hourly)');
 
   // Graceful shutdown
   process.on('SIGTERM', async () => {

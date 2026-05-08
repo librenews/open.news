@@ -1,5 +1,5 @@
 /** @jsxImportSource hono/jsx */
-import type { ConvergenceArticle } from '../../db/queries/convergence.js';
+import type { ConvergenceArticle, TopicCluster } from '../../db/queries/convergence.js';
 
 function timeAgo(dateStr: string | null): string {
   if (!dateStr) return '';
@@ -73,10 +73,14 @@ export function FrontPage({
   articles,
   stats,
   view,
+  topics,
+  activeTopic,
 }: {
   articles: ConvergenceArticle[];
   stats: { totalTracks: number; articlesToday: number; activeTopics: number };
   view: 'convergence' | 'latest';
+  topics: TopicCluster[];
+  activeTopic: number | null;
 }) {
   const featured = articles[0];
   const rest = articles.slice(1);
@@ -338,7 +342,56 @@ export function FrontPage({
             .article-thumb { width: 88px; height: 60px; }
             .stats-bar { gap: 1rem; flex-wrap: wrap; }
           }
-        `}} />
+
+          /* Topic pills */
+          .topic-bar {
+            max-width: 1080px;
+            margin: 0 auto;
+            padding: 0.75rem 1.5rem;
+            display: flex;
+            gap: 0.5rem;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: none;
+          }
+          .topic-bar::-webkit-scrollbar { display: none; }
+          .topic-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            padding: 0.35rem 0.85rem;
+            border-radius: 99px;
+            border: 1px solid var(--border);
+            background: white;
+            color: var(--text-secondary);
+            font-size: 0.8rem;
+            font-weight: 500;
+            text-decoration: none;
+            white-space: nowrap;
+            transition: all 0.15s;
+            flex-shrink: 0;
+          }
+          .topic-pill:hover {
+            border-color: var(--accent);
+            color: var(--accent);
+          }
+          .topic-pill.active {
+            background: var(--accent);
+            color: white;
+            border-color: var(--accent);
+          }
+          .topic-pill.active .topic-count {
+            background: rgba(255,255,255,0.25);
+            color: white;
+          }
+          .topic-count {
+            font-size: 0.65rem;
+            font-weight: 600;
+            background: var(--accent-light);
+            color: var(--accent);
+            padding: 0.1rem 0.4rem;
+            border-radius: 99px;
+          }        `}} />
       </head>
       <body>
         <header class="site-header">
@@ -357,9 +410,23 @@ export function FrontPage({
         </div>
 
         <div class="view-tabs">
-          <a href="/?view=convergence" class={`view-tab ${view === 'convergence' ? 'active' : ''}`}>For You</a>
-          <a href="/?view=latest" class={`view-tab ${view === 'latest' ? 'active' : ''}`}>Latest</a>
+          <a href="/?view=convergence" class={`view-tab ${view === 'convergence' && !activeTopic ? 'active' : ''}`}>For You</a>
+          <a href="/?view=latest" class={`view-tab ${view === 'latest' && !activeTopic ? 'active' : ''}`}>Latest</a>
         </div>
+
+        {topics.length > 0 && (
+          <div class="topic-bar">
+            {topics.map((t) => (
+              <a
+                href={`/?topic=${t.id}`}
+                class={`topic-pill ${activeTopic === t.id ? 'active' : ''}`}
+              >
+                {t.label}
+                <span class="topic-count">{t.articleCount}</span>
+              </a>
+            ))}
+          </div>
+        )}
 
         <main class="main-content">
           {articles.length === 0 ? (

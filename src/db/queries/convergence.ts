@@ -111,7 +111,7 @@ export async function getConvergenceStats(): Promise<{
     SELECT
       (SELECT COUNT(*) FROM tracks WHERE is_active = true) AS total_tracks,
       (SELECT COUNT(*) FROM articles WHERE is_news = true AND published_at > NOW() - INTERVAL '24 hours') AS articles_today,
-      (SELECT COUNT(DISTINCT t.name) FROM tracks t JOIN track_matches tm ON t.id = tm.track_id WHERE tm.matched_at > NOW() - INTERVAL '24 hours') AS active_topics
+      (SELECT COUNT(*) FROM topic_clusters WHERE article_count > 0) AS active_topics
   `);
 
   return {
@@ -119,4 +119,72 @@ export async function getConvergenceStats(): Promise<{
     articlesToday: Number(rows[0].articles_today),
     activeTopics: Number(rows[0].active_topics),
   };
+}
+
+export interface TopicCluster {
+  id: number;
+  label: string;
+  articleCount: number;
+  trackCount: number;
+}
+
+/**
+ * Fetch topic clusters ordered by article count.
+ */
+export async function getTopicClusters(): Promise<TopicCluster[]> {
+  const { rows } = await db.query(
+    `SELECT id, label, article_count, array_length(track_ids, 1) AS track_count
+     FROM topic_clusters
+     WHERE article_count > 0
+     ORDER BY article_count DESC`
+  );
+  return rows.map((r: any) => ({
+    id: Number(r.id),
+    label: r.label,
+    articleCount: Number(r.article_count),
+    trackCount: Number(r.track_count || 1),
+  }));
+}
+
+/**
+ * Fetch articles filtered by a topic cluster.
+ */
+export async function getArticlesByTopic(
+  topicId: number,
+  limit: number = 30
+): Promise<ConvergenceArticle[]> {
+  const { rows } = await db.query(
+    `SELECT 
+       a.id, a.title, a.url, a.description, a.image_url, a.site_name,
+       a.published_at,
+       COUNT(DISTINCT tm.track_id) AS convergence_score,
+       COUNT(DISTINCT asrc.source_id) AS share_count,
+       ARRAY[]::text[] AS track_names
+     FROM articles a
+     JOIN article_sources asrc ON a.id = asrc.article_id
+     JOIN track_matches tm ON asrc.post_uri = tm.post_uri
+     JOIN topic_clusters tc ON tm.track_id = ANY(tc.track_ids)
+     WHERE tc.id = $1
+       AND a.is_news = true
+       AND a.word_count > 50
+       AND a.url NOT LIKE '%bsky.app%'
+       AND a.url NOT LIKE '%ranked.news%'
+     GROUP BY a.id
+     ORDER BY CASE WHEN a.published_at > NOW() THEN a.created_at ELSE a.published_at END DESC NULLS LAST
+     LIMIT $2`,
+    [topicId, limit]
+  );
+
+  return rows.map((r: any) => ({
+    id: Number(r.id),
+    title: r.title,
+    url: r.url,
+    description: r.description,
+    image_url: r.image_url,
+    site_name: r.site_name,
+    published_at: r.published_at?.toISOString() ?? null,
+    convergence_score: Number(r.convergence_score),
+    share_count: Number(r.share_count),
+    track_names: r.track_names || [],
+  }));
 }
