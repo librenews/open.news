@@ -39,7 +39,7 @@ export async function getConvergenceArticles(
        AND a.url NOT LIKE '%bsky.app%'
        AND a.url NOT LIKE '%ranked.news%'
      GROUP BY a.id
-     ORDER BY convergence_score DESC, share_count DESC, LEAST(a.published_at, NOW()) DESC NULLS LAST
+     ORDER BY convergence_score DESC, share_count DESC, CASE WHEN a.published_at > NOW() THEN a.created_at ELSE a.published_at END DESC NULLS LAST
      LIMIT $2`,
     [hours, limit]
   );
@@ -80,7 +80,7 @@ export async function getRecentArticles(
        AND a.url NOT LIKE '%bsky.app%'
        AND a.url NOT LIKE '%ranked.news%'
      GROUP BY a.id
-     ORDER BY LEAST(a.published_at, NOW()) DESC NULLS LAST
+     ORDER BY CASE WHEN a.published_at > NOW() THEN a.created_at ELSE a.published_at END DESC NULLS LAST
      LIMIT $2`,
     [hours, limit]
   );
