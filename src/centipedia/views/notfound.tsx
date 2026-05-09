@@ -50,7 +50,7 @@ export function NotFoundPage() {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 0.75rem 2rem;
+            padding: 1rem 2rem;
             border-bottom: 1px solid var(--border);
           }
           .top-header-logo {
@@ -62,7 +62,7 @@ export function NotFoundPage() {
             display: flex;
             align-items: center;
           }
-          .top-header-logo img { height: 36px; width: auto; }
+          .top-header-logo img { height: 40px; width: auto; }
           .top-header-links {
             display: flex;
             gap: 1.25rem;
