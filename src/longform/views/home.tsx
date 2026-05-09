@@ -419,6 +419,48 @@ export function HomePage({
             font-size: 0.75rem;
             color: var(--text-muted);
           }
+          .user-card {
+            position: relative;
+            cursor: pointer;
+          }
+          .user-card-dropdown {
+            display: none;
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+            overflow: hidden;
+            margin-top: 0.25rem;
+            z-index: 50;
+          }
+          .user-card:hover .user-card-dropdown {
+            display: block;
+          }
+          .user-card-dropdown a {
+            display: block;
+            padding: 0.6rem 1rem;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-weight: 500;
+            transition: background 0.1s;
+          }
+          .user-card-dropdown a:hover {
+            background: var(--bg-secondary);
+          }
+          .user-card-dropdown .signout-link {
+            color: #d32f2f;
+            border-top: 1px solid var(--border);
+          }
+          @media (prefers-color-scheme: dark) {
+            .user-card-dropdown {
+              box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+            }
+          }
 
           /* Empty state */
           .empty-state {
@@ -532,6 +574,11 @@ export function HomePage({
                 <div class="user-card-info">
                   <div class="user-card-name">{profile.displayName}</div>
                   <div class="user-card-handle">@{profile.handle}</div>
+                </div>
+                <div class="user-card-dropdown">
+                  <a href={`/@${profile.handle}`}>Profile</a>
+                  <a href="/posts">My Stories</a>
+                  <a href="/logout" class="signout-link">Sign out</a>
                 </div>
               </div>
             ) : (
