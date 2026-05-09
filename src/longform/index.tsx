@@ -73,12 +73,53 @@ app.get('/', async (c) => {
   }
 
   // Home page — show indexed longform articles
-  const view = (c.req.query('view') || 'latest') as 'latest' | 'foryou';
+  const view = (c.req.query('view') || 'latest') as 'latest' | 'foryou' | 'following';
   const profile = sessionDid ? await fetchUserProfile(sessionDid) : null;
 
-  // Fetch stories from site_standard_articles
-  const { rows } = await db.query(
-    `SELECT s.uri, s.author_did, s.title, s.description, s.published_at, s.site, s.path, s.word_count,
+  // For the "following" tab, fetch the user's subscriptions
+  let followedPubUris: string[] = [];
+  if (view === 'following' && sessionDid) {
+    try {
+      const client = await getLongformAuthClient();
+      const oauthSession = await client.restore(sessionDid);
+      const agent = new Agent(oauthSession);
+      const res = await agent.com.atproto.repo.listRecords({
+        repo: sessionDid,
+        collection: 'site.standard.graph.subscription',
+        limit: 100,
+      });
+      followedPubUris = (res.data.records || [])
+        .map((r: any) => r.value?.publication)
+        .filter((u: any): u is string => typeof u === 'string');
+    } catch (err) {
+      logger.warn({ err }, 'Failed to fetch user subscriptions for Following tab');
+    }
+  }
+
+  // Build the query — add publication filter for "following" view
+  let queryText: string;
+  let queryParams: any[] = [];
+
+  if (view === 'following' && followedPubUris.length > 0) {
+    queryText = `SELECT s.uri, s.author_did, s.title, s.description, s.published_at, s.site, s.path, s.word_count,
+       split_part(s.uri, '/', 4) AS collection,
+       CASE WHEN s.uri LIKE '%/site.standard.document/%' OR s.uri LIKE '%/pub.leaflet.document/%'
+         THEN jsonb_path_query_first(s.raw_record, '$.content.pages[0].blocks[*].block ? (@."$type" == "pub.leaflet.blocks.image").image.ref."$link"') #>> '{}'
+         ELSE NULL
+       END AS image_cid,
+       CASE WHEN s.raw_record->>'site' LIKE 'at://%site.standard.publication%'
+         THEN s.raw_record->>'site'
+         ELSE NULL
+       END AS publication_uri
+     FROM site_standard_articles s
+     WHERE s.word_count > 100
+       AND s.language = 'eng'
+       AND s.raw_record->>'site' = ANY($1)
+     ORDER BY s.published_at DESC NULLS LAST
+     LIMIT 40`;
+    queryParams = [followedPubUris];
+  } else {
+    queryText = `SELECT s.uri, s.author_did, s.title, s.description, s.published_at, s.site, s.path, s.word_count,
        split_part(s.uri, '/', 4) AS collection,
        CASE WHEN s.uri LIKE '%/site.standard.document/%' OR s.uri LIKE '%/pub.leaflet.document/%'
          THEN jsonb_path_query_first(s.raw_record, '$.content.pages[0].blocks[*].block ? (@."$type" == "pub.leaflet.blocks.image").image.ref."$link"') #>> '{}'
@@ -92,8 +133,10 @@ app.get('/', async (c) => {
      WHERE s.word_count > 100
        AND s.language = 'eng'
      ORDER BY s.published_at DESC NULLS LAST
-     LIMIT 40`,
-  );
+     LIMIT 40`;
+  }
+
+  const { rows } = await db.query(queryText, queryParams);
 
   // Batch fetch author profiles (deduplicate DIDs)
   const uniqueDids = [...new Set(rows.map((r: any) => r.author_did))];
@@ -138,7 +181,10 @@ app.get('/', async (c) => {
   // Topics placeholder — we'll populate this later
   const topics: { label: string; count: number; slug: string }[] = [];
 
-  return c.html((<HomePage stories={stories} topics={topics} view={view} profile={profile} domain={config.LONGFORM_DOMAIN} />) as unknown as string);
+  // Track whether the user has any subscriptions (for empty state on Following tab)
+  const hasSubscriptions = followedPubUris.length > 0;
+
+  return c.html((<HomePage stories={stories} topics={topics} view={view} profile={profile} domain={config.LONGFORM_DOMAIN} hasSubscriptions={hasSubscriptions} />) as unknown as string);
 });
 
 app.get('/search', async (c) => {

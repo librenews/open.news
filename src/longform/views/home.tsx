@@ -95,12 +95,14 @@ export function HomePage({
   view,
   profile,
   domain,
+  hasSubscriptions,
 }: {
   stories: LongformStory[];
   topics: TopicGroup[];
-  view: 'latest' | 'foryou';
+  view: 'latest' | 'foryou' | 'following';
   profile?: { displayName: string; avatar: string; handle: string } | null;
   domain: string;
+  hasSubscriptions?: boolean;
 }) {
   return (
     <html lang="en">
@@ -828,12 +830,25 @@ export function HomePage({
             <div class="center-header">
               <div class="center-tabs">
                 <a href="/?view=latest" class={`center-tab ${view === 'latest' ? 'active' : ''}`}>Latest</a>
+                {profile && <a href="/?view=following" class={`center-tab ${view === 'following' ? 'active' : ''}`}>Following</a>}
                 <a href="/?view=foryou" class={`center-tab ${view === 'foryou' ? 'active' : ''}`}>For You</a>
               </div>
             </div>
 
             <div class="stories-list">
-              {stories.length === 0 ? (
+              {view === 'following' && !profile ? (
+                <div class="empty-state">
+                  <h3>Sign in to see your feed</h3>
+                  <p>Follow publications to see their stories here.</p>
+                  <a href="/login" style="display: inline-block; margin-top: 0.75rem; padding: 0.5rem 1.25rem; background: var(--accent); color: var(--bg); border-radius: 99px; font-size: 0.85rem; font-weight: 600; text-decoration: none;">Sign In</a>
+                </div>
+              ) : view === 'following' && stories.length === 0 ? (
+                <div class="empty-state">
+                  <h3>No stories from followed publications</h3>
+                  <p>Follow publications on story cards to see their articles here.</p>
+                  <a href="/?view=latest" style="display: inline-block; margin-top: 0.75rem; color: var(--text-secondary); font-size: 0.85rem; text-decoration: underline;">Browse latest stories →</a>
+                </div>
+              ) : stories.length === 0 ? (
                 <div class="empty-state">
                   <h3>No stories yet</h3>
                   <p>Long-form articles from the AT Protocol network will appear here.</p>
