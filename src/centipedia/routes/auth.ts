@@ -27,7 +27,7 @@ export async function getCentipediaAuthClient(): Promise<NodeOAuthClient> {
 
   _oauthClient = new NodeOAuthClient({
     clientMetadata: {
-      client_name: 'Longform Publishing (open.news)',
+      client_name: 'Centipedia (open.news)',
       client_id: `${clientUri}/client-metadata.json?v=6`,
       client_uri: clientUri,
       redirect_uris: [`${clientUri}/oauth/callback`],
@@ -85,7 +85,7 @@ authRouter.get('/client-metadata.json', async (c) => {
   const clientUri = `https://${config.CENTIPEDIA_DOMAIN}`;
   return c.json({
     client_id: `${clientUri}/client-metadata.json?v=6`,
-    client_name: 'Longform Publishing (open.news)',
+    client_name: 'Centipedia (open.news)',
     client_uri: clientUri,
     redirect_uris: [`${clientUri}/oauth/callback`],
     grant_types: ['authorization_code', 'refresh_token'],

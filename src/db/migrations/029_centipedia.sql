@@ -2,7 +2,8 @@
 CREATE TABLE IF NOT EXISTS centipedia_oauth_state (
   key TEXT PRIMARY KEY,
   value JSONB NOT NULL,
-  created_at TIMESTAMPTZ DEFAULT NOW()
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  expires_at TIMESTAMPTZ
 );
 
 CREATE TABLE IF NOT EXISTS centipedia_oauth_sessions (
