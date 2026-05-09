@@ -83,7 +83,11 @@ app.get('/', async (c) => {
        CASE WHEN s.uri LIKE '%/site.standard.document/%' OR s.uri LIKE '%/pub.leaflet.document/%'
          THEN jsonb_path_query_first(s.raw_record, '$.content.pages[0].blocks[*].block ? (@."$type" == "pub.leaflet.blocks.image").image.ref."$link"') #>> '{}'
          ELSE NULL
-       END AS image_cid
+       END AS image_cid,
+       CASE WHEN s.raw_record->>'site' LIKE 'at://%site.standard.publication%'
+         THEN s.raw_record->>'site'
+         ELSE NULL
+       END AS publication_uri
      FROM site_standard_articles s
      WHERE s.word_count > 100
        AND s.language = 'eng'
@@ -127,6 +131,7 @@ app.get('/', async (c) => {
       wordCount: r.word_count || 0,
       imageUrl: r.image_cid ? `/blob/${r.author_did}/${r.image_cid}` : null,
       externalUrl: readUrl,
+      publicationUri: r.publication_uri || null,
     };
   });
 
@@ -488,6 +493,96 @@ app.get('/blob/:did/:cid', async (c) => {
   }
 });
 
+// --- Publication subscription (follow) API ---
+
+app.get('/api/subscription-status', async (c) => {
+  const sessionDid = await getSession(c);
+  if (!sessionDid) return c.json({ subscribed: false, rkey: null });
+  const pubUri = c.req.query('publication');
+  if (!pubUri) return c.json({ subscribed: false, rkey: null });
+
+  try {
+    const client = await getLongformAuthClient();
+    const oauthSession = await client.restore(sessionDid);
+    const agent = new Agent(oauthSession);
+    const res = await agent.com.atproto.repo.listRecords({
+      repo: sessionDid,
+      collection: 'site.standard.graph.subscription',
+      limit: 100,
+    });
+    const match = (res.data.records || []).find((r: any) => r.value?.publication === pubUri);
+    if (match) {
+      const rkey = match.uri.split('/').pop();
+      return c.json({ subscribed: true, rkey });
+    }
+    return c.json({ subscribed: false, rkey: null });
+  } catch (err: any) {
+    logger.error({ err }, 'Failed to check subscription status');
+    return c.json({ subscribed: false, rkey: null });
+  }
+});
+
+app.post('/api/subscribe', async (c) => {
+  const sessionDid = await getSession(c);
+  if (!sessionDid) return c.json({ error: 'Not authenticated' }, 401);
+
+  const body = await c.req.json();
+  const pubUri = body.publication;
+  if (!pubUri || typeof pubUri !== 'string' || !pubUri.startsWith('at://')) {
+    return c.json({ error: 'Invalid publication URI' }, 400);
+  }
+
+  try {
+    const client = await getLongformAuthClient();
+    const oauthSession = await client.restore(sessionDid);
+    const agent = new Agent(oauthSession);
+    const rkey = Date.now().toString(36) + Math.random().toString(36).substring(2, 7);
+
+    await agent.com.atproto.repo.createRecord({
+      repo: sessionDid,
+      collection: 'site.standard.graph.subscription',
+      rkey,
+      record: {
+        $type: 'site.standard.graph.subscription',
+        publication: pubUri,
+        createdAt: new Date().toISOString(),
+      },
+    });
+
+    logger.info({ did: sessionDid, publication: pubUri, rkey }, 'User subscribed to publication');
+    return c.json({ ok: true, rkey });
+  } catch (err: any) {
+    logger.error({ err, pubUri }, 'Failed to create subscription');
+    return c.json({ error: 'Failed to subscribe' }, 500);
+  }
+});
+
+app.post('/api/unsubscribe', async (c) => {
+  const sessionDid = await getSession(c);
+  if (!sessionDid) return c.json({ error: 'Not authenticated' }, 401);
+
+  const body = await c.req.json();
+  const rkey = body.rkey;
+  if (!rkey) return c.json({ error: 'Missing rkey' }, 400);
+
+  try {
+    const client = await getLongformAuthClient();
+    const oauthSession = await client.restore(sessionDid);
+    const agent = new Agent(oauthSession);
+
+    await agent.com.atproto.repo.deleteRecord({
+      repo: sessionDid,
+      collection: 'site.standard.graph.subscription',
+      rkey,
+    });
+
+    logger.info({ did: sessionDid, rkey }, 'User unsubscribed from publication');
+    return c.json({ ok: true });
+  } catch (err: any) {
+    logger.error({ err, rkey }, 'Failed to delete subscription');
+    return c.json({ error: 'Failed to unsubscribe' }, 500);
+  }
+});
 
 app.get('/api/my-permission', async (c) => {
   const sessionDid = await getSession(c);

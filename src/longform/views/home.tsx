@@ -14,6 +14,7 @@ export interface LongformStory {
   wordCount: number;
   imageUrl: string | null;
   externalUrl: string | null;
+  publicationUri: string | null;
 }
 
 export interface TopicGroup {
@@ -67,7 +68,16 @@ function StoryCard({ story, domain }: { story: LongformStory; domain: string }) 
             {ago && <span class="story-time">{ago}</span>}
             <span class="meta-dot">·</span>
             <span class="story-read-time">{minRead} min read</span>
-          </div>
+          {story.publicationUri && (
+            <button
+              class="follow-btn"
+              data-publication={story.publicationUri}
+              onclick="window.handleFollow(this)"
+            >
+              Follow
+            </button>
+          )}
+        </div>
         </div>
         {story.imageUrl && (
           <a href={readUrl} class="story-thumb" target="_blank" rel="noopener noreferrer">
@@ -364,6 +374,34 @@ export function HomePage({
           }
           .story-read-time {
             color: var(--text-muted);
+          }
+          .follow-btn {
+            margin-left: auto;
+            padding: 0.25rem 0.75rem;
+            border: 1px solid var(--border);
+            border-radius: 99px;
+            background: transparent;
+            color: var(--text-secondary);
+            font-size: 0.7rem;
+            font-weight: 600;
+            font-family: var(--font-sans);
+            cursor: pointer;
+            transition: all 0.15s;
+            white-space: nowrap;
+          }
+          .follow-btn:hover {
+            background: var(--bg-secondary);
+            color: var(--text-main);
+            border-color: var(--text-muted);
+          }
+          .follow-btn.following {
+            background: var(--accent);
+            color: var(--bg);
+            border-color: var(--accent);
+          }
+          .follow-btn.following:hover {
+            background: #d32f2f;
+            border-color: #d32f2f;
           }
 
           /* Right column */
@@ -860,6 +898,69 @@ export function HomePage({
             </div>
           </aside>
         </div>
+        <script dangerouslySetInnerHTML={{__html: `
+          // Follow button logic
+          window.handleFollow = async function(btn) {
+            const pub = btn.dataset.publication;
+            if (!pub) return;
+            btn.disabled = true;
+
+            if (btn.classList.contains('following')) {
+              // Unsubscribe
+              const rkey = btn.dataset.rkey;
+              if (!rkey) return;
+              try {
+                const res = await fetch('/api/unsubscribe', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ rkey })
+                });
+                if (res.ok) {
+                  btn.classList.remove('following');
+                  btn.textContent = 'Follow';
+                  btn.dataset.rkey = '';
+                }
+              } catch(e) {}
+            } else {
+              // Subscribe
+              try {
+                const res = await fetch('/api/subscribe', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ publication: pub })
+                });
+                const data = await res.json();
+                if (data.ok) {
+                  btn.classList.add('following');
+                  btn.textContent = 'Following';
+                  btn.dataset.rkey = data.rkey;
+                }
+              } catch(e) {}
+            }
+            btn.disabled = false;
+          };
+
+          // Check subscription status on load
+          document.addEventListener('DOMContentLoaded', async () => {
+            const btns = document.querySelectorAll('.follow-btn[data-publication]');
+            const pubs = [...new Set([...btns].map(b => b.dataset.publication))];
+            for (const pub of pubs) {
+              try {
+                const res = await fetch('/api/subscription-status?publication=' + encodeURIComponent(pub));
+                const data = await res.json();
+                if (data.subscribed) {
+                  btns.forEach(b => {
+                    if (b.dataset.publication === pub) {
+                      b.classList.add('following');
+                      b.textContent = 'Following';
+                      b.dataset.rkey = data.rkey;
+                    }
+                  });
+                }
+              } catch(e) {}
+            }
+          });
+        `}} />
       </body>
     </html>
   );
