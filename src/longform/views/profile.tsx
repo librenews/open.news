@@ -35,6 +35,8 @@ export function ProfilePage({
   sessionProfile?: { displayName: string; avatar: string; handle: string } | null;
   domain: string;
 }) {
+  // Extract publication URI from stories (all from same author will share the same one)
+  const publicationUri = stories.find(s => s.publicationUri)?.publicationUri || null;
   return (
     <html lang="en">
       <head>
@@ -380,6 +382,36 @@ export function ProfilePage({
             color: var(--text-secondary);
             margin-bottom: 0.5rem;
           }
+          .profile-follow-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            margin-top: 1rem;
+            padding: 0.45rem 1.25rem;
+            border: 1px solid var(--border);
+            border-radius: 99px;
+            background: transparent;
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+            font-weight: 600;
+            font-family: var(--font-sans);
+            cursor: pointer;
+            transition: all 0.15s;
+          }
+          .profile-follow-btn:hover {
+            background: var(--bg-secondary);
+            color: var(--text-main);
+            border-color: var(--text-muted);
+          }
+          .profile-follow-btn.following {
+            background: var(--accent);
+            color: var(--bg);
+            border-color: var(--accent);
+          }
+          .profile-follow-btn.following:hover {
+            background: #d32f2f;
+            border-color: #d32f2f;
+          }
           @media (max-width: 640px) {
             .profile-header {
               flex-direction: column;
@@ -453,6 +485,15 @@ export function ProfilePage({
                 <span><strong>{author.followsCount}</strong> following</span>
                 <span><strong>{stories.length}</strong> {stories.length === 1 ? 'story' : 'stories'}</span>
               </div>
+              {publicationUri && sessionProfile && (
+                <button
+                  class="profile-follow-btn"
+                  id="profile-follow-btn"
+                  data-publication={publicationUri}
+                >
+                  Follow
+                </button>
+              )}
             </div>
           </div>
 
@@ -500,6 +541,58 @@ export function ProfilePage({
             })
           )}
         </div>
+        <script dangerouslySetInnerHTML={{__html: `
+          (async function() {
+            const btn = document.getElementById('profile-follow-btn');
+            if (!btn) return;
+            const pub = btn.dataset.publication;
+
+            // Check status on load
+            try {
+              const res = await fetch('/api/subscription-status?publication=' + encodeURIComponent(pub));
+              const data = await res.json();
+              if (data.subscribed) {
+                btn.classList.add('following');
+                btn.textContent = 'Following';
+                btn.dataset.rkey = data.rkey;
+              }
+            } catch(e) {}
+
+            btn.addEventListener('click', async () => {
+              btn.disabled = true;
+              if (btn.classList.contains('following')) {
+                const rkey = btn.dataset.rkey;
+                try {
+                  const res = await fetch('/api/unsubscribe', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ rkey })
+                  });
+                  if (res.ok) {
+                    btn.classList.remove('following');
+                    btn.textContent = 'Follow';
+                    btn.dataset.rkey = '';
+                  }
+                } catch(e) {}
+              } else {
+                try {
+                  const res = await fetch('/api/subscribe', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ publication: pub })
+                  });
+                  const data = await res.json();
+                  if (data.ok) {
+                    btn.classList.add('following');
+                    btn.textContent = 'Following';
+                    btn.dataset.rkey = data.rkey;
+                  }
+                } catch(e) {}
+              }
+              btn.disabled = false;
+            });
+          })();
+        `}} />
       </body>
     </html>
   );

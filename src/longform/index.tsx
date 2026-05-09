@@ -11,6 +11,7 @@ import { Layout } from './views/layout.js';
 import { HomePage } from './views/home.js';
 import { ProfilePage } from './views/profile.js';
 import { SearchPage } from './views/search.js';
+import { NotFoundPage } from './views/notfound.js';
 import type { LongformStory } from './views/home.js';
 import type { ProfileData } from './views/profile.js';
 import type { SearchResult } from './views/search.js';
@@ -1051,6 +1052,11 @@ const collabServer = HocuspocusServer.configure({
 });
 
 const wss = new WebSocketServer({ noServer: true });
+
+// Custom 404 page
+app.notFound((c) => {
+  return c.html((<NotFoundPage />) as unknown as string, 404);
+});
 
 // Startup hook
 async function start() {
