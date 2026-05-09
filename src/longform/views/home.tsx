@@ -549,6 +549,35 @@ export function HomePage({
             height: 24px;
             width: auto;
           }
+          .top-header-search {
+            display: flex;
+            align-items: center;
+            flex: 1;
+            max-width: 320px;
+            margin: 0 1.5rem;
+          }
+          .top-header-search input {
+            width: 100%;
+            padding: 0.4rem 0.75rem;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: 0.8rem;
+            font-family: var(--font-sans);
+            background: var(--bg-secondary);
+            color: var(--text-main);
+            outline: none;
+            transition: border-color 0.15s, background 0.15s;
+          }
+          .top-header-search input:focus {
+            border-color: var(--text-muted);
+            background: var(--bg);
+          }
+          .top-header-search input::placeholder {
+            color: var(--text-muted);
+          }
+          @media (max-width: 768px) {
+            .top-header-search { display: none; }
+          }
           .top-header-links {
             display: flex;
             gap: 1.25rem;
@@ -658,6 +687,9 @@ export function HomePage({
           <a href="/" class="top-header-logo">
             <img src="/logo.png" alt="Longform" onerror="this.outerHTML='<span>Longform</span>'" />
           </a>
+          <form class="top-header-search" action="/search" method="get">
+            <input type="text" name="q" placeholder="Search articles..." />
+          </form>
           <div class="top-header-links">
             <a href="/">Home</a>
             <a href="/posts">Stories</a>

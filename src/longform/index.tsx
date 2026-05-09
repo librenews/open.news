@@ -10,8 +10,10 @@ import { ReaderPage } from './views/reader.js';
 import { Layout } from './views/layout.js';
 import { HomePage } from './views/home.js';
 import { ProfilePage } from './views/profile.js';
+import { SearchPage } from './views/search.js';
 import type { LongformStory } from './views/home.js';
 import type { ProfileData } from './views/profile.js';
+import type { SearchResult } from './views/search.js';
 import { authRouter, getSession, getLongformAuthClient } from './routes/auth.js';
 import { Agent, BskyAgent } from '@atproto/api';
 import { serializeTiptapToLeaflet } from './lib/leafletExporter.js';
@@ -21,6 +23,7 @@ import { Server as HocuspocusServer } from '@hocuspocus/server';
 import { hocuspocusDb } from './lib/hocuspocusDb.js';
 import { WebSocketServer } from 'ws';
 import { db } from '../db/client.js';
+import { searchSiteStandardArticles } from '../track/opensearch.js';
 
 process.on('unhandledRejection', (err) => {
   logger.warn({ err }, 'Caught unhandled promise rejection in Longform (likely a background OAuth token getter)');
@@ -131,6 +134,56 @@ app.get('/', async (c) => {
   const topics: { label: string; count: number; slug: string }[] = [];
 
   return c.html((<HomePage stories={stories} topics={topics} view={view} profile={profile} domain={config.LONGFORM_DOMAIN} />) as unknown as string);
+});
+
+app.get('/search', async (c) => {
+  const q = (c.req.query('q') || '').trim();
+  const sort = (c.req.query('sort') || 'relevant') as 'relevant' | 'latest';
+  const sessionDid = await getSession(c);
+  const profile = sessionDid ? await fetchUserProfile(sessionDid) : null;
+
+  let results: SearchResult[] = [];
+
+  if (q) {
+    try {
+      const osSort = sort === 'latest' ? 'recent' : 'relevant';
+      const hits = await searchSiteStandardArticles(q, 'long', osSort, 30);
+
+      const uniqueDids = [...new Set((hits.hits || []).map((h: any) => h._source.did))];
+      const profileMap = new Map<string, { displayName: string; avatar: string; handle: string }>();
+      await Promise.all(uniqueDids.map(async (did) => {
+        const p = await fetchUserProfile(did as string);
+        profileMap.set(did as string, p);
+      }));
+
+      results = (hits.hits || []).map((hit: any) => {
+        const s = hit._source;
+        const p = profileMap.get(s.did) || { displayName: s.did, avatar: '', handle: s.did };
+        const highlights = hit.highlight || {};
+        const textHighlights = Object.keys(highlights)
+          .filter(k => k.startsWith('text_content'))
+          .flatMap(k => highlights[k]);
+
+        return {
+          uri: s.uri,
+          did: s.did,
+          title: s.title || 'Untitled',
+          site: s.site || null,
+          path: s.path || null,
+          publishedAt: s.published_at || null,
+          wordCount: s.word_count || 0,
+          highlight: textHighlights.length > 0 ? textHighlights[0] : null,
+          authorHandle: p.handle,
+          authorName: p.displayName,
+          authorAvatar: p.avatar,
+        };
+      });
+    } catch (err: any) {
+      logger.error({ err, q }, 'Search failed');
+    }
+  }
+
+  return c.html((<SearchPage query={q} results={results} sort={sort} profile={profile} domain={config.LONGFORM_DOMAIN} />) as unknown as string);
 });
 
 app.get('/login', async (c) => {
