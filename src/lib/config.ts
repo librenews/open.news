@@ -9,6 +9,8 @@ const schema = z.object({
   BSKY_BOT_PASSWORD: z.string().optional(),
   LONGFORM_BOT_DID: z.string().optional(),
   LONGFORM_BOT_PASSWORD: z.string().optional(),
+  CENTIPEDIA_BSKY_HANDLE: z.string().optional(),
+  CENTIPEDIA_BSKY_PASSWORD: z.string().optional(),
   BSKY_OAUTH_CLIENT_ID: z.string().url(),
   ATPROTO_PDS_URL: z.string().url().default('https://bsky.social'),
 
