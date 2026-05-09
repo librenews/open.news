@@ -75,7 +75,8 @@ app.get('/', async (c) => {
 
   // Fetch stories from site_standard_articles
   const { rows } = await db.query(
-    `SELECT s.uri, s.author_did, s.title, s.description, s.published_at, s.site, s.path, s.word_count
+    `SELECT s.uri, s.author_did, s.title, s.description, s.published_at, s.site, s.path, s.word_count,
+       jsonb_path_query_first(s.raw_record, '$.content.pages[0].blocks[*].block ? (@."$type" == "pub.leaflet.blocks.image").image.ref."$link"') #>> '{}' AS image_cid
      FROM site_standard_articles s
      WHERE s.word_count > 100
        AND s.language = 'eng'
@@ -105,6 +106,7 @@ app.get('/', async (c) => {
       site: r.site,
       path: r.path,
       wordCount: r.word_count || 0,
+      imageUrl: r.image_cid ? `/blob/${r.author_did}/${r.image_cid}` : null,
     };
   });
 

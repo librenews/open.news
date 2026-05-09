@@ -12,6 +12,7 @@ export interface LongformStory {
   site: string | null;
   path: string | null;
   wordCount: number;
+  imageUrl: string | null;
 }
 
 export interface TopicGroup {
@@ -45,25 +46,34 @@ function StoryCard({ story, domain }: { story: LongformStory; domain: string }) 
 
   return (
     <article class="story-card">
-      <a href={readUrl} class="story-link" target="_blank" rel="noopener noreferrer">
-        <h3 class="story-title">{story.title || 'Untitled'}</h3>
-        {story.description && (
-          <p class="story-excerpt">{story.description.length > 200 ? story.description.substring(0, 200) + '…' : story.description}</p>
+      <div class="story-card-inner">
+        <div class="story-card-text">
+          <a href={readUrl} class="story-link" target="_blank" rel="noopener noreferrer">
+            <h3 class="story-title">{story.title || 'Untitled'}</h3>
+            {story.description && (
+              <p class="story-excerpt">{story.description.length > 200 ? story.description.substring(0, 200) + '…' : story.description}</p>
+            )}
+          </a>
+          <div class="story-meta">
+            <a href={`/@${story.authorHandle}`} class="author-link">
+              {story.authorAvatar ? (
+                <img src={story.authorAvatar} alt="" class="author-avatar" />
+              ) : (
+                <div class="author-avatar-placeholder">{(story.authorName || story.authorHandle).charAt(0).toUpperCase()}</div>
+              )}
+              <span class="author-name">{story.authorName || story.authorHandle}</span>
+            </a>
+            <span class="meta-dot">·</span>
+            {ago && <span class="story-time">{ago}</span>}
+            <span class="meta-dot">·</span>
+            <span class="story-read-time">{minRead} min read</span>
+          </div>
+        </div>
+        {story.imageUrl && (
+          <a href={readUrl} class="story-thumb" target="_blank" rel="noopener noreferrer">
+            <img src={story.imageUrl} alt="" loading="lazy" />
+          </a>
         )}
-      </a>
-      <div class="story-meta">
-        <a href={`/@${story.authorHandle}`} class="author-link">
-          {story.authorAvatar ? (
-            <img src={story.authorAvatar} alt="" class="author-avatar" />
-          ) : (
-            <div class="author-avatar-placeholder">{(story.authorName || story.authorHandle).charAt(0).toUpperCase()}</div>
-          )}
-          <span class="author-name">{story.authorName || story.authorHandle}</span>
-        </a>
-        <span class="meta-dot">·</span>
-        {ago && <span class="story-time">{ago}</span>}
-        <span class="meta-dot">·</span>
-        <span class="story-read-time">{minRead} min read</span>
       </div>
     </article>
   );
@@ -270,6 +280,27 @@ export function HomePage({
           }
           .story-card:hover {
             background: var(--bg-secondary);
+          }
+          .story-card-inner {
+            display: flex;
+            gap: 1.25rem;
+            align-items: flex-start;
+          }
+          .story-card-text {
+            flex: 1;
+            min-width: 0;
+          }
+          .story-thumb {
+            flex-shrink: 0;
+            width: 120px;
+            height: 80px;
+            border-radius: 6px;
+            overflow: hidden;
+          }
+          .story-thumb img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
           }
           .story-link {
             text-decoration: none;
