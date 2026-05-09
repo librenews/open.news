@@ -97,6 +97,12 @@ app.get('/', async (c) => {
     }
   }
 
+  if (view === 'following' && followedPubUris.length === 0) {
+    // No subscriptions — skip query, show empty state
+    const topics: { label: string; count: number; slug: string }[] = [];
+    return c.html((<HomePage stories={[]} topics={topics} view={view} profile={profile} domain={config.LONGFORM_DOMAIN} hasSubscriptions={false} />) as unknown as string);
+  }
+
   // Build the query — add publication filter for "following" view
   let queryText: string;
   let queryParams: any[] = [];
