@@ -76,7 +76,11 @@ app.get('/', async (c) => {
   // Fetch stories from site_standard_articles
   const { rows } = await db.query(
     `SELECT s.uri, s.author_did, s.title, s.description, s.published_at, s.site, s.path, s.word_count,
-       jsonb_path_query_first(s.raw_record, '$.content.pages[0].blocks[*].block ? (@."$type" == "pub.leaflet.blocks.image").image.ref."$link"') #>> '{}' AS image_cid
+       split_part(s.uri, '/', 4) AS collection,
+       CASE WHEN s.uri LIKE '%/site.standard.document/%' OR s.uri LIKE '%/pub.leaflet.document/%'
+         THEN jsonb_path_query_first(s.raw_record, '$.content.pages[0].blocks[*].block ? (@."$type" == "pub.leaflet.blocks.image").image.ref."$link"') #>> '{}'
+         ELSE NULL
+       END AS image_cid
      FROM site_standard_articles s
      WHERE s.word_count > 100
        AND s.language = 'eng'
@@ -94,6 +98,18 @@ app.get('/', async (c) => {
 
   const stories: LongformStory[] = rows.map((r: any) => {
     const p = profileMap.get(r.author_did) || { displayName: r.author_did, avatar: '', handle: r.author_did };
+    const rkey = r.uri.split('/').pop();
+    const collection = r.collection;
+
+    // Build the correct read URL per collection type
+    let readUrl: string | null = null;
+    if (r.site && r.path && r.site.startsWith('http')) {
+      readUrl = `${r.site}${r.path}`;
+    } else if (collection === 'com.whtwnd.blog.entry') {
+      readUrl = `https://whtwnd.com/${p.handle}/${rkey}`;
+    }
+    // else null — StoryCard will use /post/:did/:rkey (Leaflet reader)
+
     return {
       uri: r.uri,
       authorDid: r.author_did,
@@ -107,6 +123,7 @@ app.get('/', async (c) => {
       path: r.path,
       wordCount: r.word_count || 0,
       imageUrl: r.image_cid ? `/blob/${r.author_did}/${r.image_cid}` : null,
+      externalUrl: readUrl,
     };
   });
 
@@ -333,11 +350,24 @@ app.get('/post/:did/:rkey', async (c) => {
       }
     }
     
-    const record = await agentToUse.com.atproto.repo.getRecord({
-      repo: did,
-      collection: 'site.standard.document',
-      rkey: rkey
-    });
+    // Try multiple collection types — site.standard.document first, then pub.leaflet.document
+    const collections = ['site.standard.document', 'pub.leaflet.document'];
+    let record: any = null;
+    for (const collection of collections) {
+      try {
+        record = await agentToUse.com.atproto.repo.getRecord({
+          repo: did,
+          collection,
+          rkey: rkey
+        });
+        break;
+      } catch (e) {
+        // Try next collection
+      }
+    }
+    if (!record) {
+      return c.html((<Layout title="Post Not Found"><h1>Post Not Found</h1><p>Could not find this article.</p></Layout>) as unknown as string, 404);
+    }
     
     // Fetch author profile
     const authorProfile = await fetchUserProfile(did);

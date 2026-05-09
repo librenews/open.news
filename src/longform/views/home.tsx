@@ -13,6 +13,7 @@ export interface LongformStory {
   path: string | null;
   wordCount: number;
   imageUrl: string | null;
+  externalUrl: string | null;
 }
 
 export interface TopicGroup {
@@ -39,10 +40,9 @@ function StoryCard({ story, domain }: { story: LongformStory; domain: string }) 
   const minRead = Math.max(1, Math.ceil(story.wordCount / 200));
   const rkey = story.uri.split('/').pop();
 
-  // Link to site+path if available, otherwise longform reader
-  const readUrl = (story.site && story.path && story.site.startsWith('http'))
-    ? `${story.site}${story.path}`
-    : `https://${domain}/post/${story.authorDid}/${rkey}`;
+  // Use pre-computed externalUrl, or fall back to longform reader for Leaflet
+  const readUrl = story.externalUrl
+    || `https://${domain}/post/${story.authorDid}/${rkey}`;
 
   return (
     <article class="story-card">
