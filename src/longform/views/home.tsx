@@ -481,13 +481,19 @@ export function HomePage({
             </div>
 
             <div class="nav-footer">
-              <a href={profile ? "/new" : "/"} class="nav-write-btn">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                </svg>
-                Write
-              </a>
+              {profile ? (
+                <a href="/new" class="nav-write-btn">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                  </svg>
+                  Write
+                </a>
+              ) : (
+                <a href="/login" class="nav-write-btn">
+                  Sign In
+                </a>
+              )}
             </div>
           </nav>
 
@@ -514,7 +520,7 @@ export function HomePage({
 
           {/* Right Sidebar */}
           <aside class="right-sidebar">
-            {profile && (
+            {profile ? (
               <div class="user-card">
                 {profile.avatar ? (
                   <img src={profile.avatar} alt="" class="user-card-avatar" />
@@ -527,6 +533,15 @@ export function HomePage({
                   <div class="user-card-name">{profile.displayName}</div>
                   <div class="user-card-handle">@{profile.handle}</div>
                 </div>
+              </div>
+            ) : (
+              <div class="sidebar-section">
+                <a href="/login" class="nav-write-btn" style="margin-bottom: 0.75rem;">
+                  Sign in to write
+                </a>
+                <p style="font-size: 0.75rem; color: var(--text-muted); line-height: 1.5; text-align: center;">
+                  Use your Bluesky or AT Protocol identity
+                </p>
               </div>
             )}
 

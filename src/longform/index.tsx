@@ -53,7 +53,7 @@ app.get('/', async (c) => {
 
   // If ?doc= param, show editor (requires login)
   if (docId) {
-    if (!sessionDid) return c.redirect('/');
+    if (!sessionDid) return c.redirect('/login');
     const profile = await fetchUserProfile(sessionDid);
     const headerAction = html`
       <div style="display: flex; gap: 0.5rem; align-items: center;">
@@ -112,6 +112,31 @@ app.get('/', async (c) => {
   const topics: { label: string; count: number; slug: string }[] = [];
 
   return c.html((<HomePage stories={stories} topics={topics} view={view} profile={profile} domain={config.LONGFORM_DOMAIN} />) as unknown as string);
+});
+
+app.get('/login', async (c) => {
+  const sessionDid = await getSession(c);
+  if (sessionDid) return c.redirect('/');
+
+  return c.html((<Layout title={`Sign in — Longform`}>
+    <div style="text-align: center; padding-top: 15vh;">
+      <img src="/logo.png" alt="Longform" style="height: 64px; margin-bottom: 0.5rem;" onerror="this.outerHTML='<h1 style=\'font-family: var(--font-body); font-weight: 700; font-size: 54px; color: var(--text-main); letter-spacing: -0.03em; margin-bottom: 0.5rem;\'>Longform</h1>'" />
+      <p style="color: var(--text-muted); font-family: var(--font-sans); margin-bottom: 3rem; font-size: 18px;">Sign in with your AT Protocol identity to write and publish.</p>
+      <form action="/oauth/login" method="get">
+        <input
+          type="text"
+          name="handle"
+          placeholder="e.g. alice.bsky.social"
+          style="padding: 0.75rem 1rem; border: 1px solid rgba(0,0,0,0.2); border-radius: 6px; font-size: 16px; margin-right: 0.5rem; width: 260px; font-family: var(--font-sans);"
+          required
+        />
+        <button
+          type="submit"
+          style="padding: 0.75rem 1.5rem; background: #242424; color: white; border: none; border-radius: 6px; font-size: 16px; cursor: pointer; font-family: var(--font-sans); font-weight: 500;"
+        >Sign In</button>
+      </form>
+    </div>
+  </Layout>) as unknown as string);
 });
 
 app.get('/@:handle', async (c) => {
