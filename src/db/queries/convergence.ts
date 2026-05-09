@@ -41,7 +41,7 @@ export async function getConvergenceArticles(
      GROUP BY a.id
      ORDER BY
        (COUNT(DISTINCT tm.track_id) + COUNT(DISTINCT asrc.source_id) * 0.5)
-       / POWER(EXTRACT(EPOCH FROM (NOW() - COALESCE(a.published_at, a.created_at))) / 3600 + 2, 1.5) DESC,
+       / POWER(GREATEST(EXTRACT(EPOCH FROM (NOW() - COALESCE(a.published_at, a.created_at))) / 3600, 0) + 2, 1.5) DESC,
        CASE WHEN a.published_at > NOW() THEN a.created_at ELSE a.published_at END DESC NULLS LAST
      LIMIT $2`,
     [hours, limit]
