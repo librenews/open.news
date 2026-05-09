@@ -62,7 +62,7 @@ export function NotFoundPage() {
             display: flex;
             align-items: center;
           }
-          .top-header-logo img { height: 24px; width: auto; }
+          .top-header-logo img { height: 36px; width: auto; }
           .top-header-links {
             display: flex;
             gap: 1.25rem;
