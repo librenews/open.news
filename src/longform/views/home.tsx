@@ -554,13 +554,24 @@ export function HomePage({
             align-items: center;
             flex: 1;
             max-width: 320px;
-            margin: 0 1.5rem;
+            margin: 0 0 0 1rem;
+            position: relative;
+          }
+          .top-header-search .search-icon {
+            position: absolute;
+            left: 0.6rem;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 14px;
+            height: 14px;
+            color: var(--text-muted);
+            pointer-events: none;
           }
           .top-header-search input {
             width: 100%;
-            padding: 0.4rem 0.75rem;
+            padding: 0.45rem 0.75rem 0.45rem 2rem;
             border: 1px solid var(--border);
-            border-radius: 8px;
+            border-radius: 20px;
             font-size: 0.8rem;
             font-family: var(--font-sans);
             background: var(--bg-secondary);
@@ -688,6 +699,9 @@ export function HomePage({
             <img src="/logo.png" alt="Longform" onerror="this.outerHTML='<span>Longform</span>'" />
           </a>
           <form class="top-header-search" action="/search" method="get">
+            <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
             <input type="text" name="q" placeholder="Search articles..." />
           </form>
           <div class="top-header-links">
