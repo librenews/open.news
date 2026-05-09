@@ -51,6 +51,26 @@ async function fetchUserProfile(did: string) {
   return { displayName: did, avatar: '', handle: did };
 }
 
+/**
+ * Safely restore an OAuth session. Returns the Agent session or null if the
+ * session was deleted/expired (clears the cookie so the user is prompted to re-login).
+ */
+async function restoreSession(c: any, sessionDid: string): Promise<import('@atproto/api').AtpSessionData | null> {
+  try {
+    const client = await getLongformAuthClient();
+    return await client.restore(sessionDid);
+  } catch (err: any) {
+    const msg = err?.message || '';
+    if (msg.includes('deleted') || msg.includes('revoked') || msg.includes('expired')) {
+      logger.warn({ did: sessionDid, err: msg }, 'OAuth session invalid, clearing cookie');
+      const { setCookie } = await import('hono/cookie');
+      setCookie(c, 'lf_session', '', { maxAge: 0, path: '/' });
+      return null;
+    }
+    throw err; // re-throw unexpected errors
+  }
+}
+
 app.get('/', async (c) => {
   const sessionDid = await getSession(c);
   const docId = c.req.query('doc');
@@ -81,8 +101,8 @@ app.get('/', async (c) => {
   let followedPubUris: string[] = [];
   if (view === 'following' && sessionDid) {
     try {
-      const client = await getLongformAuthClient();
-      const oauthSession = await client.restore(sessionDid);
+      const oauthSession = await restoreSession(c, sessionDid);
+      if (!oauthSession) { return c.redirect('/login'); }
       const agent = new Agent(oauthSession);
       const res = await agent.com.atproto.repo.listRecords({
         repo: sessionDid,
@@ -384,8 +404,8 @@ app.get('/posts', async (c) => {
     );
 
     // Fetch published posts from PDS
-    const client = await getLongformAuthClient();
-    const oauthSession = await client.restore(sessionDid);
+    const oauthSession = await restoreSession(c, sessionDid);
+    if (!oauthSession) return c.redirect('/login');
     const agent = new Agent(oauthSession);
     const pdsRes = await agent.com.atproto.repo.listRecords({
       repo: sessionDid,
@@ -479,9 +499,10 @@ app.get('/post/:did/:rkey', async (c) => {
     let agentToUse;
     
     if (sessionDid) {
-      const client = await getLongformAuthClient();
-      const oauthSession = await client.restore(sessionDid);
-      agentToUse = new Agent(oauthSession);
+      const oauthSession = await restoreSession(c, sessionDid);
+      if (oauthSession) {
+        agentToUse = new Agent(oauthSession);
+      }
     } else {
       // Resolve the author's specific PDS for unauthenticated fetching
       try {
@@ -586,8 +607,8 @@ app.get('/api/subscription-status', async (c) => {
   if (!pubUri) return c.json({ subscribed: false, rkey: null });
 
   try {
-    const client = await getLongformAuthClient();
-    const oauthSession = await client.restore(sessionDid);
+    const oauthSession = await restoreSession(c, sessionDid);
+    if (!oauthSession) return c.json({ subscribed: false, rkey: null, session_expired: true });
     const agent = new Agent(oauthSession);
     const res = await agent.com.atproto.repo.listRecords({
       repo: sessionDid,
@@ -617,8 +638,8 @@ app.post('/api/subscribe', async (c) => {
   }
 
   try {
-    const client = await getLongformAuthClient();
-    const oauthSession = await client.restore(sessionDid);
+    const oauthSession = await restoreSession(c, sessionDid);
+    if (!oauthSession) return c.json({ error: 'Session expired, please sign in again' }, 401);
     const agent = new Agent(oauthSession);
 
     const res = await agent.com.atproto.repo.createRecord({
@@ -649,8 +670,8 @@ app.post('/api/unsubscribe', async (c) => {
   if (!rkey) return c.json({ error: 'Missing rkey' }, 400);
 
   try {
-    const client = await getLongformAuthClient();
-    const oauthSession = await client.restore(sessionDid);
+    const oauthSession = await restoreSession(c, sessionDid);
+    if (!oauthSession) return c.json({ error: 'Session expired, please sign in again' }, 401);
     const agent = new Agent(oauthSession);
 
     await agent.com.atproto.repo.deleteRecord({
@@ -713,8 +734,8 @@ app.delete('/api/drafts', async (c) => {
     // If it is a published post (has rkey but no draft entry), delete from PDS
     if (rkey) {
       try {
-        const client = await getLongformAuthClient();
-        const oauthSession = await client.restore(sessionDid);
+        const oauthSession = await restoreSession(c, sessionDid);
+        if (!oauthSession) return c.json({ error: 'Session expired' }, 401);
         const agent = new Agent(oauthSession);
         await agent.com.atproto.repo.deleteRecord({
           repo: sessionDid,
@@ -748,8 +769,8 @@ app.post('/api/publish', async (c) => {
    
    try {
      const body = await c.req.json();
-     const client = await getLongformAuthClient();
-     const oauthSession = await client.restore(sessionDid);
+     const oauthSession = await restoreSession(c, sessionDid);
+     if (!oauthSession) return c.json({ error: 'Session expired' }, 401);
      const agent = new Agent(oauthSession);
      
       // Extract title from first heading in the document, fallback to body.title
@@ -851,8 +872,8 @@ app.post('/api/like', async (c) => {
   
   try {
     let { rkey, authorDid, uri, cid } = await c.req.json();
-    const client = await getLongformAuthClient();
-    const oauthSession = await client.restore(sessionDid);
+    const oauthSession = await restoreSession(c, sessionDid);
+    if (!oauthSession) return c.json({ error: 'Session expired' }, 401);
     const agent = new Agent(oauthSession);
     
     if (!uri || !cid) {
@@ -888,8 +909,8 @@ app.post('/api/repost', async (c) => {
   
   try {
     let { rkey, authorDid, uri, cid } = await c.req.json();
-    const client = await getLongformAuthClient();
-    const oauthSession = await client.restore(sessionDid);
+    const oauthSession = await restoreSession(c, sessionDid);
+    if (!oauthSession) return c.json({ error: 'Session expired' }, 401);
     const agent = new Agent(oauthSession);
     
     if (!uri || !cid) {
