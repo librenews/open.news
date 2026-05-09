@@ -33,9 +33,11 @@ const schema = z.object({
   // Web
   PORT: z.coerce.number().default(3000),
   LONGFORM_PORT: z.coerce.number().default(3001),
+  CENTIPEDIA_PORT: z.coerce.number().default(4600),
   SESSION_SECRET: z.string().min(16),
   BASE_URL: z.string().url(),
   LONGFORM_DOMAIN: z.string().default('dev.libre.news'),
+  CENTIPEDIA_DOMAIN: z.string().default('dev.centipedia.org'),
 
   // Operational
   LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error']).default('info'),
