@@ -412,33 +412,29 @@ app.get('/blob/:did/:cid', async (c) => {
   const cid = c.req.param('cid');
   
   try {
-    const sessionDid = await getSession(c);
-    let agentToUse;
+    // Resolve the PDS and fetch the blob directly via HTTP
+    const pdsUrl = await resolvePds(did);
+    const blobUrl = `${pdsUrl}/xrpc/com.atproto.sync.getBlob?did=${encodeURIComponent(did)}&cid=${encodeURIComponent(cid)}`;
+    const res = await fetch(blobUrl);
     
-    if (sessionDid) {
-      const client = await getLongformAuthClient();
-      const oauthSession = await client.restore(sessionDid);
-      agentToUse = new Agent(oauthSession);
-    } else {
-      try {
-        const pdsUrl = await resolvePds(did);
-        agentToUse = new BskyAgent({ service: pdsUrl }) as any;
-      } catch (e) {
-        agentToUse = new BskyAgent({ service: 'https://public.api.bsky.app' }) as any;
-      }
+    if (!res.ok) {
+      logger.warn({ did, cid, status: res.status }, 'Blob fetch from PDS failed');
+      return c.text('Image not found', 404);
     }
     
-    const blobRes = await agentToUse.com.atproto.sync.getBlob({ did, cid });
+    const contentType = res.headers.get('content-type') || 'image/jpeg';
+    const body = await res.arrayBuffer();
     
-    return c.body(blobRes.data as any, 200, {
-      'Content-Type': 'image/jpeg',
-      'Cache-Control': 'public, max-age=31536000'
+    return c.body(body as any, 200, {
+      'Content-Type': contentType,
+      'Cache-Control': 'public, max-age=31536000, immutable'
     });
   } catch (err: any) {
     logger.error({ err, did, cid }, 'Failed to fetch blob from PDS');
     return c.text('Image not found', 404);
   }
 });
+
 
 app.get('/api/my-permission', async (c) => {
   const sessionDid = await getSession(c);
