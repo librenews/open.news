@@ -39,7 +39,10 @@ export async function getConvergenceArticles(
        AND a.url NOT LIKE '%bsky.app%'
        AND a.url NOT LIKE '%ranked.news%'
      GROUP BY a.id
-     ORDER BY convergence_score DESC, share_count DESC, CASE WHEN a.published_at > NOW() THEN a.created_at ELSE a.published_at END DESC NULLS LAST
+     ORDER BY
+       (COUNT(DISTINCT tm.track_id) + COUNT(DISTINCT asrc.source_id) * 0.5)
+       / POWER(EXTRACT(EPOCH FROM (NOW() - COALESCE(a.published_at, a.created_at))) / 3600 + 2, 1.5) DESC,
+       CASE WHEN a.published_at > NOW() THEN a.created_at ELSE a.published_at END DESC NULLS LAST
      LIMIT $2`,
     [hours, limit]
   );
