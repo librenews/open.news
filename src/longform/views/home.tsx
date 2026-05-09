@@ -433,9 +433,16 @@ export function HomePage({
             border: 1px solid var(--border);
             border-radius: 10px;
             box-shadow: 0 4px 16px rgba(0,0,0,0.12);
-            overflow: hidden;
-            margin-top: 0.25rem;
             z-index: 50;
+            padding-top: 0;
+          }
+          .user-card-dropdown::before {
+            content: '';
+            position: absolute;
+            top: -8px;
+            left: 0;
+            right: 0;
+            height: 8px;
           }
           .user-card:hover .user-card-dropdown {
             display: block;
