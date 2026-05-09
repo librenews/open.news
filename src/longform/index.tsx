@@ -299,26 +299,48 @@ app.get('/@:handle', async (c) => {
 
   // Fetch their articles
   const { rows } = await db.query(
-    `SELECT uri, author_did, title, description, published_at, site, path, word_count
+    `SELECT uri, author_did, title, description, published_at, site, path, word_count,
+       split_part(uri, '/', 4) AS collection,
+       CASE WHEN uri LIKE '%/site.standard.document/%' OR uri LIKE '%/pub.leaflet.document/%'
+         THEN jsonb_path_query_first(raw_record, '$.content.pages[0].blocks[*].block ? (@."$type" == "pub.leaflet.blocks.image").image.ref."$link"') #>> '{}'
+         ELSE NULL
+       END AS image_cid,
+       CASE WHEN raw_record->>'site' LIKE 'at://%site.standard.publication%'
+         THEN raw_record->>'site'
+         ELSE NULL
+       END AS publication_uri
      FROM site_standard_articles
      WHERE author_did = $1
      ORDER BY published_at DESC`,
     [did]
   );
 
-  const stories: LongformStory[] = rows.map((r: any) => ({
-    uri: r.uri,
-    authorDid: r.author_did,
-    authorHandle: authorData.handle,
-    authorAvatar: authorData.avatar,
-    authorName: authorData.displayName,
-    title: r.title,
-    description: r.description,
-    publishedAt: r.published_at?.toISOString() ?? null,
-    site: r.site,
-    path: r.path,
-    wordCount: r.word_count || 0,
-  }));
+  const stories: LongformStory[] = rows.map((r: any) => {
+    const rkey = r.uri.split('/').pop();
+    const collection = r.collection;
+    let readUrl: string | null = null;
+    if (r.site && r.path && r.site.startsWith('http')) {
+      readUrl = `${r.site}${r.path}`;
+    } else if (collection === 'com.whtwnd.blog.entry') {
+      readUrl = `https://whtwnd.com/${authorData.handle}/${rkey}`;
+    }
+    return {
+      uri: r.uri,
+      authorDid: r.author_did,
+      authorHandle: authorData.handle,
+      authorAvatar: authorData.avatar,
+      authorName: authorData.displayName,
+      title: r.title,
+      description: r.description,
+      publishedAt: r.published_at?.toISOString() ?? null,
+      site: r.site,
+      path: r.path,
+      wordCount: r.word_count || 0,
+      imageUrl: r.image_cid ? `/blob/${r.author_did}/${r.image_cid}` : null,
+      externalUrl: readUrl,
+      publicationUri: r.publication_uri || null,
+    };
+  });
 
   return c.html((<ProfilePage author={authorData} stories={stories} sessionProfile={sessionProfile} domain={config.LONGFORM_DOMAIN} />) as unknown as string);
 });
