@@ -736,7 +736,7 @@ export function HomePage({
         {/* Top navigation header */}
         <header class="top-header">
           <a href="/" class="top-header-logo">
-            <img src="/logo.png" alt="Centipedia" onerror="this.outerHTML='<span>Centipedia</span>'" />
+            <img src="/logo.jpg" alt="Centipedia" onerror="this.outerHTML='<span>Centipedia</span>'" />
           </a>
           <form class="top-header-search" action="/search" method="get">
             <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">

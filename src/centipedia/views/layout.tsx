@@ -164,7 +164,7 @@ export function Layout({ title, children, profile, headerAction, og }: { title: 
           ${title.includes('Login') ? '' : html`
             <nav class="nav-header">
               <a href="/" style="display: flex; align-items: center; text-decoration: none;">
-                <img src="/logo.png" alt="Centipedia" style="height: 28px; width: auto;" onerror="this.outerHTML='<span style=\\'font-family: var(--font-body); font-weight: 700; font-size: 22px; color: var(--text-main); letter-spacing: -0.03em;\\'>Centipedia</span>'" />
+                <img src="/logo.jpg" alt="Centipedia" style="height: 28px; width: auto;" onerror="this.outerHTML='<span style=\\'font-family: var(--font-body); font-weight: 700; font-size: 22px; color: var(--text-main); letter-spacing: -0.03em;\\'>Centipedia</span>'" />
               </a>
               
               ${profile ? html`

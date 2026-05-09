@@ -159,7 +159,7 @@ export function NotFoundPage() {
       <body>
         <header class="top-header">
           <a href="/" class="top-header-logo">
-            <img src="/logo.png" alt="Centipedia" onerror="this.outerHTML='<span>Centipedia</span>'" />
+            <img src="/logo.jpg" alt="Centipedia" onerror="this.outerHTML='<span>Centipedia</span>'" />
           </a>
           <div class="top-header-links">
             <a href="/">Home</a>
