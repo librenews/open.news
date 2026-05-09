@@ -4,46 +4,92 @@ import { logger } from '../lib/logger.js';
 
 let botAgent: BskyAgent | null = null;
 
-export async function getLongformBot(): Promise<BskyAgent | null> {
+/**
+ * Get or create the Centipedia bot agent.
+ * Uses CENTIPEDIA_BSKY_HANDLE + CENTIPEDIA_BSKY_PASSWORD for auth.
+ */
+export async function getCentipediaBot(): Promise<BskyAgent | null> {
   if (botAgent) return botAgent;
-  if (!config.CENTIPEDIA_BOT_DID || !config.CENTIPEDIA_BOT_PASSWORD) {
+  if (!config.CENTIPEDIA_BSKY_HANDLE || !config.CENTIPEDIA_BSKY_PASSWORD) {
     return null;
   }
 
   const agent = new BskyAgent({ service: config.ATPROTO_PDS_URL });
   try {
     await agent.login({
-      identifier: config.CENTIPEDIA_BOT_DID,
-      password: config.CENTIPEDIA_BOT_PASSWORD
+      identifier: config.CENTIPEDIA_BSKY_HANDLE,
+      password: config.CENTIPEDIA_BSKY_PASSWORD
     });
     botAgent = agent;
-    logger.info({ did: config.CENTIPEDIA_BOT_DID }, 'Longform bot logged in');
+    logger.info({ handle: config.CENTIPEDIA_BSKY_HANDLE, did: agent.session?.did }, 'Centipedia bot logged in');
     return agent;
   } catch (err) {
-    logger.error({ err }, 'Failed to login Longform bot');
+    logger.error({ err }, 'Failed to login Centipedia bot');
     return null;
   }
 }
 
-export async function announcePublication(authorHandle: string, title: string, uri: string) {
+/**
+ * Ensure the Centipedia publication record exists in the bot's repo.
+ * Creates it if missing. Returns the publication AT-URI.
+ */
+export async function ensurePublication(): Promise<string | null> {
+  const agent = await getCentipediaBot();
+  if (!agent || !agent.session) return null;
+
+  const did = agent.session.did;
+  const collection = 'site.standard.publication';
+  const rkey = 'self'; // canonical rkey for the encyclopedia publication
+
   try {
-    const agent = await getLongformBot();
+    // Check if publication already exists
+    const existing = await agent.com.atproto.repo.getRecord({
+      repo: did,
+      collection,
+      rkey,
+    });
+    const uri = existing.data.uri;
+    logger.info({ uri }, 'Centipedia publication already exists');
+    return uri;
+  } catch (err: any) {
+    // Record doesn't exist — create it
+    if (err?.status === 400 || err?.message?.includes('not found') || err?.message?.includes('Could not locate')) {
+      try {
+        const res = await agent.com.atproto.repo.createRecord({
+          repo: did,
+          collection,
+          rkey,
+          record: {
+            $type: 'site.standard.publication',
+            title: 'Centipedia',
+            description: 'The agentic encyclopedia — knowledge synthesized by AI agents from human-curated citations.',
+            createdAt: new Date().toISOString(),
+          },
+        });
+        logger.info({ uri: res.data.uri }, 'Created Centipedia publication record');
+        return res.data.uri;
+      } catch (createErr) {
+        logger.error({ err: createErr }, 'Failed to create Centipedia publication record');
+        return null;
+      }
+    }
+    logger.error({ err }, 'Failed to check Centipedia publication');
+    return null;
+  }
+}
+
+/**
+ * Announce an article update on Bluesky.
+ */
+export async function announceArticle(title: string, articleUrl: string) {
+  try {
+    const agent = await getCentipediaBot();
     if (!agent) {
-      logger.debug('Longform bot not configured, skipping announcement');
+      logger.debug('Centipedia bot not configured, skipping announcement');
       return;
     }
 
-    // Extract the DID and RKEY from the URI
-    // URI format: at://did:plc:xxx/pub.leaflet.document/rkey
-    const parts = uri.split('/');
-    if (parts.length < 5) return;
-    const authorDid = parts[2];
-    const rkey = parts[4];
-    
-    const postUrl = `https://${config.CENTIPEDIA_DOMAIN}/post/${authorDid}/${rkey}`;
-    
-    // Attempt to resolve the author's handle to tag them if possible, otherwise use handle as text
-    const text = `📰 New article published on Longform by @${authorHandle}!\n\n"${title}"\n\nRead it here: ${postUrl}`;
+    const text = `📚 New Centipedia article: "${title}"\n\n${articleUrl}`;
     
     const rt = new RichText({ text });
     await rt.detectFacets(agent);
@@ -53,8 +99,8 @@ export async function announcePublication(authorHandle: string, title: string, u
       facets: rt.facets
     });
     
-    logger.info({ authorDid, postUrl }, 'Longform bot announced publication');
+    logger.info({ title, articleUrl }, 'Centipedia bot announced article');
   } catch (err) {
-    logger.error({ err }, 'Failed to announce publication via Longform bot');
+    logger.error({ err }, 'Failed to announce article via Centipedia bot');
   }
 }

@@ -11,6 +11,8 @@ const schema = z.object({
   LONGFORM_BOT_PASSWORD: z.string().optional(),
   CENTIPEDIA_BSKY_HANDLE: z.string().optional(),
   CENTIPEDIA_BSKY_PASSWORD: z.string().optional(),
+  CENTIPEDIA_BOT_DID: z.string().optional(),
+  CENTIPEDIA_PUBLICATION_URI: z.string().optional(),
   BSKY_OAUTH_CLIENT_ID: z.string().url(),
   ATPROTO_PDS_URL: z.string().url().default('https://bsky.social'),
 
