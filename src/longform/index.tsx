@@ -78,7 +78,7 @@ app.get('/', async (c) => {
     `SELECT s.uri, s.author_did, s.title, s.description, s.published_at, s.site, s.path, s.word_count
      FROM site_standard_articles s
      WHERE s.word_count > 100
-       AND s.language IS NOT DISTINCT FROM 'en'
+       AND s.language = 'eng'
      ORDER BY s.published_at DESC NULLS LAST
      LIMIT 40`,
   );
