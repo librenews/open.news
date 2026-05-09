@@ -230,11 +230,66 @@ export function ProfilePage({
             .top-header-dropdown { box-shadow: 0 4px 16px rgba(0,0,0,0.4); }
           }
 
-          /* Profile layout */
-          .profile-layout {
-            max-width: 720px;
+          /* Three-column layout */
+          .app-shell {
+            display: flex;
+            min-height: calc(100vh - 49px);
+            max-width: 1280px;
             margin: 0 auto;
-            padding: 2rem 1.5rem;
+          }
+          .left-nav {
+            width: 220px;
+            flex-shrink: 0;
+            padding: 1.5rem;
+            border-right: 1px solid var(--border);
+            position: sticky;
+            top: 49px;
+            height: calc(100vh - 49px);
+            display: flex;
+            flex-direction: column;
+          }
+          .nav-items { display: flex; flex-direction: column; gap: 0.25rem; flex: 1; }
+          .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.65rem 0.85rem;
+            border-radius: 10px;
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 0.9rem;
+            font-weight: 500;
+            transition: all 0.15s;
+          }
+          .nav-item:hover { background: var(--bg-secondary); color: var(--text-main); }
+          .nav-item svg { width: 20px; height: 20px; flex-shrink: 0; }
+          .nav-footer { padding-top: 1.5rem; border-top: 1px solid var(--border); }
+          .nav-write-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            width: 100%;
+            padding: 0.6rem 1rem;
+            background: var(--accent);
+            color: var(--bg);
+            border: none;
+            border-radius: 99px;
+            font-size: 0.875rem;
+            font-weight: 600;
+            font-family: var(--font-sans);
+            cursor: pointer;
+            text-decoration: none;
+            transition: background 0.15s;
+          }
+          .nav-write-btn:hover { opacity: 0.85; }
+          .center-content {
+            flex: 1;
+            min-width: 0;
+            padding: 2rem 1.75rem;
+          }
+          @media (max-width: 768px) {
+            .left-nav { display: none; }
           }
 
           /* Profile header */
@@ -420,6 +475,12 @@ export function ProfilePage({
             }
             .profile-stats { justify-content: center; }
           }
+          @media (max-width: 768px) {
+            .top-header-search { display: none; }
+          }
+          @media (prefers-color-scheme: dark) {
+            .top-header-dropdown { box-shadow: 0 4px 16px rgba(0,0,0,0.4); }
+          }
         `}} />
       </head>
       <body>
@@ -465,7 +526,54 @@ export function ProfilePage({
           </div>
         </header>
 
-        <div class="profile-layout">
+        <div class="app-shell">
+          {/* Left Navigation */}
+          <nav class="left-nav">
+            <div class="nav-items">
+              <a href="/" class="nav-item">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+                  <polyline points="9 22 9 12 15 12 15 22" />
+                </svg>
+                Home
+              </a>
+              <a href="/posts" class="nav-item">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
+                  <polyline points="14 2 14 8 20 8" />
+                  <line x1="16" y1="13" x2="8" y2="13" />
+                  <line x1="16" y1="17" x2="8" y2="17" />
+                  <line x1="10" y1="9" x2="8" y2="9" />
+                </svg>
+                Stories
+              </a>
+              {sessionProfile && (
+                <a href={`/profile/${sessionProfile.handle}`} class="nav-item">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                    <circle cx="12" cy="7" r="4" />
+                  </svg>
+                  Profile
+                </a>
+              )}
+            </div>
+            <div class="nav-footer">
+              {sessionProfile ? (
+                <a href="/new" class="nav-write-btn">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                  </svg>
+                  Write
+                </a>
+              ) : (
+                <a href="/login" class="nav-write-btn">Sign In</a>
+              )}
+            </div>
+          </nav>
+
+          {/* Center Column */}
+          <main class="center-content">
           <div class="profile-header">
             {author.avatar ? (
               <img src={author.avatar} alt="" class="profile-avatar" />
@@ -540,6 +648,7 @@ export function ProfilePage({
               );
             })
           )}
+          </main>
         </div>
         <script dangerouslySetInnerHTML={{__html: `
           (async function() {
