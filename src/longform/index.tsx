@@ -262,15 +262,24 @@ app.get('/login', async (c) => {
   </Layout>) as unknown as string);
 });
 
-app.get('/@:handle', async (c) => {
-  const handle = c.req.param('handle');
+app.get('/profile/:identifier', async (c) => {
+  const identifier = c.req.param('identifier');
   const sessionDid = await getSession(c);
   const sessionProfile = sessionDid ? await fetchUserProfile(sessionDid) : null;
 
-  // Resolve handle to DID
-  const res = await fetch(`https://public.api.bsky.app/xrpc/com.atproto.identity.resolveHandle?handle=${handle}`);
-  if (!res.ok) return c.text('User not found', 404);
-  const { did } = await res.json() as any;
+  // Resolve identifier to DID — can be a handle or DID
+  let did: string;
+  let handle: string;
+  if (identifier.startsWith('did:')) {
+    did = identifier;
+    handle = identifier;
+  } else {
+    const res = await fetch(`https://public.api.bsky.app/xrpc/com.atproto.identity.resolveHandle?handle=${identifier}`);
+    if (!res.ok) return c.text('User not found', 404);
+    const data = await res.json() as any;
+    did = data.did;
+    handle = identifier;
+  }
 
   // Fetch full profile from Bluesky
   let authorData: ProfileData = {

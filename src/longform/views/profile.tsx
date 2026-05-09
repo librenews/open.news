@@ -421,7 +421,7 @@ export function ProfilePage({
                     <div style="font-weight: 600; font-size: 0.85rem; color: var(--text-main);">{sessionProfile.displayName}</div>
                     <div style="font-size: 0.7rem; color: var(--text-muted);">@{sessionProfile.handle}</div>
                   </div>
-                  <a href={`/@${sessionProfile.handle}`}>Profile</a>
+                  <a href={`/profile/${sessionProfile.handle}`}>Profile</a>
                   <a href="/posts">My Stories</a>
                   <a href="/new">New Draft</a>
                   <a href="/logout" class="signout-link">Sign out</a>

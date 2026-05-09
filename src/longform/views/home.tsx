@@ -56,7 +56,7 @@ function StoryCard({ story, domain }: { story: LongformStory; domain: string }) 
             )}
           </a>
           <div class="story-meta">
-            <a href={`/@${story.authorHandle}`} class="author-link">
+            <a href={`/profile/${story.authorHandle}`} class="author-link">
               {story.authorAvatar ? (
                 <img src={story.authorAvatar} alt="" class="author-avatar" />
               ) : (
@@ -747,7 +747,7 @@ export function HomePage({
           <div class="top-header-links">
             <a href="/">Home</a>
             <a href="/posts">Stories</a>
-            {profile && <a href={`/@${profile.handle}`}>Profile</a>}
+            {profile && <a href={`/profile/${profile.handle}`}>Profile</a>}
           </div>
           <div class="top-header-right">
             {profile ? (
@@ -764,7 +764,7 @@ export function HomePage({
                     <div style="font-weight: 600; font-size: 0.85rem; color: var(--text-main);">{profile.displayName}</div>
                     <div style="font-size: 0.7rem; color: var(--text-muted);">@{profile.handle}</div>
                   </div>
-                  <a href={`/@${profile.handle}`}>Profile</a>
+                  <a href={`/profile/${profile.handle}`}>Profile</a>
                   <a href="/posts">My Stories</a>
                   <a href="/new">New Draft</a>
                   <a href="/logout" class="signout-link">Sign out</a>
@@ -798,7 +798,7 @@ export function HomePage({
                 Stories
               </a>
               {profile && (
-                <a href={`/@${profile.handle}`} class="nav-item">
+                <a href={`/profile/${profile.handle}`} class="nav-item">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
                     <circle cx="12" cy="7" r="4" />
@@ -875,7 +875,7 @@ export function HomePage({
                   <div class="user-card-handle">@{profile.handle}</div>
                 </div>
                 <div class="user-card-dropdown">
-                  <a href={`/@${profile.handle}`}>Profile</a>
+                  <a href={`/profile/${profile.handle}`}>Profile</a>
                   <a href="/posts">My Stories</a>
                   <a href="/logout" class="signout-link">Sign out</a>
                 </div>
