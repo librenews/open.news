@@ -582,12 +582,10 @@ app.post('/api/subscribe', async (c) => {
     const client = await getLongformAuthClient();
     const oauthSession = await client.restore(sessionDid);
     const agent = new Agent(oauthSession);
-    const rkey = Date.now().toString(36) + Math.random().toString(36).substring(2, 7);
 
-    await agent.com.atproto.repo.createRecord({
+    const res = await agent.com.atproto.repo.createRecord({
       repo: sessionDid,
       collection: 'site.standard.graph.subscription',
-      rkey,
       record: {
         $type: 'site.standard.graph.subscription',
         publication: pubUri,
@@ -595,11 +593,12 @@ app.post('/api/subscribe', async (c) => {
       },
     });
 
+    const rkey = res.data.uri.split('/').pop();
     logger.info({ did: sessionDid, publication: pubUri, rkey }, 'User subscribed to publication');
     return c.json({ ok: true, rkey });
   } catch (err: any) {
-    logger.error({ err, pubUri }, 'Failed to create subscription');
-    return c.json({ error: 'Failed to subscribe' }, 500);
+    logger.error({ err: err.message || err, pubUri }, 'Failed to create subscription');
+    return c.json({ error: err.message || 'Failed to subscribe' }, 500);
   }
 });
 
