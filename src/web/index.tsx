@@ -17,7 +17,7 @@ import { logger } from '../lib/logger.js';
 import { getUserById } from '../db/queries/users.js';
 import { getArticlesForUser } from '../db/queries/articles.js';
 import { getOrCreateDefaultConversation, getMessages } from '../db/queries/conversations.js';
-import { getConvergenceArticles, getRecentArticles, getConvergenceStats, getTopicClusters, getArticlesByTopic } from '../db/queries/convergence.js';
+import { getConvergenceArticles, getRecentArticles, getConvergenceStats, getTopicClusters, getArticlesByTopic, getUserContributedArticleIds } from '../db/queries/convergence.js';
 import { sseRegistry } from './sseRegistry.js';
 import { LoginPage } from './views/login.js';
 import { FeedPage } from './views/feed.js';
@@ -84,7 +84,18 @@ app.get('/', async (c) => {
     articles = await getConvergenceArticles(48, 30);
   }
 
-  return c.html((<FrontPage articles={articles} stats={stats} view={view} topics={topics} activeTopic={activeTopic} />) as unknown as string);
+  // Check if logged-in user's tracks contributed to any articles
+  let userContributedIds = new Set<number>();
+  const userId = c.get('userId' as never) as bigint | undefined;
+  if (userId) {
+    const user = await getUserById(userId);
+    if (user) {
+      const articleIds = articles.map(a => a.id);
+      userContributedIds = await getUserContributedArticleIds(user.did, articleIds);
+    }
+  }
+
+  return c.html((<FrontPage articles={articles} stats={stats} view={view} topics={topics} activeTopic={activeTopic} userContributedIds={userContributedIds} isLoggedIn={!!userId} />) as unknown as string);
 });
 
 // GET /login

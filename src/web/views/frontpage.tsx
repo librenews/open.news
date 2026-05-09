@@ -17,7 +17,7 @@ function escHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-function ArticleCard({ article, featured }: { article: ConvergenceArticle; featured?: boolean }) {
+function ArticleCard({ article, featured, userContributed }: { article: ConvergenceArticle; featured?: boolean; userContributed?: boolean }) {
   const ago = timeAgo(article.published_at);
   const source = article.site_name || new URL(article.url).hostname.replace('www.', '');
 
@@ -38,6 +38,11 @@ function ArticleCard({ article, featured }: { article: ConvergenceArticle; featu
             {article.convergence_score > 0 && (
               <span class="convergence-badge" title={`Surfaced by ${article.track_names.join(', ')}`}>
                 {article.convergence_score} {article.convergence_score === 1 ? 'topic' : 'topics'}
+              </span>
+            )}
+            {userContributed && (
+              <span class="contributed-badge" title="Your topic monitors helped surface this article">
+                ✦ Your topic
               </span>
             )}
           </div>
@@ -63,6 +68,11 @@ function ArticleCard({ article, featured }: { article: ConvergenceArticle; featu
               {article.convergence_score} {article.convergence_score === 1 ? 'topic' : 'topics'}
             </span>
           )}
+          {userContributed && (
+            <span class="contributed-badge" title="Your topic monitors helped surface this article">
+              ✦ Your topic
+            </span>
+          )}
         </div>
       </div>
     </a>
@@ -75,12 +85,16 @@ export function FrontPage({
   view,
   topics,
   activeTopic,
+  userContributedIds,
+  isLoggedIn,
 }: {
   articles: ConvergenceArticle[];
   stats: { totalTracks: number; articlesToday: number; activeTopics: number };
   view: 'convergence' | 'latest';
   topics: TopicCluster[];
   activeTopic: number | null;
+  userContributedIds?: Set<number>;
+  isLoggedIn?: boolean;
 }) {
   const featured = articles[0];
   const rest = articles.slice(1);
@@ -308,6 +322,15 @@ export function FrontPage({
             text-transform: uppercase;
             letter-spacing: 0.03em;
           }
+          .contributed-badge {
+            background: #fef3c7;
+            color: #b45309;
+            font-size: 0.7rem;
+            font-weight: 600;
+            padding: 0.15rem 0.5rem;
+            border-radius: 99px;
+            letter-spacing: 0.02em;
+          }
 
           /* Empty state */
           .empty-state {
@@ -398,7 +421,11 @@ export function FrontPage({
           <div class="header-inner">
             <a href="/" class="site-logo">open<span>.</span>news</a>
             <nav class="header-nav">
-              <a href="/login">Sign In</a>
+              {isLoggedIn ? (
+                <a href="/chat">Dashboard</a>
+              ) : (
+                <a href="/login">Sign In</a>
+              )}
             </nav>
           </div>
         </header>
@@ -436,10 +463,10 @@ export function FrontPage({
             </div>
           ) : (
             <div>
-              {featured && <ArticleCard article={featured} featured={true} />}
+              {featured && <ArticleCard article={featured} featured={true} userContributed={userContributedIds?.has(featured.id)} />}
               <div class="articles-grid">
                 {rest.map((a) => (
-                  <ArticleCard article={a} />
+                  <ArticleCard article={a} userContributed={userContributedIds?.has(a.id)} />
                 ))}
               </div>
             </div>

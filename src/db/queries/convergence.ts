@@ -188,3 +188,28 @@ export async function getArticlesByTopic(
     track_names: r.track_names || [],
   }));
 }
+
+/**
+ * Given a user's DID, return article IDs where their tracks helped
+ * surface the article (i.e., their tracks matched posts linked to the article).
+ */
+export async function getUserContributedArticleIds(
+  userDid: string,
+  articleIds: number[]
+): Promise<Set<number>> {
+  if (articleIds.length === 0) return new Set();
+
+  const { rows } = await db.query<{ article_id: number }>(
+    `SELECT DISTINCT a.id AS article_id
+     FROM articles a
+     JOIN article_sources asrc ON a.id = asrc.article_id
+     JOIN track_matches tm ON asrc.post_uri = tm.post_uri
+     JOIN tracks t ON tm.track_id = t.id
+     JOIN track_users tu ON tu.id = t.user_id
+     WHERE tu.did = $1
+       AND a.id = ANY($2)`,
+    [userDid, articleIds]
+  );
+
+  return new Set(rows.map(r => Number(r.article_id)));
+}
