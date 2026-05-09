@@ -8,6 +8,10 @@ import { EditorPage } from './views/editor.js';
 import { PostsPage } from './views/posts.js';
 import { ReaderPage } from './views/reader.js';
 import { Layout } from './views/layout.js';
+import { HomePage } from './views/home.js';
+import { ProfilePage } from './views/profile.js';
+import type { LongformStory } from './views/home.js';
+import type { ProfileData } from './views/profile.js';
 import { authRouter, getSession, getLongformAuthClient } from './routes/auth.js';
 import { Agent, BskyAgent } from '@atproto/api';
 import { serializeTiptapToLeaflet } from './lib/leafletExporter.js';
@@ -45,50 +49,130 @@ async function fetchUserProfile(did: string) {
 
 app.get('/', async (c) => {
   const sessionDid = await getSession(c);
-  
-  if (!sessionDid) {
+  const docId = c.req.query('doc');
+
+  // If ?doc= param, show editor (requires login)
+  if (docId) {
+    if (!sessionDid) return c.redirect('/');
+    const profile = await fetchUserProfile(sessionDid);
+    const headerAction = html`
+      <div style="display: flex; gap: 0.5rem; align-items: center;">
+        <button onclick="window.openShareModal()" id="share-btn" style="display: none; background: #242424; color: white; border: none; padding: 0.4rem 1.2rem; border-radius: 99px; cursor: pointer; font-family: var(--font-sans); font-weight: 500; font-size: 14px;">Share</button>
+        <button onclick="publishDraft()" id="publish-btn" style="background: #118156; color: white; border: none; padding: 0.4rem 1.2rem; border-radius: 99px; cursor: pointer; font-family: var(--font-sans); font-weight: 500; font-size: 14px;">Publish</button>
+      </div>
+    `;
     return c.html((
-      <Layout title={`Login to Longform - Write securely on the AT Protocol`}>
-        <div style="text-align: center; padding-top: 20vh;">
-          <img src="/logo.png" alt="Longform" style="height: 64px; margin-bottom: 0.5rem;" onerror="this.outerHTML='<h1 style=\'font-family: var(--font-body); font-weight: 700; font-size: 54px; color: var(--text-main); letter-spacing: -0.03em; margin-bottom: 0.5rem;\'>Longform</h1>'" />
-          <p style="color: var(--text-muted); font-family: var(--font-sans); margin-bottom: 3rem; font-size: 18px;">Sign in to your ATproto PDS to write.</p>
-          <form action="/oauth/login" method="get">
-            <input 
-              type="text" 
-              name="handle" 
-              placeholder="e.g. alice.bsky.social" 
-              style="padding: 0.75rem 1rem; border: 1px solid rgba(0,0,0,0.2); border-radius: 6px; font-size: 16px; margin-right: 0.5rem; width: 260px; font-family: var(--font-sans);" 
-              required 
-            />
-            <button 
-              type="submit" 
-              style="padding: 0.75rem 1.5rem; background: #242424; color: white; border: none; border-radius: 6px; font-size: 16px; cursor: pointer; font-family: var(--font-sans); font-weight: 500;"
-            >Sign In</button>
-          </form>
-        </div>
+      <Layout title={`Draft - ${config.LONGFORM_DOMAIN}`} profile={profile} headerAction={headerAction}>
+        <script dangerouslySetInnerHTML={{ __html: `window.SESSION_DID = ${JSON.stringify(sessionDid)}; window.SESSION_HANDLE = ${JSON.stringify(profile?.handle || sessionDid)};` }} />
+        <EditorPage />
       </Layout>
     ) as unknown as string);
   }
 
-  // If no doc param, redirect to posts/drafts listing
-  const docId = c.req.query('doc');
-  if (!docId) return c.redirect('/posts');
+  // Home page — show indexed longform articles
+  const view = (c.req.query('view') || 'latest') as 'latest' | 'foryou';
+  const profile = sessionDid ? await fetchUserProfile(sessionDid) : null;
 
-  const profile = await fetchUserProfile(sessionDid);
+  // Fetch stories from site_standard_articles
+  const { rows } = await db.query(
+    `SELECT s.uri, s.author_did, s.title, s.description, s.published_at, s.site, s.path, s.word_count
+     FROM site_standard_articles s
+     WHERE s.word_count > 100
+       AND s.language IS NOT DISTINCT FROM 'en'
+     ORDER BY s.published_at DESC NULLS LAST
+     LIMIT 40`,
+  );
 
-  const headerAction = html`
-    <div style="display: flex; gap: 0.5rem; align-items: center;">
-      <button onclick="window.openShareModal()" id="share-btn" style="display: none; background: #242424; color: white; border: none; padding: 0.4rem 1.2rem; border-radius: 99px; cursor: pointer; font-family: var(--font-sans); font-weight: 500; font-size: 14px;">Share</button>
-      <button onclick="publishDraft()" id="publish-btn" style="background: #118156; color: white; border: none; padding: 0.4rem 1.2rem; border-radius: 99px; cursor: pointer; font-family: var(--font-sans); font-weight: 500; font-size: 14px;">Publish</button>
-    </div>
-  `;
+  // Batch fetch author profiles (deduplicate DIDs)
+  const uniqueDids = [...new Set(rows.map((r: any) => r.author_did))];
+  const profileMap = new Map<string, { displayName: string; avatar: string; handle: string }>();
+  await Promise.all(uniqueDids.map(async (did) => {
+    const p = await fetchUserProfile(did as string);
+    profileMap.set(did as string, p);
+  }));
 
-  return c.html((
-    <Layout title={`Draft - ${config.LONGFORM_DOMAIN}`} profile={profile} headerAction={headerAction}>
-      <script dangerouslySetInnerHTML={{ __html: `window.SESSION_DID = ${JSON.stringify(sessionDid)}; window.SESSION_HANDLE = ${JSON.stringify(profile?.handle || sessionDid)};` }} />
-      <EditorPage />
-    </Layout>
-  ) as unknown as string);
+  const stories: LongformStory[] = rows.map((r: any) => {
+    const p = profileMap.get(r.author_did) || { displayName: r.author_did, avatar: '', handle: r.author_did };
+    return {
+      uri: r.uri,
+      authorDid: r.author_did,
+      authorHandle: p.handle,
+      authorAvatar: p.avatar,
+      authorName: p.displayName,
+      title: r.title,
+      description: r.description,
+      publishedAt: r.published_at?.toISOString() ?? null,
+      site: r.site,
+      path: r.path,
+      wordCount: r.word_count || 0,
+    };
+  });
+
+  // Topics placeholder — we'll populate this later
+  const topics: { label: string; count: number; slug: string }[] = [];
+
+  return c.html((<HomePage stories={stories} topics={topics} view={view} profile={profile} domain={config.LONGFORM_DOMAIN} />) as unknown as string);
+});
+
+app.get('/@:handle', async (c) => {
+  const handle = c.req.param('handle');
+  const sessionDid = await getSession(c);
+  const sessionProfile = sessionDid ? await fetchUserProfile(sessionDid) : null;
+
+  // Resolve handle to DID
+  const res = await fetch(`https://public.api.bsky.app/xrpc/com.atproto.identity.resolveHandle?handle=${handle}`);
+  if (!res.ok) return c.text('User not found', 404);
+  const { did } = await res.json() as any;
+
+  // Fetch full profile from Bluesky
+  let authorData: ProfileData = {
+    did,
+    handle,
+    displayName: handle,
+    avatar: '',
+    description: '',
+    followersCount: 0,
+    followsCount: 0,
+  };
+  try {
+    const profileRes = await fetch(`https://public.api.bsky.app/xrpc/app.bsky.actor.getProfile?actor=${encodeURIComponent(did)}`).then(r => r.json()) as any;
+    if (profileRes && !profileRes.error) {
+      authorData = {
+        did,
+        handle: profileRes.handle || handle,
+        displayName: profileRes.displayName || profileRes.handle || handle,
+        avatar: profileRes.avatar || '',
+        description: profileRes.description || '',
+        followersCount: profileRes.followersCount || 0,
+        followsCount: profileRes.followsCount || 0,
+      };
+    }
+  } catch (e) {}
+
+  // Fetch their articles
+  const { rows } = await db.query(
+    `SELECT uri, author_did, title, description, published_at, site, path, word_count
+     FROM site_standard_articles
+     WHERE author_did = $1
+     ORDER BY published_at DESC`,
+    [did]
+  );
+
+  const stories: LongformStory[] = rows.map((r: any) => ({
+    uri: r.uri,
+    authorDid: r.author_did,
+    authorHandle: authorData.handle,
+    authorAvatar: authorData.avatar,
+    authorName: authorData.displayName,
+    title: r.title,
+    description: r.description,
+    publishedAt: r.published_at?.toISOString() ?? null,
+    site: r.site,
+    path: r.path,
+    wordCount: r.word_count || 0,
+  }));
+
+  return c.html((<ProfilePage author={authorData} stories={stories} sessionProfile={sessionProfile} domain={config.LONGFORM_DOMAIN} />) as unknown as string);
 });
 
 app.get('/new', async (c) => {
