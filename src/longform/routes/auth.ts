@@ -4,6 +4,7 @@ import { config } from '../../lib/config.js';
 import { logger } from '../../lib/logger.js';
 import { pool } from '../../db/client.js';
 import { setCookie, getCookie, deleteCookie } from 'hono/cookie';
+import { Agent } from '@atproto/api';
 
 const locks = new Map<string, Promise<unknown>>();
 function requestLock<T>(key: string, fn: () => T | PromiseLike<T>): Promise<T> {
@@ -27,13 +28,13 @@ export async function getLongformAuthClient(): Promise<NodeOAuthClient> {
   _oauthClient = new NodeOAuthClient({
     clientMetadata: {
       client_name: 'Longform Publishing (open.news)',
-      client_id: `${clientUri}/client-metadata.json?v=4`,
+      client_id: `${clientUri}/client-metadata.json?v=5`,
       client_uri: clientUri,
       redirect_uris: [`${clientUri}/oauth/callback`],
       grant_types: ['authorization_code', 'refresh_token'],
       response_types: ['code'],
       token_endpoint_auth_method: 'none',
-      scope: 'atproto repo:site.standard.document blob:image/jpeg repo:app.bsky.feed.like repo:app.bsky.feed.repost',
+      scope: 'atproto transition:email repo:site.standard.document blob:image/jpeg repo:app.bsky.feed.like repo:app.bsky.feed.repost',
       dpop_bound_access_tokens: true,
     },
     requestLock,
@@ -83,14 +84,14 @@ export async function getLongformAuthClient(): Promise<NodeOAuthClient> {
 authRouter.get('/client-metadata.json', async (c) => {
   const clientUri = `https://${config.LONGFORM_DOMAIN}`;
   return c.json({
-    client_id: `${clientUri}/client-metadata.json?v=4`,
+    client_id: `${clientUri}/client-metadata.json?v=5`,
     client_name: 'Longform Publishing (open.news)',
     client_uri: clientUri,
     redirect_uris: [`${clientUri}/oauth/callback`],
     grant_types: ['authorization_code', 'refresh_token'],
     response_types: ['code'],
     token_endpoint_auth_method: 'none',
-    scope: 'atproto repo:site.standard.document blob:image/jpeg repo:app.bsky.feed.like repo:app.bsky.feed.repost',
+    scope: 'atproto transition:email repo:site.standard.document blob:image/jpeg repo:app.bsky.feed.like repo:app.bsky.feed.repost',
     dpop_bound_access_tokens: true,
   });
 });
@@ -103,7 +104,7 @@ authRouter.get('/oauth/login', async (c) => {
 
   try {
     const client = await getLongformAuthClient();
-    const url = await client.authorize(handle, { scope: 'atproto repo:site.standard.document blob:image/jpeg repo:app.bsky.feed.like repo:app.bsky.feed.repost' });
+    const url = await client.authorize(handle, { scope: 'atproto transition:email repo:site.standard.document blob:image/jpeg repo:app.bsky.feed.like repo:app.bsky.feed.repost' });
     return c.redirect(url.toString());
   } catch (err) {
     logger.error({ err, handle }, 'Longform OAuth initiation failed');
@@ -126,7 +127,49 @@ authRouter.get('/oauth/callback', async (c) => {
       maxAge: 60 * 60 * 24 * 30
     });
 
-    logger.info({ event: 'longform_login', did }, 'User successfully authenticated via AT Protocol');
+    // Fetch email and profile via the authenticated session
+    let email: string | null = null;
+    let emailConfirmed = false;
+    let handle = did;
+    let displayName: string | null = null;
+    let avatarUrl: string | null = null;
+
+    try {
+      const agent = new Agent(session);
+      // getSession returns email when transition:email scope is granted
+      const sessionInfo = await agent.com.atproto.server.getSession();
+      email = sessionInfo.data.email || null;
+      emailConfirmed = sessionInfo.data.emailConfirmed || false;
+      handle = sessionInfo.data.handle || did;
+    } catch (e) {
+      logger.warn({ err: e, did }, 'Failed to fetch session email (scope may not be granted)');
+    }
+
+    // Fetch profile for display name and avatar
+    try {
+      const profileRes = await fetch(`https://public.api.bsky.app/xrpc/app.bsky.actor.getProfile?actor=${encodeURIComponent(did)}`).then(r => r.json()) as any;
+      if (profileRes && !profileRes.error) {
+        displayName = profileRes.displayName || null;
+        avatarUrl = profileRes.avatar || null;
+        handle = profileRes.handle || handle;
+      }
+    } catch (e) {}
+
+    // Upsert user
+    await pool.query(
+      `INSERT INTO longform_users (did, handle, display_name, avatar_url, email, email_confirmed)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       ON CONFLICT (did) DO UPDATE SET
+         handle = EXCLUDED.handle,
+         display_name = COALESCE(EXCLUDED.display_name, longform_users.display_name),
+         avatar_url = COALESCE(EXCLUDED.avatar_url, longform_users.avatar_url),
+         email = COALESCE(EXCLUDED.email, longform_users.email),
+         email_confirmed = EXCLUDED.email_confirmed,
+         updated_at = NOW()`,
+      [did, handle, displayName, avatarUrl, email, emailConfirmed]
+    );
+
+    logger.info({ event: 'longform_login', did, email: email ? '***' : null, emailConfirmed }, 'User successfully authenticated via AT Protocol');
 
     return c.redirect('/');
   } catch (err) {
