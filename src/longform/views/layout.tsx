@@ -49,13 +49,12 @@ export function Layout({ title, children, profile, headerAction, og }: { title: 
             color: var(--text-main);
             font-family: var(--font-body);
             -webkit-font-smoothing: antialiased;
-            display: flex;
-            justify-content: center;
           }
 
           .container {
             width: 100%;
             max-width: var(--container-width);
+            margin: 0 auto;
             padding: 2rem 20px 4rem 20px;
             box-sizing: border-box;
           }
@@ -64,10 +63,17 @@ export function Layout({ title, children, profile, headerAction, og }: { title: 
             display: flex;
             align-items: center;
             justify-content: space-between;
-            margin-bottom: 3rem;
             font-family: var(--font-sans);
             font-size: 14px;
             font-weight: 500;
+            padding: 1rem 2rem;
+            border-bottom: 1px solid rgba(0,0,0,0.06);
+          }
+          
+          @media (prefers-color-scheme: dark) {
+            .nav-header {
+              border-bottom-color: rgba(255,255,255,0.06);
+            }
           }
           
           .nav-links {
@@ -155,7 +161,6 @@ export function Layout({ title, children, profile, headerAction, og }: { title: 
         </style>
       </head>
       <body>
-        <div class="container">
           ${title.includes('Login') ? '' : html`
             <nav class="nav-header">
               <a href="/" style="display: flex; align-items: center; text-decoration: none;">
@@ -195,8 +200,9 @@ export function Layout({ title, children, profile, headerAction, og }: { title: 
               </div>
             </nav>
           `}
-          ${children}
-        </div>
+          <div class="container">
+            ${children}
+          </div>
       </body>
     </html>
   `;

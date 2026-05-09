@@ -151,11 +151,11 @@ export function HomePage({
           .left-nav {
             width: 220px;
             flex-shrink: 0;
-            padding: 2rem 1.5rem;
+            padding: 1.5rem 1.5rem;
             border-right: 1px solid var(--border);
             position: sticky;
-            top: 0;
-            height: 100vh;
+            top: 49px;
+            height: calc(100vh - 49px);
             display: flex;
             flex-direction: column;
           }
@@ -372,8 +372,8 @@ export function HomePage({
             flex-shrink: 0;
             padding: 1.5rem;
             position: sticky;
-            top: 0;
-            height: 100vh;
+            top: 49px;
+            height: calc(100vh - 49px);
             overflow-y: auto;
           }
           .sidebar-section {
@@ -521,16 +521,178 @@ export function HomePage({
             .left-nav { display: none; }
             .center-content { border-right: none; }
           }
+          /* Top nav header */
+          .top-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.75rem 2rem;
+            border-bottom: 1px solid var(--border);
+            font-family: var(--font-sans);
+            position: sticky;
+            top: 0;
+            background: var(--bg);
+            z-index: 20;
+          }
+          .top-header-logo {
+            font-family: var(--font-body);
+            font-weight: 700;
+            font-size: 1.2rem;
+            color: var(--text-main);
+            text-decoration: none;
+            letter-spacing: -0.03em;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+          }
+          .top-header-logo img {
+            height: 24px;
+            width: auto;
+          }
+          .top-header-links {
+            display: flex;
+            gap: 1.25rem;
+            align-items: center;
+          }
+          .top-header-links a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 0.85rem;
+            font-weight: 500;
+            transition: color 0.15s;
+          }
+          .top-header-links a:hover {
+            color: var(--text-main);
+          }
+          .top-header-right {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+          }
+          .top-header-signin {
+            padding: 0.4rem 1rem;
+            background: var(--accent);
+            color: var(--bg);
+            border: none;
+            border-radius: 99px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            font-family: var(--font-sans);
+            text-decoration: none;
+            transition: background 0.15s;
+          }
+          .top-header-signin:hover {
+            opacity: 0.85;
+          }
+          .top-header-user {
+            position: relative;
+            cursor: pointer;
+          }
+          .top-header-user img {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            object-fit: cover;
+            display: block;
+          }
+          .top-header-user-placeholder {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            background: var(--text-muted);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--bg);
+            font-size: 0.75rem;
+            font-weight: 700;
+          }
+          .top-header-dropdown {
+            display: none;
+            position: absolute;
+            top: 100%;
+            right: 0;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+            min-width: 180px;
+            z-index: 50;
+          }
+          .top-header-dropdown::before {
+            content: '';
+            position: absolute;
+            top: -8px;
+            left: 0;
+            right: 0;
+            height: 8px;
+          }
+          .top-header-user:hover .top-header-dropdown {
+            display: block;
+          }
+          .top-header-dropdown a {
+            display: block;
+            padding: 0.6rem 1rem;
+            font-size: 0.85rem;
+            color: var(--text-secondary) !important;
+            text-decoration: none;
+            font-weight: 500;
+          }
+          .top-header-dropdown a:hover {
+            background: var(--bg-secondary);
+          }
+          .top-header-dropdown .signout-link {
+            color: #d32f2f !important;
+            border-top: 1px solid var(--border);
+          }
+          @media (prefers-color-scheme: dark) {
+            .top-header-dropdown {
+              box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+            }
+          }
         `}} />
       </head>
       <body>
+        {/* Top navigation header */}
+        <header class="top-header">
+          <a href="/" class="top-header-logo">
+            <img src="/logo.png" alt="Longform" onerror="this.outerHTML='<span>Longform</span>'" />
+          </a>
+          <div class="top-header-links">
+            <a href="/">Home</a>
+            <a href="/posts">Stories</a>
+            {profile && <a href={`/@${profile.handle}`}>Profile</a>}
+          </div>
+          <div class="top-header-right">
+            {profile ? (
+              <div class="top-header-user">
+                {profile.avatar ? (
+                  <img src={profile.avatar} alt="" />
+                ) : (
+                  <div class="top-header-user-placeholder">
+                    {profile.displayName.charAt(0).toUpperCase()}
+                  </div>
+                )}
+                <div class="top-header-dropdown">
+                  <div style="padding: 0.6rem 1rem; border-bottom: 1px solid var(--border);">
+                    <div style="font-weight: 600; font-size: 0.85rem; color: var(--text-main);">{profile.displayName}</div>
+                    <div style="font-size: 0.7rem; color: var(--text-muted);">@{profile.handle}</div>
+                  </div>
+                  <a href={`/@${profile.handle}`}>Profile</a>
+                  <a href="/posts">My Stories</a>
+                  <a href="/new">New Draft</a>
+                  <a href="/logout" class="signout-link">Sign out</a>
+                </div>
+              </div>
+            ) : (
+              <a href="/login" class="top-header-signin">Sign In</a>
+            )}
+          </div>
+        </header>
+
         <div class="app-shell">
           {/* Left Navigation */}
           <nav class="left-nav">
-            <a href="/" class="nav-logo">
-              <img src="/logo.png" alt="Longform" onerror="this.outerHTML='<span>Longform</span>'" />
-            </a>
-
             <div class="nav-items">
               <a href="/" class="nav-item active">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
