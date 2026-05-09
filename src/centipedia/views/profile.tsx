@@ -44,7 +44,7 @@ export function ProfilePage({
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <title>{author.displayName} — Longform</title>
         <meta name="description" content={author.description || `${author.displayName}'s long-form writing on the AT Protocol.`} />
-        <link rel="icon" type="image/png" href="/favicon.png" />
+        <link rel="icon" type="image/jpeg" href="/favicon.jpg" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Merriweather:ital,wght@0,300;0,400;0,700;1,300;1,400&display=swap" rel="stylesheet" />
