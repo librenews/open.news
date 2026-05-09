@@ -33,7 +33,7 @@ process.on('unhandledRejection', (err) => {
 const app = new Hono();
 
 app.use('/logo.jpg', serveStatic({ root: './src/centipedia/public', path: 'logo.jpg' }));
-app.use('/favicon.jpg', serveStatic({ root: './src/centipedia/public', path: 'favicon.jpg' }));
+app.use('/favicon.png', serveStatic({ root: './src/centipedia/public', path: 'favicon.png' }));
 
 app.route('/', authRouter);
 
