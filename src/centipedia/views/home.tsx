@@ -166,8 +166,8 @@ export function HomePage({
             padding: 1.5rem 1.5rem;
             border-right: 1px solid var(--border);
             position: sticky;
-            top: 49px;
-            height: calc(100vh - 49px);
+            top: 57px;
+            height: calc(100vh - 57px);
             display: flex;
             flex-direction: column;
           }
@@ -412,8 +412,8 @@ export function HomePage({
             flex-shrink: 0;
             padding: 1.5rem;
             position: sticky;
-            top: 49px;
-            height: calc(100vh - 49px);
+            top: 57px;
+            height: calc(100vh - 57px);
             overflow-y: auto;
           }
           .sidebar-section {

@@ -232,7 +232,7 @@ export function SearchPage({
           /* Three-column layout */
           .app-shell {
             display: flex;
-            min-height: calc(100vh - 49px);
+            min-height: calc(100vh - 57px);
             max-width: 1280px;
             margin: 0 auto;
           }
@@ -244,8 +244,8 @@ export function SearchPage({
             padding: 1.5rem 1.5rem;
             border-right: 1px solid var(--border);
             position: sticky;
-            top: 49px;
-            height: calc(100vh - 49px);
+            top: 57px;
+            height: calc(100vh - 57px);
             display: flex;
             flex-direction: column;
           }
@@ -264,7 +264,7 @@ export function SearchPage({
           }
           .nav-item:hover { background: var(--bg-secondary); color: var(--text-main); }
           .nav-item svg { width: 20px; height: 20px; flex-shrink: 0; }
-          .nav-footer { padding-top: 1.5rem; border-top: 1px solid var(--border); }
+          .nav-footer { padding-top: 1.5rem; padding-bottom: 0.5rem; border-top: 1px solid var(--border); }
           .nav-write-btn {
             display: flex;
             align-items: center;
@@ -293,7 +293,7 @@ export function SearchPage({
           }
           .center-header {
             position: sticky;
-            top: 49px;
+            top: 57px;
             background: var(--bg);
             z-index: 10;
             border-bottom: 1px solid var(--border);
@@ -417,8 +417,8 @@ export function SearchPage({
             flex-shrink: 0;
             padding: 1.5rem;
             position: sticky;
-            top: 49px;
-            height: calc(100vh - 49px);
+            top: 57px;
+            height: calc(100vh - 57px);
             overflow-y: auto;
           }
           .sidebar-section { margin-bottom: 2rem; }

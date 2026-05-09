@@ -233,7 +233,7 @@ export function ProfilePage({
           /* Three-column layout */
           .app-shell {
             display: flex;
-            min-height: calc(100vh - 49px);
+            min-height: calc(100vh - 57px);
             max-width: 1280px;
             margin: 0 auto;
           }
@@ -243,8 +243,8 @@ export function ProfilePage({
             padding: 1.5rem;
             border-right: 1px solid var(--border);
             position: sticky;
-            top: 49px;
-            height: calc(100vh - 49px);
+            top: 57px;
+            height: calc(100vh - 57px);
             display: flex;
             flex-direction: column;
           }
@@ -263,7 +263,7 @@ export function ProfilePage({
           }
           .nav-item:hover { background: var(--bg-secondary); color: var(--text-main); }
           .nav-item svg { width: 20px; height: 20px; flex-shrink: 0; }
-          .nav-footer { padding-top: 1.5rem; border-top: 1px solid var(--border); }
+          .nav-footer { padding-top: 1.5rem; padding-bottom: 0.5rem; border-top: 1px solid var(--border); }
           .nav-write-btn {
             display: flex;
             align-items: center;
