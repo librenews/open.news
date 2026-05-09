@@ -172,9 +172,9 @@ authRouter.get('/oauth/callback', async (c) => {
     logger.info({ event: 'centipedia_login', did, email: email ? '***' : null, emailConfirmed }, 'User successfully authenticated via AT Protocol');
 
     return c.redirect('/');
-  } catch (err) {
+  } catch (err: any) {
     logger.error({ err }, 'Centipedia OAuth callback parsing failed');
-    return c.text('Login failure across authentication bridge', 500);
+    return c.text(`Login failure: ${err?.message || err}`, 500);
   }
 });
 
