@@ -9,17 +9,17 @@ import { PostsPage } from './views/posts.js';
 import { ReaderPage } from './views/reader.js';
 import { Layout } from './views/layout.js';
 import { HomePage } from './views/home.js';
+import type { CentipediaCitation } from './views/home.js';
 import { ProfilePage } from './views/profile.js';
 import { SearchPage } from './views/search.js';
 import { NotFoundPage } from './views/notfound.js';
-import type { LongformStory } from './views/home.js';
 import type { ProfileData } from './views/profile.js';
 import type { SearchResult } from './views/search.js';
 import { authRouter, getSession, getCentipediaAuthClient } from './routes/auth.js';
 import { Agent, BskyAgent } from '@atproto/api';
 import { serializeTiptapToLeaflet } from './lib/leafletExporter.js';
 import { resolvePds } from '../lib/pds.js';
-import { announcePublication, getLongformBot } from './bot.js';
+import { announceArticle, getCentipediaBot } from './bot.js';
 import { Server as HocuspocusServer } from '@hocuspocus/server';
 import { hocuspocusDb } from './lib/hocuspocusDb.js';
 import { WebSocketServer } from 'ws';
@@ -93,125 +93,28 @@ app.get('/', async (c) => {
     ) as unknown as string);
   }
 
-  // Home page — show indexed articles
-  const view = (c.req.query('view') || 'latest') as 'latest' | 'foryou' | 'following';
+  // Centipedia home page
   const profile = sessionDid ? await fetchUserProfile(sessionDid) : null;
 
-  // For the "following" tab, fetch the user's subscriptions
-  let followedPubUris: string[] = [];
-  if (view === 'following' && sessionDid) {
-    try {
-      const oauthSession = await restoreSession(c, sessionDid);
-      if (!oauthSession) { return c.redirect('/login'); }
-      const agent = new Agent(oauthSession);
-      const res = await agent.com.atproto.repo.listRecords({
-        repo: sessionDid,
-        collection: 'site.standard.graph.subscription',
-        limit: 100,
-      });
-      followedPubUris = (res.data.records || [])
-        .map((r: any) => r.value?.publication)
-        .filter((u: any): u is string => typeof u === 'string');
-    } catch (err) {
-      logger.warn({ err }, 'Failed to fetch user subscriptions for Following tab');
-    }
-  }
+  // Fetch recent citations
+  const { rows: citationRows } = await db.query(
+    'SELECT id, url, title, submitted_by, topic, status, created_at FROM centipedia_citations ORDER BY created_at DESC LIMIT 20'
+  );
 
-  if (view === 'following' && followedPubUris.length === 0) {
-    // No subscriptions — skip query, show empty state
-    const topics: { label: string; count: number; slug: string }[] = [];
-    return c.html((<HomePage stories={[]} topics={topics} view={view} profile={profile} domain={config.CENTIPEDIA_DOMAIN} hasSubscriptions={false} />) as unknown as string);
-  }
+  // Stats
+  const { rows: [statsRow] } = await db.query(`
+    SELECT
+      (SELECT count(*) FROM centipedia_citations) AS citations,
+      (SELECT count(*) FROM centipedia_citations WHERE status = 'accepted') AS articles,
+      (SELECT count(DISTINCT topic) FROM centipedia_citations WHERE topic IS NOT NULL) AS topics
+  `);
 
-  // Build the query — add publication filter for "following" view
-  let queryText: string;
-  let queryParams: any[] = [];
-
-  if (view === 'following' && followedPubUris.length > 0) {
-    queryText = `SELECT s.uri, s.author_did, s.title, s.description, s.published_at, s.site, s.path, s.word_count,
-       split_part(s.uri, '/', 4) AS collection,
-       CASE WHEN s.uri LIKE '%/site.standard.document/%' OR s.uri LIKE '%/pub.leaflet.document/%'
-         THEN jsonb_path_query_first(s.raw_record, '$.content.pages[0].blocks[*].block ? (@."$type" == "pub.leaflet.blocks.image").image.ref."$link"') #>> '{}'
-         ELSE NULL
-       END AS image_cid,
-       CASE WHEN s.raw_record->>'site' LIKE 'at://%site.standard.publication%'
-         THEN s.raw_record->>'site'
-         ELSE NULL
-       END AS publication_uri
-     FROM site_standard_articles s
-     WHERE s.word_count > 100
-       AND s.language = 'eng'
-       AND s.raw_record->>'site' = ANY($1)
-     ORDER BY s.published_at DESC NULLS LAST
-     LIMIT 40`;
-    queryParams = [followedPubUris];
-  } else {
-    queryText = `SELECT s.uri, s.author_did, s.title, s.description, s.published_at, s.site, s.path, s.word_count,
-       split_part(s.uri, '/', 4) AS collection,
-       CASE WHEN s.uri LIKE '%/site.standard.document/%' OR s.uri LIKE '%/pub.leaflet.document/%'
-         THEN jsonb_path_query_first(s.raw_record, '$.content.pages[0].blocks[*].block ? (@."$type" == "pub.leaflet.blocks.image").image.ref."$link"') #>> '{}'
-         ELSE NULL
-       END AS image_cid,
-       CASE WHEN s.raw_record->>'site' LIKE 'at://%site.standard.publication%'
-         THEN s.raw_record->>'site'
-         ELSE NULL
-       END AS publication_uri
-     FROM site_standard_articles s
-     WHERE s.word_count > 100
-       AND s.language = 'eng'
-     ORDER BY s.published_at DESC NULLS LAST
-     LIMIT 40`;
-  }
-
-  const { rows } = await db.query(queryText, queryParams);
-
-  // Batch fetch author profiles (deduplicate DIDs)
-  const uniqueDids = [...new Set(rows.map((r: any) => r.author_did))];
-  const profileMap = new Map<string, { displayName: string; avatar: string; handle: string }>();
-  await Promise.all(uniqueDids.map(async (did) => {
-    const p = await fetchUserProfile(did as string);
-    profileMap.set(did as string, p);
-  }));
-
-  const stories: LongformStory[] = rows.map((r: any) => {
-    const p = profileMap.get(r.author_did) || { displayName: r.author_did, avatar: '', handle: r.author_did };
-    const rkey = r.uri.split('/').pop();
-    const collection = r.collection;
-
-    // Build the correct read URL per collection type
-    let readUrl: string | null = null;
-    if (r.site && r.path && r.site.startsWith('http')) {
-      readUrl = `${r.site}${r.path}`;
-    } else if (collection === 'com.whtwnd.blog.entry') {
-      readUrl = `https://whtwnd.com/${p.handle}/${rkey}`;
-    }
-    // else null — StoryCard will use /post/:did/:rkey (Leaflet reader)
-
-    return {
-      uri: r.uri,
-      authorDid: r.author_did,
-      authorHandle: p.handle,
-      authorAvatar: p.avatar,
-      authorName: p.displayName,
-      title: r.title,
-      description: r.description,
-      publishedAt: r.published_at?.toISOString() ?? null,
-      site: r.site,
-      path: r.path,
-      wordCount: r.word_count || 0,
-      imageUrl: r.image_cid ? `/blob/${r.author_did}/${r.image_cid}` : null,
-      externalUrl: readUrl,
-      publicationUri: r.publication_uri || null,
-    };
-  });
-
-  // Topics placeholder — we'll populate this later
-  const topics: { label: string; count: number; slug: string }[] = [];
-
-  // Track whether the user has any subscriptions (for empty state on Following tab)
-  const hasSubscriptions = followedPubUris.length > 0;
-
-  return c.html((<HomePage stories={stories} topics={topics} view={view} profile={profile} domain={config.CENTIPEDIA_DOMAIN} hasSubscriptions={hasSubscriptions} />) as unknown as string);
+  return c.html((<HomePage
+    citations={citationRows as CentipediaCitation[]}
+    profile={profile}
+    domain={config.CENTIPEDIA_DOMAIN}
+    stats={{ articles: Number(statsRow.articles), citations: Number(statsRow.citations), topics: Number(statsRow.topics) }}
+  />) as unknown as string);
 });
 
 app.get('/search', async (c) => {
@@ -268,10 +171,10 @@ app.get('/login', async (c) => {
   const sessionDid = await getSession(c);
   if (sessionDid) return c.redirect('/');
 
-  return c.html((<Layout title={`Sign in — Longform`}>
+  return c.html((<Layout title={`Sign in — Centipedia`}>
     <div style="text-align: center; padding-top: 15vh;">
-      <img src="/logo.jpg" alt="Longform" style="height: 64px; margin-bottom: 0.5rem;" onerror="this.outerHTML='<h1 style=\'font-family: var(--font-body); font-weight: 700; font-size: 54px; color: var(--text-main); letter-spacing: -0.03em; margin-bottom: 0.5rem;\'>Longform</h1>'" />
-      <p style="color: var(--text-muted); font-family: var(--font-sans); margin-bottom: 3rem; font-size: 18px;">Sign in with your AT Protocol identity to write and publish.</p>
+      <img src="/logo.jpg" alt="Centipedia" style="height: 64px; margin-bottom: 0.5rem;" onerror="this.outerHTML='<h1 style=\'font-family: var(--font-body); font-weight: 700; font-size: 54px; color: var(--text-main); letter-spacing: -0.03em; margin-bottom: 0.5rem;\'>Centipedia</h1>'" />
+      <p style="color: var(--text-muted); font-family: var(--font-sans); margin-bottom: 3rem; font-size: 18px;">Sign in with your AT Protocol identity to contribute citations.</p>
       <form action="/oauth/login" method="get">
         <input
           type="text"
@@ -595,6 +498,36 @@ app.get('/blob/:did/:cid', async (c) => {
   } catch (err: any) {
     logger.error({ err, did, cid }, 'Failed to fetch blob from PDS');
     return c.text('Image not found', 404);
+  }
+});
+// --- Citation submission API ---
+
+app.post('/api/citations', async (c) => {
+  const sessionDid = await getSession(c);
+  const body = await c.req.json();
+  const url = body.url?.trim();
+  const topic = body.topic?.trim() || null;
+
+  if (!url || typeof url !== 'string') {
+    return c.json({ error: 'URL is required' }, 400);
+  }
+
+  try {
+    new URL(url); // validate URL format
+  } catch {
+    return c.json({ error: 'Invalid URL format' }, 400);
+  }
+
+  try {
+    await db.query(
+      'INSERT INTO centipedia_citations (url, submitted_by, topic, status) VALUES ($1, $2, $3, $4)',
+      [url, sessionDid || null, topic, 'pending']
+    );
+    logger.info({ url, topic, submitter: sessionDid }, 'New citation submitted');
+    return c.json({ ok: true });
+  } catch (err: any) {
+    logger.error({ err }, 'Failed to store citation');
+    return c.json({ error: 'Failed to submit citation' }, 500);
   }
 });
 
