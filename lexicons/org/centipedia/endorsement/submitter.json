@@ -1,6 +1,6 @@
 {
   "lexicon": 1,
-  "id": "site.centipedia.endorsement.submitter",
+  "id": "org.centipedia.endorsement.submitter",
   "defs": {
     "main": {
       "type": "record",

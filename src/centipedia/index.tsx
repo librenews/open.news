@@ -847,7 +847,7 @@ app.post('/api/endorse/citation', async (c) => {
         [sessionDid, citationId]
       );
       // Write to PDS for portability
-      writeEndorsementRecord(c, sessionDid, 'site.centipedia.endorsement.citation', { subject: String(citationId) }).catch(() => {});
+      writeEndorsementRecord(c, sessionDid, 'org.centipedia.endorsement.citation', { subject: String(citationId) }).catch(() => {});
       const { rows: [{ count }] } = await db.query(
         'SELECT count(*) FROM centipedia_endorsement_citations WHERE citation_id = $1',
         [citationId]
@@ -892,7 +892,7 @@ app.post('/api/endorse/submitter', async (c) => {
         'INSERT INTO centipedia_endorsement_submitters (did, subject, topic) VALUES ($1, $2, $3)',
         [sessionDid, subjectDid, topicVal]
       );
-      writeEndorsementRecord(c, sessionDid, 'site.centipedia.endorsement.submitter', { subject: subjectDid, ...(topicVal ? { topic: topicVal } : {}) }).catch(() => {});
+      writeEndorsementRecord(c, sessionDid, 'org.centipedia.endorsement.submitter', { subject: subjectDid, ...(topicVal ? { topic: topicVal } : {}) }).catch(() => {});
       const { rows: [{ count }] } = await db.query(
         'SELECT count(*) FROM centipedia_endorsement_submitters WHERE subject = $1',
         [subjectDid]
@@ -937,7 +937,7 @@ app.post('/api/endorse/domain', async (c) => {
         'INSERT INTO centipedia_endorsement_sources (did, domain, topic) VALUES ($1, $2, $3)',
         [sessionDid, normalizedDomain, topicVal]
       );
-      writeEndorsementRecord(c, sessionDid, 'site.centipedia.endorsement.source', { domain: normalizedDomain, ...(topicVal ? { topic: topicVal } : {}) }).catch(() => {});
+      writeEndorsementRecord(c, sessionDid, 'org.centipedia.endorsement.source', { domain: normalizedDomain, ...(topicVal ? { topic: topicVal } : {}) }).catch(() => {});
       const { rows: [{ count }] } = await db.query(
         'SELECT count(*) FROM centipedia_endorsement_sources WHERE domain = $1',
         [normalizedDomain]

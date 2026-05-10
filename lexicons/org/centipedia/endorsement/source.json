@@ -1,18 +1,19 @@
 {
   "lexicon": 1,
-  "id": "site.centipedia.endorsement.citation",
+  "id": "org.centipedia.endorsement.source",
   "defs": {
     "main": {
       "type": "record",
-      "description": "An endorsement of a specific citation/source URL as credible.",
+      "description": "An endorsement of a domain/source as trustworthy.",
       "key": "tid",
       "record": {
         "type": "object",
-        "required": ["subject", "createdAt"],
+        "required": ["domain", "createdAt"],
         "properties": {
-          "subject": {
+          "domain": {
             "type": "string",
-            "description": "AT-URI of the citation record, or a direct URL for external citations."
+            "maxLength": 256,
+            "description": "The endorsed domain, e.g. 'nature.com', 'arxiv.org'."
           },
           "topic": {
             "type": "string",
