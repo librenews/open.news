@@ -126,17 +126,8 @@ app.use('/favicon.png', serveStatic({ root: './src/centipedia/public', path: 'fa
 app.route('/', authRouter);
 
 async function fetchUserProfile(did: string) {
-  try {
-    const profileRes = await fetch(`https://public.api.bsky.app/xrpc/app.bsky.actor.getProfile?actor=${encodeURIComponent(did)}`).then(r => r.json());
-    if (profileRes && !profileRes.error) {
-      return {
-        displayName: profileRes.displayName || profileRes.handle || did,
-        avatar: profileRes.avatar || '',
-        handle: profileRes.handle || did
-      };
-    }
-  } catch (e) {}
-  return { displayName: did, avatar: '', handle: did };
+  const p = await getCachedProfile(did);
+  return { displayName: p.displayName, avatar: p.avatar, handle: p.handle };
 }
 
 /**
@@ -904,7 +895,7 @@ app.get('/article/:rkey', async (c) => {
     const contributorDids = [...new Set(citationRows.filter((r: any) => r.submitted_by).map((r: any) => r.submitted_by))] as string[];
     const contributors = await Promise.all(
       contributorDids.map(async (cdid: string) => {
-        const p = await fetchUserProfile(cdid);
+        const p = await getCachedProfile(cdid);
         return { did: cdid, handle: p.handle, displayName: p.displayName, avatar: p.avatar };
       })
     );
