@@ -924,6 +924,11 @@ app.get('/article/:rkey', async (c) => {
       })
     );
 
+    // Browser-level caching: serve stale for 2 min, revalidate for 1h
+    if (!sessionDid) {
+      c.header('Cache-Control', 'public, max-age=120, stale-while-revalidate=3600');
+    }
+
     return c.html((<ArticleReaderPage
       doc={doc}
       did={did}

@@ -25,7 +25,7 @@ function listKey(did: string, collection: string): string {
 
 const TTL_NONE = 0;            // No expiry — invalidated via Jetstream
 const TTL_EXTERNAL = 3600;     // 1 hour for records we don't own
-const TTL_PROFILE = 900;       // 15 min
+const TTL_PROFILE = 7200;      // 2 hours — profiles rarely change
 const TTL_LIST = 300;          // 5 min for listRecords results
 
 // ── Record cache ────────────────────────────────────────────────────────────
