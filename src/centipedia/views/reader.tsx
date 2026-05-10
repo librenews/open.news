@@ -35,7 +35,7 @@ function extractBlobCid(imageRef: any): string {
   return '';
 }
 
-function renderBlocks(blocks: LeafletBlock[], did: string): string {
+function renderBlocks(blocks: LeafletBlock[], did: string, citationUrls?: string[]): string {
   if (!Array.isArray(blocks)) return '';
   const raw = blocks.map(b => {
     const block = b.block as any;
@@ -81,7 +81,14 @@ function renderBlocks(blocks: LeafletBlock[], did: string): string {
   }).join('');
 
   // Post-process: convert [N] citation markers to clickable superscript links
+  // Links go directly to the external source URL (new tab) with a title showing the ref number
   return raw.replace(/\[(\d{1,2})\]/g, (match, num) => {
+    const idx = parseInt(num, 10) - 1;
+    if (citationUrls && citationUrls[idx]) {
+      const url = citationUrls[idx];
+      return `<a href="${url}" target="_blank" rel="noopener noreferrer" class="cite-marker" title="Source [${num}]" data-ref="${num}">[${num}]</a>`;
+    }
+    // Fallback: scroll to reference section if URL unknown
     return `<a href="#ref-${num}" class="cite-marker" title="Reference ${num}">[${num}]</a>`;
   });
 }
@@ -326,7 +333,10 @@ export function ArticleReaderPage({
       return { text, id, level: b.block.level || 2 };
     });
 
-  const renderedContent = renderBlocks(blocks, did);
+  // Build citation URL map for inline [N] links
+  const citationUrls = (citations || []).map(c => c.url);
+
+  const renderedContent = renderBlocks(blocks, did, citationUrls);
 
   // JSON-LD structured data
   const jsonLd = {
@@ -729,8 +739,9 @@ export function ArticleReaderPage({
               }
             });
           });
-          // Inline citation click — smooth scroll with reliable offset
-          document.querySelectorAll('.cite-marker').forEach(link => {
+          // Inline citation click — only handle #ref- anchor links (fallback)
+          // External source links (target="_blank") open naturally in new tabs
+          document.querySelectorAll('.cite-marker[href^="#ref-"]').forEach(link => {
             link.addEventListener('click', (e) => {
               e.preventDefault();
               const refId = link.getAttribute('href')?.replace('#', '');
@@ -748,7 +759,6 @@ export function ArticleReaderPage({
                 target.style.background = '';
                 target.style.borderColor = '';
               }, 2000);
-              // Update hash without jumping
               history.replaceState(null, '', '#' + refId);
             });
           });
