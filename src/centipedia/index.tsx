@@ -1541,7 +1541,7 @@ app.get('/api/comments', async (c) => {
   if (!url) return c.json({ error: 'Missing url parameter' }, 400);
   
   try {
-    const agent = await getLongformBot();
+    const agent = await getCentipediaBot();
     if (!agent) return c.json({ posts: [] });
     
     const res = await agent.app.bsky.feed.searchPosts({ q: url, limit: 15 });
