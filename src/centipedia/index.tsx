@@ -16,7 +16,7 @@ import { MyCitationsPage } from './views/my-citations.js';
 import { ProfilePage } from './views/profile.js';
 import { SearchPage } from './views/search.js';
 import { NotFoundPage } from './views/notfound.js';
-import type { ProfileData, ProfileStory, ProfileCitation, TrustStats } from './views/profile.js';
+import type { ProfileData, ProfileCitation, TrustStats, ContributedArticle } from './views/profile.js';
 import type { SearchResult } from './views/search.js';
 import { authRouter, getSession, getCentipediaAuthClient } from './routes/auth.js';
 import { Agent, BskyAgent } from '@atproto/api';
@@ -441,50 +441,26 @@ app.get('/profile/:identifier', async (c) => {
     }
   } catch (e) {}
 
-  // Fetch their articles
-  const { rows } = await db.query(
-    `SELECT uri, author_did, title, description, published_at, site, path, word_count,
-       split_part(uri, '/', 4) AS collection,
-       CASE WHEN uri LIKE '%/site.standard.document/%' OR uri LIKE '%/pub.leaflet.document/%'
-         THEN jsonb_path_query_first(raw_record, '$.content.pages[0].blocks[*].block ? (@."$type" == "pub.leaflet.blocks.image").image.ref."$link"') #>> '{}'
-         ELSE NULL
-       END AS image_cid,
-       CASE WHEN raw_record->>'site' LIKE 'at://%site.standard.publication%'
-         THEN raw_record->>'site'
-         ELSE NULL
-       END AS publication_uri
-     FROM site_standard_articles
-     WHERE author_did = $1
-     ORDER BY published_at DESC`,
+  // Fetch articles this user contributed to (via their citations)
+  const { rows: contributedRows } = await db.query(
+    `SELECT DISTINCT c.article_rkey, 
+       MIN(c.topic) AS topic,
+       COUNT(c.id) AS user_citations,
+       MIN(c.created_at) AS earliest_contribution
+     FROM centipedia_citations c
+     WHERE c.submitted_by = $1 AND c.status = 'accepted' AND c.article_rkey IS NOT NULL
+     GROUP BY c.article_rkey
+     ORDER BY earliest_contribution DESC`,
     [did]
   );
 
-  const stories: ProfileStory[] = rows.map((r: any) => {
-    const rkey = r.uri.split('/').pop();
-    const collection = r.collection;
-    let readUrl: string | null = null;
-    if (r.site && r.path && r.site.startsWith('http')) {
-      readUrl = `${r.site}${r.path}`;
-    } else if (collection === 'com.whtwnd.blog.entry') {
-      readUrl = `https://whtwnd.com/${authorData.handle}/${rkey}`;
-    }
-    return {
-      uri: r.uri,
-      authorDid: r.author_did,
-      authorHandle: authorData.handle,
-      authorAvatar: authorData.avatar,
-      authorName: authorData.displayName,
-      title: r.title,
-      description: r.description,
-      publishedAt: r.published_at?.toISOString() ?? null,
-      site: r.site,
-      path: r.path,
-      wordCount: r.word_count || 0,
-      imageUrl: r.image_cid ? `/blob/${r.author_did}/${r.image_cid}` : null,
-      externalUrl: readUrl,
-      publicationUri: r.publication_uri || null,
-    };
-  });
+  const contributedArticles = contributedRows.map((r: any) => ({
+    rkey: r.article_rkey,
+    topic: r.topic || 'Untitled',
+    userCitations: Number(r.user_citations),
+    contributedAt: r.earliest_contribution?.toISOString() || '',
+  }));
+
   // Fetch user's Centipedia citations
   const { rows: citationRows } = await db.query(
     `SELECT c.id, c.url, c.title, c.topic, c.status, c.article_rkey, c.created_at,
@@ -533,12 +509,12 @@ app.get('/profile/:identifier', async (c) => {
 
   return c.html((<ProfilePage
     author={authorData}
-    stories={stories}
     sessionProfile={sessionProfile}
     domain={config.CENTIPEDIA_DOMAIN}
     citations={profileCitations}
     trustStats={trustStats}
     isEndorsed={isEndorsed}
+    contributedArticles={contributedArticles}
   />) as unknown as string);
 });
 

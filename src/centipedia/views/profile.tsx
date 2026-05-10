@@ -12,21 +12,11 @@ export interface ProfileData {
   followsCount: number;
 }
 
-export interface ProfileStory {
-  uri: string;
-  authorDid: string;
-  authorHandle: string;
-  authorAvatar: string;
-  authorName: string;
-  title: string;
-  description: string | null;
-  publishedAt: string | null;
-  site: string | null;
-  path: string | null;
-  wordCount: number;
-  imageUrl: string | null;
-  externalUrl: string | null;
-  publicationUri: string | null;
+export interface ContributedArticle {
+  rkey: string;
+  topic: string;
+  userCitations: number;
+  contributedAt: string;
 }
 
 export interface ProfileCitation {
@@ -131,18 +121,18 @@ const PAGE_STYLES = `
 `;
 
 export function ProfilePage({
-  author, stories, sessionProfile, domain,
+  author, sessionProfile, domain,
   citations = [], trustStats, isEndorsed = false,
+  contributedArticles = [],
 }: {
   author: ProfileData;
-  stories: ProfileStory[];
   sessionProfile?: UserProfile | null;
   domain: string;
   citations?: ProfileCitation[];
   trustStats?: TrustStats;
   isEndorsed?: boolean;
+  contributedArticles?: ContributedArticle[];
 }) {
-  const publicationUri = stories.find(s => s.publicationUri)?.publicationUri || null;
   return (
     <html lang="en">
       <head>
@@ -178,13 +168,8 @@ export function ProfilePage({
                 <div class="profile-stats">
                   <span><strong>{author.followersCount}</strong> followers</span>
                   <span><strong>{author.followsCount}</strong> following</span>
-                  <span><strong>{stories.length}</strong> {stories.length === 1 ? 'article' : 'articles'}</span>
+                  <span><strong>{citations.length}</strong> {citations.length === 1 ? 'citation' : 'citations'}</span>
                 </div>
-                {publicationUri && sessionProfile && (
-                  <button class="profile-follow-btn" id="profile-follow-btn" data-publication={publicationUri}>
-                    Follow
-                  </button>
-                )}
                 {sessionProfile && sessionProfile.handle !== author.handle && (
                   <button class={`profile-endorse-btn ${isEndorsed ? 'endorsed' : ''}`} id="endorse-user-btn" data-did={author.did}>
                     {isEndorsed ? '✓ Endorsed' : '↑ Endorse'}
@@ -228,59 +213,17 @@ export function ProfilePage({
 
             {/* Tabs */}
             <div class="tabs" id="profile-tabs">
-              <button class="tab active" data-tab="articles">Articles ({stories.length})</button>
-              <button class="tab" data-tab="citations">Citations ({citations.length})</button>
+              <button class="tab active" data-tab="citations">Citations ({citations.length})</button>
+              <button class="tab" data-tab="articles">Contributed Articles ({contributedArticles.length})</button>
             </div>
 
-            {/* Articles tab */}
-            <div class="tab-content active" id="tab-articles">
-            {stories.length === 0 ? (
-              <div class="empty-profile">
-                <h3>No articles yet</h3>
-                <p>{author.displayName} hasn't published any articles on Centipedia.</p>
-              </div>
-            ) : (
-              stories.map((s) => {
-                const rkey = s.uri.split('/').pop();
-                const readUrl = s.externalUrl || `https://${domain}/post/${s.authorDid}/${rkey}`;
-                const minRead = Math.max(1, Math.ceil(s.wordCount / 200));
-                const ago = timeAgo(s.publishedAt);
-                return (
-                  <div class="story-item">
-                    <div class="story-item-content">
-                      <a href={readUrl} target="_blank" rel="noopener noreferrer">
-                        <h3 class="story-item-title">{s.title || 'Untitled'}</h3>
-                        {s.description && (
-                          <p class="story-item-excerpt">
-                            {s.description.length > 200 ? s.description.substring(0, 200) + '…' : s.description}
-                          </p>
-                        )}
-                        <div class="story-item-meta">
-                          {ago && <span>{ago}</span>}
-                          {ago && <span>·</span>}
-                          <span>{minRead} min read</span>
-                          <span>·</span>
-                          <span>{s.wordCount} words</span>
-                        </div>
-                      </a>
-                    </div>
-                    {s.imageUrl && (
-                      <a href={readUrl} class="story-item-thumb" target="_blank" rel="noopener noreferrer">
-                        <img src={s.imageUrl} alt="" loading="lazy" />
-                      </a>
-                    )}
-                  </div>
-                );
-              })
-            )}
-            </div>
-
-            {/* Citations tab */}
-            <div class="tab-content" id="tab-citations">
+            {/* Citations tab — default */}
+            <div class="tab-content active" id="tab-citations">
               {citations.length === 0 ? (
                 <div class="empty-profile">
-                  <h3>No citations</h3>
+                  <h3>No citations yet</h3>
                   <p>{author.displayName} hasn't submitted any citations yet.</p>
+                  <a href="/submit" style="display: inline-block; margin-top: 0.75rem; padding: 0.45rem 1.25rem; background: var(--accent); color: var(--bg); border-radius: 99px; text-decoration: none; font-size: 0.85rem; font-weight: 600;">Submit a Citation</a>
                 </div>
               ) : (
                 citations.map(c => (
@@ -306,28 +249,34 @@ export function ProfilePage({
                 ))
               )}
             </div>
+
+            {/* Contributed Articles tab */}
+            <div class="tab-content" id="tab-articles">
+              {contributedArticles.length === 0 ? (
+                <div class="empty-profile">
+                  <h3>No article contributions yet</h3>
+                  <p>When {author.displayName}'s citations are used in an article, they'll appear here.</p>
+                </div>
+              ) : (
+                contributedArticles.map(a => (
+                  <div class="story-item">
+                    <div class="story-item-content">
+                      <a href={`/post/did:plc:srdudtvbpm5ck3i4mjdoasdy/${a.rkey}`}>
+                        <h3 class="story-item-title">{a.topic}</h3>
+                        <div class="story-item-meta">
+                          <span>{a.userCitations} citation{a.userCitations !== 1 ? 's' : ''} contributed</span>
+                          <span>·</span>
+                          <span>{timeAgo(a.contributedAt)}</span>
+                        </div>
+                      </a>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
           </main>
         </div>
         <script dangerouslySetInnerHTML={{__html: `
-          (async function() {
-            const btn = document.getElementById('profile-follow-btn');
-            if (!btn) return;
-            const pub = btn.dataset.publication;
-            try {
-              const res = await fetch('/api/subscription-status?publication=' + encodeURIComponent(pub));
-              const data = await res.json();
-              if (data.subscribed) { btn.classList.add('following'); btn.textContent = 'Following'; btn.dataset.rkey = data.rkey; }
-            } catch(e) {}
-            btn.addEventListener('click', async () => {
-              btn.disabled = true;
-              if (btn.classList.contains('following')) {
-                try { const res = await fetch('/api/unsubscribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rkey: btn.dataset.rkey }) }); if (res.ok) { btn.classList.remove('following'); btn.textContent = 'Follow'; } } catch(e) {}
-              } else {
-                try { const res = await fetch('/api/subscribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ publication: pub }) }); const data = await res.json(); if (data.ok) { btn.classList.add('following'); btn.textContent = 'Following'; btn.dataset.rkey = data.rkey; } } catch(e) {}
-              }
-              btn.disabled = false;
-            });
-          })();
 
           // Tab switching
           document.querySelectorAll('#profile-tabs .tab').forEach(tab => {
