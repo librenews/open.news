@@ -16,7 +16,7 @@ import { MyCitationsPage } from './views/my-citations.js';
 import { ProfilePage } from './views/profile.js';
 import { SearchPage } from './views/search.js';
 import { NotFoundPage } from './views/notfound.js';
-import type { ProfileData, ProfileStory } from './views/profile.js';
+import type { ProfileData, ProfileStory, ProfileCitation, TrustStats } from './views/profile.js';
 import type { SearchResult } from './views/search.js';
 import { authRouter, getSession, getCentipediaAuthClient } from './routes/auth.js';
 import { Agent, BskyAgent } from '@atproto/api';
@@ -453,8 +453,61 @@ app.get('/profile/:identifier', async (c) => {
       publicationUri: r.publication_uri || null,
     };
   });
+  // Fetch user's Centipedia citations
+  const { rows: citationRows } = await db.query(
+    `SELECT c.id, c.url, c.title, c.topic, c.status, c.article_rkey, c.created_at,
+       (SELECT count(*) FROM centipedia_endorsement_citations e WHERE e.citation_id = c.id) AS endorsements
+     FROM centipedia_citations c WHERE c.submitted_by = $1
+     ORDER BY c.created_at DESC`,
+    [did]
+  );
+  const profileCitations = citationRows.map((r: any) => ({
+    ...r, endorsements: Number(r.endorsements)
+  }));
 
-  return c.html((<ProfilePage author={authorData} stories={stories} sessionProfile={sessionProfile} domain={config.CENTIPEDIA_DOMAIN} />) as unknown as string);
+  // Build trust stats
+  const { rows: [endorseStats] } = await db.query(`
+    SELECT
+      (SELECT count(*) FROM centipedia_citations WHERE submitted_by = $1) AS citations_submitted,
+      (SELECT count(*) FROM centipedia_citations WHERE submitted_by = $1 AND status = 'accepted') AS citations_accepted,
+      (SELECT count(*) FROM centipedia_endorsement_submitters WHERE subject = $1) AS endorsements_received,
+      (SELECT count(*) FROM centipedia_endorsement_submitters WHERE did = $1) + 
+        (SELECT count(*) FROM centipedia_endorsement_citations WHERE did = $1) +
+        (SELECT count(*) FROM centipedia_endorsement_sources WHERE did = $1) AS endorsements_given
+  `, [did]);
+
+  const { rows: domainRows } = await db.query(
+    'SELECT domain FROM centipedia_endorsement_sources WHERE did = $1 ORDER BY created_at DESC LIMIT 10',
+    [did]
+  );
+
+  const trustStats = {
+    citationsSubmitted: Number(endorseStats.citations_submitted),
+    citationsAccepted: Number(endorseStats.citations_accepted),
+    endorsementsReceived: Number(endorseStats.endorsements_received),
+    endorsementsGiven: Number(endorseStats.endorsements_given),
+    trustedDomains: domainRows.map((r: any) => r.domain),
+  };
+
+  // Check if logged-in user has endorsed this person
+  let isEndorsed = false;
+  if (sessionDid && sessionDid !== did) {
+    const { rows: endorseCheck } = await db.query(
+      'SELECT id FROM centipedia_endorsement_submitters WHERE did = $1 AND subject = $2 AND topic IS NULL',
+      [sessionDid, did]
+    );
+    isEndorsed = endorseCheck.length > 0;
+  }
+
+  return c.html((<ProfilePage
+    author={authorData}
+    stories={stories}
+    sessionProfile={sessionProfile}
+    domain={config.CENTIPEDIA_DOMAIN}
+    citations={profileCitations}
+    trustStats={trustStats}
+    isEndorsed={isEndorsed}
+  />) as unknown as string);
 });
 
 app.get('/new', async (c) => {
@@ -769,6 +822,94 @@ app.post('/api/endorse/citation', async (c) => {
     }
   } catch (err: any) {
     logger.error({ err }, 'Failed to toggle citation endorsement');
+    return c.json({ error: 'Failed to endorse' }, 500);
+  }
+});
+
+// --- Submitter endorsement API ---
+
+app.post('/api/endorse/submitter', async (c) => {
+  const sessionDid = await getSession(c);
+  if (!sessionDid) return c.json({ error: 'Not authenticated' }, 401);
+
+  const { subjectDid, topic } = await c.req.json();
+  if (!subjectDid) return c.json({ error: 'Missing subjectDid' }, 400);
+  if (subjectDid === sessionDid) return c.json({ error: 'Cannot endorse yourself' }, 400);
+
+  try {
+    const topicVal = topic?.trim() || null;
+    const { rows: existing } = await db.query(
+      'SELECT id FROM centipedia_endorsement_submitters WHERE did = $1 AND subject = $2 AND (topic = $3 OR ($3 IS NULL AND topic IS NULL))',
+      [sessionDid, subjectDid, topicVal]
+    );
+
+    if (existing.length > 0) {
+      await db.query(
+        'DELETE FROM centipedia_endorsement_submitters WHERE did = $1 AND subject = $2 AND (topic = $3 OR ($3 IS NULL AND topic IS NULL))',
+        [sessionDid, subjectDid, topicVal]
+      );
+      const { rows: [{ count }] } = await db.query(
+        'SELECT count(*) FROM centipedia_endorsement_submitters WHERE subject = $1',
+        [subjectDid]
+      );
+      return c.json({ endorsed: false, count: Number(count) });
+    } else {
+      await db.query(
+        'INSERT INTO centipedia_endorsement_submitters (did, subject, topic) VALUES ($1, $2, $3)',
+        [sessionDid, subjectDid, topicVal]
+      );
+      const { rows: [{ count }] } = await db.query(
+        'SELECT count(*) FROM centipedia_endorsement_submitters WHERE subject = $1',
+        [subjectDid]
+      );
+      return c.json({ endorsed: true, count: Number(count) });
+    }
+  } catch (err: any) {
+    logger.error({ err }, 'Failed to toggle submitter endorsement');
+    return c.json({ error: 'Failed to endorse' }, 500);
+  }
+});
+
+// --- Domain endorsement API ---
+
+app.post('/api/endorse/domain', async (c) => {
+  const sessionDid = await getSession(c);
+  if (!sessionDid) return c.json({ error: 'Not authenticated' }, 401);
+
+  const { domain, topic } = await c.req.json();
+  if (!domain) return c.json({ error: 'Missing domain' }, 400);
+
+  try {
+    const normalizedDomain = domain.toLowerCase().replace(/^www\./, '').trim();
+    const topicVal = topic?.trim() || null;
+    const { rows: existing } = await db.query(
+      'SELECT id FROM centipedia_endorsement_sources WHERE did = $1 AND domain = $2 AND (topic = $3 OR ($3 IS NULL AND topic IS NULL))',
+      [sessionDid, normalizedDomain, topicVal]
+    );
+
+    if (existing.length > 0) {
+      await db.query(
+        'DELETE FROM centipedia_endorsement_sources WHERE did = $1 AND domain = $2 AND (topic = $3 OR ($3 IS NULL AND topic IS NULL))',
+        [sessionDid, normalizedDomain, topicVal]
+      );
+      const { rows: [{ count }] } = await db.query(
+        'SELECT count(*) FROM centipedia_endorsement_sources WHERE domain = $1',
+        [normalizedDomain]
+      );
+      return c.json({ endorsed: false, count: Number(count) });
+    } else {
+      await db.query(
+        'INSERT INTO centipedia_endorsement_sources (did, domain, topic) VALUES ($1, $2, $3)',
+        [sessionDid, normalizedDomain, topicVal]
+      );
+      const { rows: [{ count }] } = await db.query(
+        'SELECT count(*) FROM centipedia_endorsement_sources WHERE domain = $1',
+        [normalizedDomain]
+      );
+      return c.json({ endorsed: true, count: Number(count) });
+    }
+  } catch (err: any) {
+    logger.error({ err }, 'Failed to toggle domain endorsement');
     return c.json({ error: 'Failed to endorse' }, 500);
   }
 });

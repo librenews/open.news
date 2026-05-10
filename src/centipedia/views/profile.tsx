@@ -29,6 +29,25 @@ export interface ProfileStory {
   publicationUri: string | null;
 }
 
+export interface ProfileCitation {
+  id: number;
+  url: string;
+  title: string | null;
+  topic: string | null;
+  status: string;
+  endorsements: number;
+  article_rkey: string | null;
+  created_at: string;
+}
+
+export interface TrustStats {
+  citationsSubmitted: number;
+  citationsAccepted: number;
+  endorsementsReceived: number;
+  endorsementsGiven: number;
+  trustedDomains: string[];
+}
+
 function timeAgo(dateStr: string | null): string {
   if (!dateStr) return '';
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -72,16 +91,56 @@ const PAGE_STYLES = `
 .profile-follow-btn:hover { background: var(--bg-secondary); color: var(--text-main); border-color: var(--text-muted); }
 .profile-follow-btn.following { background: var(--accent); color: var(--bg); border-color: var(--accent); }
 .profile-follow-btn.following:hover { background: #d32f2f; border-color: #d32f2f; }
+.profile-endorse-btn { display: inline-flex; align-items: center; gap: 0.4rem; margin-top: 1rem; margin-left: 0.5rem; padding: 0.45rem 1.25rem; border: 1px solid #10b981; border-radius: 99px; background: transparent; color: #10b981; font-size: 0.85rem; font-weight: 600; font-family: var(--font-sans); cursor: pointer; transition: all 0.15s; }
+.profile-endorse-btn:hover { background: rgba(16,185,129,0.08); }
+.profile-endorse-btn.endorsed { background: #10b981; color: #fff; }
+.profile-endorse-btn.endorsed:hover { background: #ef4444; border-color: #ef4444; }
+
+/* Trust stats */
+.trust-section { margin-top: 2rem; padding-top: 2rem; border-top: 1px solid var(--border); }
+.trust-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 1.5rem; }
+@media (max-width: 640px) { .trust-grid { grid-template-columns: repeat(2, 1fr); } }
+.trust-card { padding: 1rem; border: 1px solid var(--border); border-radius: 10px; text-align: center; }
+.trust-card-value { font-size: 1.5rem; font-weight: 800; font-family: var(--font-sans); letter-spacing: -0.02em; }
+.trust-card-label { font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; margin-top: 0.15rem; }
+
+/* Contributions list */
+.contrib-item { display: flex; gap: 0.75rem; padding: 0.75rem 0; border-bottom: 1px solid var(--border); align-items: flex-start; }
+.contrib-status { font-size: 0.6rem; font-weight: 700; text-transform: uppercase; padding: 0.15rem 0.45rem; border-radius: 99px; flex-shrink: 0; margin-top: 0.1rem; }
+.contrib-status[data-status="accepted"] { background: rgba(16,185,129,0.1); color: #10b981; }
+.contrib-status[data-status="pending"] { background: rgba(245,158,11,0.1); color: #f59e0b; }
+.contrib-status[data-status="rejected"] { background: rgba(239,68,68,0.1); color: #ef4444; }
+.contrib-body { flex: 1; min-width: 0; }
+.contrib-title { font-size: 0.85rem; font-weight: 600; color: var(--accent); text-decoration: none; word-break: break-word; }
+.contrib-title:hover { text-decoration: underline; }
+.contrib-meta { font-size: 0.7rem; color: var(--text-muted); margin-top: 0.2rem; font-family: var(--font-sans); display: flex; gap: 0.5rem; }
+.contrib-endorsements { color: #10b981; font-weight: 600; display: flex; align-items: center; gap: 0.2rem; }
+
+/* Domains */
+.trusted-domains { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.5rem; }
+.domain-badge { padding: 0.25rem 0.6rem; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 99px; font-size: 0.75rem; color: var(--text-secondary); font-family: var(--font-sans); }
+
+.tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border); margin-bottom: 1.5rem; }
+.tab { padding: 0.6rem 1.25rem; font-size: 0.85rem; font-weight: 500; color: var(--text-muted); cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.15s; background: none; border-top: none; border-left: none; border-right: none; font-family: var(--font-sans); }
+.tab:hover { color: var(--text-secondary); }
+.tab.active { color: var(--text-main); border-bottom-color: var(--accent); font-weight: 600; }
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+
 @media (max-width: 640px) { .profile-header { flex-direction: column; align-items: center; text-align: center; } .profile-stats { justify-content: center; } }
 `;
 
 export function ProfilePage({
   author, stories, sessionProfile, domain,
+  citations = [], trustStats, isEndorsed = false,
 }: {
   author: ProfileData;
   stories: ProfileStory[];
   sessionProfile?: UserProfile | null;
   domain: string;
+  citations?: ProfileCitation[];
+  trustStats?: TrustStats;
+  isEndorsed?: boolean;
 }) {
   const publicationUri = stories.find(s => s.publicationUri)?.publicationUri || null;
   return (
@@ -126,11 +185,55 @@ export function ProfilePage({
                     Follow
                   </button>
                 )}
+                {sessionProfile && sessionProfile.handle !== author.handle && (
+                  <button class={`profile-endorse-btn ${isEndorsed ? 'endorsed' : ''}`} id="endorse-user-btn" data-did={author.did}>
+                    {isEndorsed ? '✓ Endorsed' : '↑ Endorse'}
+                  </button>
+                )}
               </div>
             </div>
 
-            <h2 class="profile-stories-title">Articles</h2>
+            {/* Trust stats */}
+            {trustStats && (
+              <div class="trust-section">
+                <h2 class="profile-stories-title">Trust Profile</h2>
+                <div class="trust-grid">
+                  <div class="trust-card">
+                    <div class="trust-card-value">{trustStats.citationsSubmitted}</div>
+                    <div class="trust-card-label">Citations</div>
+                  </div>
+                  <div class="trust-card">
+                    <div class="trust-card-value">{trustStats.citationsAccepted}</div>
+                    <div class="trust-card-label">Accepted</div>
+                  </div>
+                  <div class="trust-card">
+                    <div class="trust-card-value">{trustStats.endorsementsReceived}</div>
+                    <div class="trust-card-label">Endorsements</div>
+                  </div>
+                  <div class="trust-card">
+                    <div class="trust-card-value">{trustStats.endorsementsGiven}</div>
+                    <div class="trust-card-label">Given</div>
+                  </div>
+                </div>
+                {trustStats.trustedDomains.length > 0 && (
+                  <div>
+                    <div class="profile-stories-title">Trusted Sources</div>
+                    <div class="trusted-domains">
+                      {trustStats.trustedDomains.map(d => <span class="domain-badge">{d}</span>)}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
+            {/* Tabs */}
+            <div class="tabs" id="profile-tabs">
+              <button class="tab active" data-tab="articles">Articles ({stories.length})</button>
+              <button class="tab" data-tab="citations">Citations ({citations.length})</button>
+            </div>
+
+            {/* Articles tab */}
+            <div class="tab-content active" id="tab-articles">
             {stories.length === 0 ? (
               <div class="empty-profile">
                 <h3>No articles yet</h3>
@@ -170,6 +273,39 @@ export function ProfilePage({
                 );
               })
             )}
+            </div>
+
+            {/* Citations tab */}
+            <div class="tab-content" id="tab-citations">
+              {citations.length === 0 ? (
+                <div class="empty-profile">
+                  <h3>No citations</h3>
+                  <p>{author.displayName} hasn't submitted any citations yet.</p>
+                </div>
+              ) : (
+                citations.map(c => (
+                  <div class="contrib-item">
+                    <div class="contrib-status" data-status={c.status}>{c.status}</div>
+                    <div class="contrib-body">
+                      <a href={c.url} target="_blank" rel="noopener" class="contrib-title">{c.title || c.url}</a>
+                      <div class="contrib-meta">
+                        {c.topic && <span>{c.topic}</span>}
+                        <span>{timeAgo(c.created_at)}</span>
+                        {c.endorsements > 0 && (
+                          <span class="contrib-endorsements">
+                            <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 19V5M5 12l7-7 7 7" /></svg>
+                            {c.endorsements}
+                          </span>
+                        )}
+                        {c.article_rkey && (
+                          <a href={`/post/did:plc:srdudtvbpm5ck3i4mjdoasdy/${c.article_rkey}`} style="color: var(--accent); text-decoration: none; font-weight: 600;">→ Article</a>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
           </main>
         </div>
         <script dangerouslySetInnerHTML={{__html: `
@@ -192,6 +328,38 @@ export function ProfilePage({
               btn.disabled = false;
             });
           })();
+
+          // Tab switching
+          document.querySelectorAll('#profile-tabs .tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+              document.querySelectorAll('#profile-tabs .tab').forEach(t => t.classList.remove('active'));
+              document.querySelectorAll('.tab-content').forEach(tc => tc.classList.remove('active'));
+              tab.classList.add('active');
+              document.getElementById('tab-' + tab.dataset.tab)?.classList.add('active');
+            });
+          });
+
+          // Endorse user button
+          const endorseBtn = document.getElementById('endorse-user-btn');
+          if (endorseBtn) {
+            endorseBtn.addEventListener('click', async () => {
+              endorseBtn.disabled = true;
+              try {
+                const res = await fetch('/api/endorse/submitter', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ subjectDid: endorseBtn.dataset.did })
+                });
+                if (res.status === 401) { location.href = '/login'; return; }
+                const data = await res.json();
+                if (res.ok) {
+                  endorseBtn.classList.toggle('endorsed', data.endorsed);
+                  endorseBtn.textContent = data.endorsed ? '✓ Endorsed' : '↑ Endorse';
+                }
+              } catch(e) {}
+              endorseBtn.disabled = false;
+            });
+          }
         `}} />
       </body>
     </html>
