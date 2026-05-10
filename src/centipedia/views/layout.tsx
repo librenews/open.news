@@ -23,28 +23,33 @@ export function Layout({ title, children, profile, headerAction, og }: { title: 
         <style>
           :root {
             --bg: #ffffff;
-            --text-main: #242424;
-            --text-muted: rgba(117, 117, 117, 1);
+            --bg-secondary: #f8f9fa;
+            --text-main: #1a1a1a;
+            --text-secondary: #6b7280;
+            --text-muted: #9ca3af;
+            --border: #e5e7eb;
+            --accent: #111827;
             --font-body: 'Merriweather', Georgia, serif;
-            --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
             --container-width: 680px;
+            --header-height: 57px;
           }
           
           @media (prefers-color-scheme: dark) {
             :root {
-               --bg: #121212;
-               --text-main: rgba(255, 255, 255, 0.9);
-               --text-muted: rgba(255, 255, 255, 0.6);
+               --bg: #0f0f0f;
+               --bg-secondary: #1a1a1a;
+               --text-main: rgba(255, 255, 255, 0.92);
+               --text-secondary: rgba(255, 255, 255, 0.6);
+               --text-muted: rgba(255, 255, 255, 0.4);
+               --border: rgba(255, 255, 255, 0.08);
+               --accent: #ffffff;
             }
           }
 
-          html {
-            overflow-y: scroll;
-          }
-
+          * { box-sizing: border-box; margin: 0; padding: 0; }
+          html { overflow-y: scroll; }
           body {
-            margin: 0;
-            padding: 0;
             background: var(--bg);
             color: var(--text-main);
             font-family: var(--font-body);
@@ -56,9 +61,9 @@ export function Layout({ title, children, profile, headerAction, og }: { title: 
             max-width: var(--container-width);
             margin: 0 auto;
             padding: 2rem 20px 4rem 20px;
-            box-sizing: border-box;
           }
 
+          /* Shared header — matches partials.tsx */
           .nav-header {
             display: flex;
             align-items: center;
@@ -67,13 +72,12 @@ export function Layout({ title, children, profile, headerAction, og }: { title: 
             font-size: 14px;
             font-weight: 500;
             padding: 1rem 2rem;
-            border-bottom: 1px solid rgba(0,0,0,0.06);
-          }
-          
-          @media (prefers-color-scheme: dark) {
-            .nav-header {
-              border-bottom-color: rgba(255,255,255,0.06);
-            }
+            border-bottom: 1px solid var(--border);
+            height: var(--header-height);
+            position: sticky;
+            top: 0;
+            background: var(--bg);
+            z-index: 20;
           }
           
           .nav-links {
@@ -104,24 +108,28 @@ export function Layout({ title, children, profile, headerAction, og }: { title: 
             background-color: var(--bg);
             min-width: 180px;
             box-shadow: 0px 8px 24px rgba(0,0,0,0.12);
-            border-radius: 8px;
+            border-radius: 10px;
             z-index: 100;
             overflow: hidden;
-            border: 1px solid rgba(0,0,0,0.1);
+            border: 1px solid var(--border);
+          }
+          .dropdown-content::before {
+            content: '';
+            position: absolute;
+            top: -8px;
+            left: 0;
+            right: 0;
+            height: 8px;
           }
           .user-dropdown:hover .dropdown-content {
             display: block;
           }
           .dropdown-content a:hover {
-            background-color: rgba(0,0,0,0.03);
+            background-color: var(--bg-secondary);
           }
           @media (prefers-color-scheme: dark) {
             .dropdown-content {
-               border: 1px solid rgba(255,255,255,0.1);
                box-shadow: 0px 8px 24px rgba(0,0,0,0.5);
-            }
-            .dropdown-content a:hover {
-               background-color: rgba(255,255,255,0.05);
             }
           }
 
@@ -161,10 +169,10 @@ export function Layout({ title, children, profile, headerAction, og }: { title: 
         </style>
       </head>
       <body>
-          ${title.includes('Login') ? '' : html`
+          ${title.includes('Sign in') ? '' : html`
             <nav class="nav-header">
               <a href="/" style="display: flex; align-items: center; text-decoration: none;">
-                <img src="/logo.jpg" alt="Centipedia" style="height: 28px; width: auto;" onerror="this.outerHTML='<span style=\\'font-family: var(--font-body); font-weight: 700; font-size: 22px; color: var(--text-main); letter-spacing: -0.03em;\\'>Centipedia</span>'" />
+                <img src="/logo.jpg" alt="Centipedia" style="height: 40px; width: auto;" onerror="this.outerHTML='<span style=\\'font-family: var(--font-body); font-weight: 700; font-size: 22px; color: var(--text-main); letter-spacing: -0.03em;\\'>Centipedia</span>'" />
               </a>
               
               ${profile ? html`
@@ -185,15 +193,15 @@ export function Layout({ title, children, profile, headerAction, og }: { title: 
                 ${profile ? html`
                   <div class="user-dropdown">
                     ${profile.avatar 
-                      ? html`<img src="${profile.avatar}" alt="${profile.handle}" style="width: 32px; height: 32px; border-radius: 50%; object-fit: cover; cursor: pointer; display: block;" />` 
-                      : html`<div style="width: 32px; height: 32px; border-radius: 50%; background: var(--text-muted); display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--bg);">${profile.displayName.charAt(0).toUpperCase()}</div>`
+                      ? html`<img src="${profile.avatar}" alt="${profile.handle}" style="width: 30px; height: 30px; border-radius: 50%; object-fit: cover; cursor: pointer; display: block;" />` 
+                      : html`<div style="width: 30px; height: 30px; border-radius: 50%; background: var(--text-muted); display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--bg); font-size: 0.75rem; font-weight: 700;">${profile.displayName.charAt(0).toUpperCase()}</div>`
                     }
                     <div class="dropdown-content">
-                      <div style="padding: 0.75rem 1rem; border-bottom: 1px solid rgba(0,0,0,0.1);">
-                        <span style="display: block; font-weight: 600; color: var(--text-main); margin-bottom: 0.2rem;">${profile.displayName}</span>
-                        <span style="display: block; font-size: 12px; color: var(--text-muted);">@${profile.handle}</span>
+                      <div style="padding: 0.6rem 1rem; border-bottom: 1px solid var(--border);">
+                        <span style="display: block; font-weight: 600; font-size: 0.85rem; color: var(--text-main);">${profile.displayName}</span>
+                        <span style="display: block; font-size: 0.7rem; color: var(--text-muted);">@${profile.handle}</span>
                       </div>
-                      <a href="/logout" style="display: block; padding: 0.75rem 1rem; color: #d32f2f;">Sign out</a>
+                      <a href="/logout" style="display: block; padding: 0.6rem 1rem; font-size: 0.85rem; color: #d32f2f !important;">Sign out</a>
                     </div>
                   </div>
                 ` : ''}
