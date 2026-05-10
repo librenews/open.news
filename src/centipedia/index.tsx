@@ -98,10 +98,30 @@ app.get('/', async (c) => {
   // Centipedia home page
   const profile = sessionDid ? await fetchUserProfile(sessionDid) : null;
 
-  // Fetch recent citations
+  // Fetch recent citations with endorsement counts
   const { rows: citationRows } = await db.query(
-    'SELECT id, url, title, submitted_by, topic, status, created_at FROM centipedia_citations ORDER BY created_at DESC LIMIT 20'
+    `SELECT c.id, c.url, c.title, c.submitted_by, c.topic, c.status, c.created_at,
+       (SELECT count(*) FROM centipedia_endorsement_citations e WHERE e.citation_id = c.id) AS endorsements
+     FROM centipedia_citations c
+     ORDER BY c.created_at DESC LIMIT 20`
   );
+
+  // If logged in, get which citations this user has endorsed
+  let userEndorsements = new Set<number>();
+  if (sessionDid) {
+    const { rows: endorsed } = await db.query(
+      'SELECT citation_id FROM centipedia_endorsement_citations WHERE did = $1',
+      [sessionDid]
+    );
+    userEndorsements = new Set(endorsed.map((r: any) => r.citation_id));
+  }
+
+  // Attach endorsement data to citations
+  const citationsWithEndorsements = citationRows.map((r: any) => ({
+    ...r,
+    endorsements: Number(r.endorsements),
+    userEndorsed: userEndorsements.has(r.id),
+  }));
 
   // Stats
   const { rows: [statsRow] } = await db.query(`
@@ -112,7 +132,7 @@ app.get('/', async (c) => {
   `);
 
   return c.html((<HomePage
-    citations={citationRows as CentipediaCitation[]}
+    citations={citationsWithEndorsements as CentipediaCitation[]}
     profile={profile}
     domain={config.CENTIPEDIA_DOMAIN}
     stats={{ articles: Number(statsRow.articles), citations: Number(statsRow.citations), topics: Number(statsRow.topics) }}
@@ -555,6 +575,49 @@ app.post('/api/citations', async (c) => {
   } catch (err: any) {
     logger.error({ err }, 'Failed to store citation');
     return c.json({ error: 'Failed to submit citation' }, 500);
+  }
+});
+
+// --- Citation endorsement API ---
+
+app.post('/api/endorse/citation', async (c) => {
+  const sessionDid = await getSession(c);
+  if (!sessionDid) return c.json({ error: 'Not authenticated' }, 401);
+
+  const { citationId } = await c.req.json();
+  if (!citationId) return c.json({ error: 'Missing citationId' }, 400);
+
+  try {
+    // Toggle: if already endorsed, remove it; otherwise add it
+    const { rows: existing } = await db.query(
+      'SELECT id FROM centipedia_endorsement_citations WHERE did = $1 AND citation_id = $2',
+      [sessionDid, citationId]
+    );
+
+    if (existing.length > 0) {
+      await db.query(
+        'DELETE FROM centipedia_endorsement_citations WHERE did = $1 AND citation_id = $2',
+        [sessionDid, citationId]
+      );
+      const { rows: [{ count }] } = await db.query(
+        'SELECT count(*) FROM centipedia_endorsement_citations WHERE citation_id = $1',
+        [citationId]
+      );
+      return c.json({ endorsed: false, count: Number(count) });
+    } else {
+      await db.query(
+        'INSERT INTO centipedia_endorsement_citations (did, citation_id) VALUES ($1, $2)',
+        [sessionDid, citationId]
+      );
+      const { rows: [{ count }] } = await db.query(
+        'SELECT count(*) FROM centipedia_endorsement_citations WHERE citation_id = $1',
+        [citationId]
+      );
+      return c.json({ endorsed: true, count: Number(count) });
+    }
+  } catch (err: any) {
+    logger.error({ err }, 'Failed to toggle citation endorsement');
+    return c.json({ error: 'Failed to endorse' }, 500);
   }
 });
 

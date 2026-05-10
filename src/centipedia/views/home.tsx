@@ -10,6 +10,8 @@ export interface CentipediaCitation {
   topic: string | null;
   status: string;
   created_at: string;
+  endorsements: number;
+  userEndorsed: boolean;
 }
 
 function timeAgo(dateStr: string | null): string {
@@ -71,6 +73,13 @@ const PAGE_STYLES = `
 .step-num { width: 24px; height: 24px; border-radius: 50%; background: var(--accent); color: var(--bg); font-size: 0.7rem; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .how-step div { font-size: 0.8rem; color: var(--text-secondary); line-height: 1.5; }
 .how-step strong { color: var(--text-main); }
+
+/* Endorse button */
+.endorse-btn { display: flex; flex-direction: column; align-items: center; gap: 0.1rem; padding: 0.35rem 0.4rem; border: 1px solid var(--border); border-radius: 8px; background: transparent; color: var(--text-muted); cursor: pointer; transition: all 0.15s; flex-shrink: 0; font-family: var(--font-sans); }
+.endorse-btn:hover { border-color: var(--text-secondary); color: var(--text-secondary); background: var(--bg-secondary); }
+.endorse-btn.endorsed { border-color: #10b981; color: #10b981; background: rgba(16, 185, 129, 0.08); }
+.endorse-btn.endorsed:hover { border-color: #ef4444; color: #ef4444; background: rgba(239, 68, 68, 0.08); }
+.endorse-count { font-size: 0.65rem; font-weight: 700; min-width: 0.8rem; text-align: center; }
 `;
 
 export function HomePage({
@@ -137,6 +146,16 @@ export function HomePage({
                 <div class="citations-list">
                   {citations.map(c => (
                     <div class="citation-card">
+                      <button
+                        class={`endorse-btn ${c.userEndorsed ? 'endorsed' : ''}`}
+                        data-citation-id={c.id}
+                        title="Endorse this citation"
+                      >
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                          <path d="M12 19V5M5 12l7-7 7 7" />
+                        </svg>
+                        <span class="endorse-count">{c.endorsements || ''}</span>
+                      </button>
                       <div class="citation-status" data-status={c.status}>{c.status}</div>
                       <a href={c.url} target="_blank" rel="noopener" class="citation-url">{c.title || c.url}</a>
                       {c.topic && <span class="citation-topic">{c.topic}</span>}
@@ -220,6 +239,26 @@ export function HomePage({
             }
             form.querySelector('button').disabled = false;
             form.querySelector('button').textContent = 'Submit';
+          });
+
+          // Endorsement handlers
+          document.querySelectorAll('.endorse-btn').forEach(btn => {
+            btn.addEventListener('click', async () => {
+              const citationId = Number(btn.dataset.citationId);
+              try {
+                const res = await fetch('/api/endorse/citation', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ citationId })
+                });
+                if (res.status === 401) { location.href = '/login'; return; }
+                const data = await res.json();
+                if (res.ok) {
+                  btn.classList.toggle('endorsed', data.endorsed);
+                  btn.querySelector('.endorse-count').textContent = data.count || '';
+                }
+              } catch(e) {}
+            });
           });
         `}} />
       </body>
