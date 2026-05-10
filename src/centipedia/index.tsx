@@ -348,7 +348,7 @@ app.get('/my-citations', async (c) => {
   const profile = await fetchUserProfile(sessionDid);
 
   const { rows: citations } = await db.query(
-    `SELECT c.id, c.url, c.title, c.topic, c.excerpt, c.status, c.created_at, c.article_rkey,
+    `SELECT c.id, c.url, c.title, c.topic, c.excerpt, c.status, c.created_at, c.article_rkey, c.agent_notes,
        (SELECT count(*) FROM centipedia_endorsement_citations e WHERE e.citation_id = c.id) AS endorsements
      FROM centipedia_citations c
      WHERE c.submitted_by = $1

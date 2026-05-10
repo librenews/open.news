@@ -99,11 +99,14 @@ async function processPendingCitations(): Promise<number> {
 
     if (!content || content.text.length < 50) {
       // Reject — URL is inaccessible or has no meaningful content
+      const reason = !content
+        ? 'Could not access this URL. The page may be behind a paywall, require login, or be temporarily unavailable.'
+        : 'The page content was too short to be useful as a citation (less than 50 characters extracted).';
       await db.query(
-        "UPDATE centipedia_citations SET status = 'rejected' WHERE id = $1",
-        [cit.id]
+        "UPDATE centipedia_citations SET status = 'rejected', agent_notes = $2, processed_at = NOW() WHERE id = $1",
+        [cit.id, reason]
       );
-      logger.info({ id: cit.id, url: cit.url }, 'Citation rejected (inaccessible or no content)');
+      logger.info({ id: cit.id, url: cit.url, reason }, 'Citation rejected');
       continue;
     }
 

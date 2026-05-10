@@ -12,6 +12,7 @@ export interface MyCitation {
   created_at: string;
   article_rkey: string | null;
   endorsements: number;
+  agent_notes: string | null;
 }
 
 const PAGE_STYLES = `
@@ -41,6 +42,7 @@ const PAGE_STYLES = `
 .empty-state { text-align: center; padding: 4rem 2rem; color: var(--text-muted); }
 .empty-state h3 { font-family: var(--font-body); font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 0.5rem; }
 .empty-state a { display: inline-block; margin-top: 1rem; padding: 0.5rem 1.5rem; background: var(--accent); color: var(--bg); border-radius: 99px; text-decoration: none; font-size: 0.85rem; font-weight: 600; }
+.my-citation-reason { font-size: 0.75rem; color: #ef4444; margin-top: 0.35rem; padding: 0.4rem 0.6rem; background: rgba(239,68,68,0.05); border-radius: 6px; border-left: 2px solid rgba(239,68,68,0.3); line-height: 1.5; }
 `;
 
 function timeAgo(dateStr: string): string {
@@ -115,6 +117,9 @@ export function MyCitationsPage({
                     <div class="my-citation-body">
                       <a href={c.url} target="_blank" rel="noopener" class="my-citation-title">{c.title || c.url}</a>
                       {c.excerpt && <div class="my-citation-excerpt">{c.excerpt}</div>}
+                      {c.status === 'rejected' && c.agent_notes && (
+                        <div class="my-citation-reason">⚠ {c.agent_notes}</div>
+                      )}
                       <div class="my-citation-meta">
                         {c.topic && <span>{c.topic}</span>}
                         <span>{timeAgo(c.created_at)}</span>
