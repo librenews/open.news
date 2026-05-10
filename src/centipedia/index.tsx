@@ -588,7 +588,7 @@ app.get('/profile/:identifier', async (c) => {
           followsCount: profileRes.followsCount || 0,
         };
       }
-      await redis.set(profKey, JSON.stringify(authorData), 'EX', 900).catch(() => {});
+      await redis.set(profKey, JSON.stringify(authorData), 'EX', 86400).catch(() => {});
     }
   } catch (e) {}
 
