@@ -527,21 +527,31 @@ app.get('/profile/:identifier', async (c) => {
   const sessionDid = await getSession(c);
   const sessionProfile = sessionDid ? await fetchUserProfile(sessionDid) : null;
 
-  // Resolve identifier to DID — can be a handle or DID
+  // Resolve identifier to DID — can be a handle or DID (cached)
   let did: string;
   let handle: string;
   if (identifier.startsWith('did:')) {
     did = identifier;
     handle = identifier;
   } else {
-    const res = await fetch(`https://public.api.bsky.app/xrpc/com.atproto.identity.resolveHandle?handle=${identifier}`);
-    if (!res.ok) return c.text('User not found', 404);
-    const data = await res.json() as any;
-    did = data.did;
+    // Cache handle→DID resolution
+    const { getRedis } = await import('../lib/redis.js');
+    const redis = getRedis();
+    const cacheKey = `pds:handle:${identifier}`;
+    const cached = await redis.get(cacheKey).catch(() => null);
+    if (cached) {
+      did = cached;
+    } else {
+      const res = await fetch(`https://public.api.bsky.app/xrpc/com.atproto.identity.resolveHandle?handle=${identifier}`);
+      if (!res.ok) return c.text('User not found', 404);
+      const data = await res.json() as any;
+      did = data.did;
+      await redis.set(cacheKey, did, 'EX', 3600).catch(() => {});
+    }
     handle = identifier;
   }
 
-  // Fetch full profile from Bluesky
+  // Fetch full profile from Bluesky (cached)
   let authorData: ProfileData = {
     did,
     handle,
@@ -552,17 +562,26 @@ app.get('/profile/:identifier', async (c) => {
     followsCount: 0,
   };
   try {
-    const profileRes = await fetch(`https://public.api.bsky.app/xrpc/app.bsky.actor.getProfile?actor=${encodeURIComponent(did)}`).then(r => r.json()) as any;
-    if (profileRes && !profileRes.error) {
-      authorData = {
-        did,
-        handle: profileRes.handle || handle,
-        displayName: profileRes.displayName || profileRes.handle || handle,
-        avatar: profileRes.avatar || '',
-        description: profileRes.description || '',
-        followersCount: profileRes.followersCount || 0,
-        followsCount: profileRes.followsCount || 0,
-      };
+    const { getRedis } = await import('../lib/redis.js');
+    const redis = getRedis();
+    const profKey = `pds:fullprof:${did}`;
+    const cached = await redis.get(profKey).catch(() => null);
+    if (cached) {
+      authorData = JSON.parse(cached);
+    } else {
+      const profileRes = await fetch(`https://public.api.bsky.app/xrpc/app.bsky.actor.getProfile?actor=${encodeURIComponent(did)}`).then(r => r.json()) as any;
+      if (profileRes && !profileRes.error) {
+        authorData = {
+          did,
+          handle: profileRes.handle || handle,
+          displayName: profileRes.displayName || profileRes.handle || handle,
+          avatar: profileRes.avatar || '',
+          description: profileRes.description || '',
+          followersCount: profileRes.followersCount || 0,
+          followsCount: profileRes.followsCount || 0,
+        };
+      }
+      await redis.set(profKey, JSON.stringify(authorData), 'EX', 900).catch(() => {});
     }
   } catch (e) {}
 
