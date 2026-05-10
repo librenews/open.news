@@ -125,6 +125,17 @@ function renderBlocks(blocks: LeafletBlock[], did: string): string {
           return `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer" class="article-website-embed"><span class="embed-title">${escapeHtml(url)}</span><span class="embed-domain">External Link · ${escapeHtml(domain)}</span></a>`;
         } catch { return `<a href="${escapeHtml(url)}" class="article-link">${escapeHtml(url)}</a>`; }
       }
+      case 'pub.leaflet.blocks.unorderedList':
+      case 'pub.leaflet.blocks.orderedList': {
+        const tag = block.$type === 'pub.leaflet.blocks.orderedList' ? 'ol' : 'ul';
+        const items = (block as any).children || [];
+        const listHtml = items.map((item: any) => {
+          const content = item.content || {};
+          const text = renderFacets(content.plaintext || '', content.facets || []);
+          return `<li>${text}</li>`;
+        }).join('');
+        return `<${tag} class="article-list">${listHtml}</${tag}>`;
+      }
       case 'pub.leaflet.blocks.text':
       default: {
         const text = renderFacets((block as any).plaintext || '', (block as any).facets || []);

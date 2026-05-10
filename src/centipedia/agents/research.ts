@@ -339,16 +339,55 @@ function textToBlocks(text: string): any[] {
   const lines = text.split('\n');
   const blocks: any[] = [];
   let currentParagraph = '';
+  let currentListItems: any[] = [];
+
+  function stripInlineMarkdown(raw: string): { plaintext: string; facets: any[] } {
+    const encoder = new TextEncoder();
+    let plaintext = '';
+    const facets: any[] = [];
+    // Match **bold** and *italic*
+    const re = /(\*\*(.+?)\*\*|\*(.+?)\*)/g;
+    let lastIndex = 0;
+    let match;
+    while ((match = re.exec(raw)) !== null) {
+      plaintext += raw.substring(lastIndex, match.index);
+      const byteStart = encoder.encode(plaintext).length;
+      const innerText = match[2] || match[3]; // bold or italic capture
+      plaintext += innerText;
+      const byteEnd = encoder.encode(plaintext).length;
+      facets.push({
+        index: { byteStart, byteEnd },
+        features: [{ $type: match[2] ? 'pub.leaflet.richtext.facet#bold' : 'pub.leaflet.richtext.facet#italic' }]
+      });
+      lastIndex = re.lastIndex;
+    }
+    plaintext += raw.substring(lastIndex);
+    return { plaintext, facets };
+  }
+
+  function flushListItems() {
+    if (currentListItems.length > 0) {
+      blocks.push({
+        $type: 'pub.leaflet.pages.linearDocument#block',
+        block: {
+          $type: 'pub.leaflet.blocks.unorderedList',
+          children: currentListItems,
+        }
+      });
+      currentListItems = [];
+    }
+  }
 
   function flushParagraph() {
     const trimmed = currentParagraph.trim();
     if (trimmed) {
+      const { plaintext, facets } = stripInlineMarkdown(trimmed);
       blocks.push({
         $type: 'pub.leaflet.pages.linearDocument#block',
         block: {
           $type: 'pub.leaflet.blocks.text',
-          facets: [],
-          plaintext: trimmed,
+          facets,
+          plaintext,
         }
       });
     }
@@ -362,6 +401,7 @@ function textToBlocks(text: string): any[] {
     const headingMatch = trimmedLine.match(/^(#{2,3})\s+(.+)$/);
     if (headingMatch) {
       flushParagraph();
+      flushListItems();
       blocks.push({
         $type: 'pub.leaflet.pages.linearDocument#block',
         block: {
@@ -372,6 +412,26 @@ function textToBlocks(text: string): any[] {
         }
       });
       continue;
+    }
+
+    // List item (- or *)
+    const listMatch = trimmedLine.match(/^[-*]\s+(.+)$/);
+    if (listMatch) {
+      flushParagraph();
+      const { plaintext, facets } = stripInlineMarkdown(listMatch[1]);
+      currentListItems.push({
+        content: {
+          $type: 'pub.leaflet.blocks.text',
+          facets,
+          plaintext,
+        }
+      });
+      continue;
+    }
+
+    // If we had list items and now hit a non-list line, flush the list
+    if (currentListItems.length > 0 && !listMatch) {
+      flushListItems();
     }
 
     // Blockquote
@@ -399,6 +459,7 @@ function textToBlocks(text: string): any[] {
   }
 
   flushParagraph();
+  flushListItems();
   return blocks;
 }
 
