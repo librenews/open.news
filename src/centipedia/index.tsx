@@ -29,7 +29,7 @@ import { Server as HocuspocusServer } from '@hocuspocus/server';
 import { hocuspocusDb } from './lib/hocuspocusDb.js';
 import { WebSocketServer } from 'ws';
 import { db } from '../db/client.js';
-import { searchSiteStandardArticles } from '../track/opensearch.js';
+
 import { startResearchAgent } from './agents/research.js';
 
 process.on('unhandledRejection', (err) => {
@@ -443,44 +443,36 @@ app.get('/search', async (c) => {
 
   if (q) {
     try {
-      const osSort = sort === 'latest' ? 'recent' : 'relevant';
-      const hits = await searchSiteStandardArticles(q, 'long', osSort, 30);
+      // Search centipedia articles (topics that have published articles)
+      const { rows: articleHits } = await db.query(
+        `SELECT DISTINCT c.topic, c.article_rkey,
+           (SELECT count(*) FROM centipedia_citations cc WHERE cc.topic = c.topic AND cc.status = 'accepted') AS citation_count
+         FROM centipedia_citations c
+         WHERE c.article_rkey IS NOT NULL
+           AND (c.topic ILIKE '%' || $1 || '%' OR c.article_rkey ILIKE '%' || $1 || '%')
+           AND c.status = 'accepted'
+         ORDER BY citation_count DESC
+         LIMIT 10`,
+        [q]
+      );
 
-      const uniqueDids = [...new Set((hits.hits || []).map((h: any) => h._source.did))];
-      const profileMap = new Map<string, { displayName: string; avatar: string; handle: string }>();
-      await Promise.all(uniqueDids.map(async (did) => {
-        const p = await fetchUserProfile(did as string);
-        profileMap.set(did as string, p);
-      }));
+      for (const hit of articleHits) {
+        results.push({
+          uri: `/article/${hit.article_rkey}`,
+          did: BOT_DID,
+          title: hit.topic || hit.article_rkey,
+          site: `https://${config.CENTIPEDIA_DOMAIN}`,
+          path: `/article/${hit.article_rkey}`,
+          publishedAt: null,
+          wordCount: 0,
+          highlight: `${hit.citation_count} citations`,
+          authorHandle: 'centipedia',
+          authorName: 'Centipedia',
+          authorAvatar: '',
+        });
+      }
 
-      results = (hits.hits || []).map((hit: any) => {
-        const s = hit._source;
-        const p = profileMap.get(s.did) || { displayName: s.did, avatar: '', handle: s.did };
-        const highlights = hit.highlight || {};
-        const textHighlights = Object.keys(highlights)
-          .filter(k => k.startsWith('text_content'))
-          .flatMap(k => highlights[k]);
-
-        return {
-          uri: s.uri,
-          did: s.did,
-          title: s.title || 'Untitled',
-          site: s.site || null,
-          path: s.path || null,
-          publishedAt: s.published_at || null,
-          wordCount: s.word_count || 0,
-          highlight: textHighlights.length > 0 ? textHighlights[0] : null,
-          authorHandle: p.handle,
-          authorName: p.displayName,
-          authorAvatar: p.avatar,
-        };
-      });
-    } catch (err: any) {
-      logger.error({ err, q }, 'Search failed');
-    }
-
-    // Also search local citations
-    try {
+      // Search local citations
       const { rows: citationHits } = await db.query(
         `SELECT c.id, c.url, c.title, c.topic, c.excerpt, c.article_rkey, c.created_at,
            (SELECT count(*) FROM centipedia_endorsement_citations e WHERE e.citation_id = c.id) AS endorsements
@@ -490,7 +482,7 @@ app.get('/search', async (c) => {
          ORDER BY endorsements DESC LIMIT 10`,
         [q]
       );
-      // Append citation results as search results
+
       for (const ch of citationHits) {
         results.push({
           uri: ch.url,
@@ -507,7 +499,7 @@ app.get('/search', async (c) => {
         });
       }
     } catch (err: any) {
-      logger.warn({ err }, 'Citation search failed');
+      logger.error({ err, q }, 'Centipedia search failed');
     }
   }
 
