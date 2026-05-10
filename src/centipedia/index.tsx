@@ -10,6 +10,8 @@ import { ReaderPage } from './views/reader.js';
 import { Layout } from './views/layout.js';
 import { HomePage } from './views/home.js';
 import type { CentipediaCitation } from './views/home.js';
+import { TopicsPage } from './views/topics.js';
+import { SubmitPage } from './views/submit.js';
 import { ProfilePage } from './views/profile.js';
 import { SearchPage } from './views/search.js';
 import { NotFoundPage } from './views/notfound.js';
@@ -115,6 +117,30 @@ app.get('/', async (c) => {
     domain={config.CENTIPEDIA_DOMAIN}
     stats={{ articles: Number(statsRow.articles), citations: Number(statsRow.citations), topics: Number(statsRow.topics) }}
   />) as unknown as string);
+});
+
+app.get('/topics', async (c) => {
+  const sessionDid = await getSession(c);
+  const profile = sessionDid ? await fetchUserProfile(sessionDid) : null;
+
+  const { rows } = await db.query(
+    `SELECT topic, count(*) AS count, max(created_at) AS latest
+     FROM centipedia_citations
+     WHERE topic IS NOT NULL AND topic != ''
+     GROUP BY topic
+     ORDER BY count DESC`
+  );
+
+  return c.html((<TopicsPage
+    topics={rows.map((r: any) => ({ topic: r.topic, count: Number(r.count), latest: r.latest?.toISOString() || '' }))}
+    profile={profile}
+  />) as unknown as string);
+});
+
+app.get('/submit', async (c) => {
+  const sessionDid = await getSession(c);
+  const profile = sessionDid ? await fetchUserProfile(sessionDid) : null;
+  return c.html((<SubmitPage profile={profile} />) as unknown as string);
 });
 
 app.get('/search', async (c) => {
@@ -507,6 +533,7 @@ app.post('/api/citations', async (c) => {
   const body = await c.req.json();
   const url = body.url?.trim();
   const topic = body.topic?.trim() || null;
+  const excerpt = body.excerpt?.trim() || null;
 
   if (!url || typeof url !== 'string') {
     return c.json({ error: 'URL is required' }, 400);
@@ -520,8 +547,8 @@ app.post('/api/citations', async (c) => {
 
   try {
     await db.query(
-      'INSERT INTO centipedia_citations (url, submitted_by, topic, status) VALUES ($1, $2, $3, $4)',
-      [url, sessionDid || null, topic, 'pending']
+      'INSERT INTO centipedia_citations (url, submitted_by, topic, excerpt, status) VALUES ($1, $2, $3, $4, $5)',
+      [url, sessionDid || null, topic, excerpt, 'pending']
     );
     logger.info({ url, topic, submitter: sessionDid }, 'New citation submitted');
     return c.json({ ok: true });
