@@ -176,7 +176,37 @@ function handleEvent(event: JetstreamEvent): void {
         logger.error({ err, postUri }, 'Failed to delete moderated post from DB');
       });
     }
+    // Clean up deleted likes/reposts from our interaction tracking
+    if ((commit.collection === 'app.bsky.feed.like' || commit.collection === 'app.bsky.feed.repost') && postUri) {
+      db.query('DELETE FROM article_interactions WHERE record_uri = $1', [postUri])
+        .catch(err => logger.debug({ err, postUri }, 'Failed to delete interaction record'));
+    }
+    // Clean up deleted longform documents from index
+    const longformDeleteCollections = ['site.standard.document', 'pub.leaflet.document', 'com.whtwnd.blog.entry'];
+    if (longformDeleteCollections.includes(commit.collection) && postUri) {
+      db.query('DELETE FROM site_standard_articles WHERE uri = $1', [postUri])
+        .catch(err => logger.debug({ err, postUri }, 'Failed to delete article from index'));
+      invalidateRecord(did, commit.collection, commit.rkey || '').catch(() => {});
+    }
     return;
+  }
+
+  // ── Like / Repost tracking on longform articles ────────────────────────────
+  const interactionCollections = ['app.bsky.feed.like', 'app.bsky.feed.repost'];
+  if (interactionCollections.includes(commit.collection) && commit.record) {
+    const subject = commit.record.subject as { uri?: string } | undefined;
+    if (subject?.uri && typeof subject.uri === 'string') {
+      // Check if the subject is a longform document
+      const longformPatterns = ['/site.standard.document/', '/pub.leaflet.document/'];
+      if (longformPatterns.some(p => subject.uri!.includes(p))) {
+        const interactionType = commit.collection === 'app.bsky.feed.like' ? 'like' : 'repost';
+        db.query(
+          `INSERT INTO article_interactions (article_uri, actor_did, interaction_type, record_uri)
+           VALUES ($1, $2, $3, $4) ON CONFLICT (article_uri, actor_did, interaction_type) DO NOTHING`,
+          [subject.uri, did, interactionType, postUri]
+        ).catch(err => logger.debug({ err }, 'Failed to track article interaction'));
+      }
+    }
   }
 
   // ── Follow-as-signup ──────────────────────────────────────────────────────

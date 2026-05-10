@@ -1545,31 +1545,45 @@ app.post('/api/like', async (c) => {
   if (!sessionDid) return c.json({ error: 'Unauthorized' }, 401);
   
   try {
-    let { rkey, authorDid, uri, cid } = await c.req.json();
+    const { rkey, authorDid } = await c.req.json();
     const oauthSession = await restoreSession(c, sessionDid);
     if (!oauthSession) return c.json({ error: 'Session expired' }, 401);
     const agent = new Agent(oauthSession);
     
-    if (!uri || !cid) {
-      uri = `at://${authorDid}/site.standard.document/${rkey}`;
-      const pdsUrl = await resolvePds(authorDid);
-      const fetchAgent = new BskyAgent({ service: pdsUrl });
-      const record = await fetchAgent.com.atproto.repo.getRecord({
-        repo: authorDid,
-        collection: 'site.standard.document',
-        rkey
-      });
-      cid = record.data.cid;
+    const articleUri = `at://${authorDid}/site.standard.document/${rkey}`;
+    
+    // Create PDS record (protocol-level like)
+    let recordUri: string | null = null;
+    try {
+      // We need the CID for a proper like subject
+      const record = await getCachedRecord(authorDid, 'site.standard.document', rkey, BOT_DID);
+      if (record) {
+        const pdsUrl = await resolvePds(authorDid);
+        const fetchAgent = new BskyAgent({ service: pdsUrl });
+        const recRes = await fetchAgent.com.atproto.repo.getRecord({
+          repo: authorDid, collection: 'site.standard.document', rkey
+        });
+        const res = await agent.com.atproto.repo.createRecord({
+          repo: sessionDid,
+          collection: 'app.bsky.feed.like',
+          record: {
+            subject: { uri: articleUri, cid: recRes.data.cid },
+            createdAt: new Date().toISOString()
+          }
+        });
+        recordUri = res.data.uri;
+      }
+    } catch (err) {
+      logger.debug({ err }, 'PDS like record creation failed (non-fatal)');
     }
     
-    await agent.com.atproto.repo.createRecord({
-      repo: sessionDid,
-      collection: 'app.bsky.feed.like',
-      record: {
-        subject: { uri, cid },
-        createdAt: new Date().toISOString()
-      }
-    });
+    // Track locally (source of truth for stats)
+    await db.query(
+      `INSERT INTO article_interactions (article_uri, actor_did, interaction_type, record_uri)
+       VALUES ($1, $2, 'like', $3) ON CONFLICT (article_uri, actor_did, interaction_type) DO NOTHING`,
+      [articleUri, sessionDid, recordUri]
+    );
+    
     return c.json({ success: true });
   } catch (err: any) {
     logger.error({ err }, 'Failed to like article');
@@ -1582,31 +1596,41 @@ app.post('/api/repost', async (c) => {
   if (!sessionDid) return c.json({ error: 'Unauthorized' }, 401);
   
   try {
-    let { rkey, authorDid, uri, cid } = await c.req.json();
+    const { rkey, authorDid } = await c.req.json();
     const oauthSession = await restoreSession(c, sessionDid);
     if (!oauthSession) return c.json({ error: 'Session expired' }, 401);
     const agent = new Agent(oauthSession);
     
-    if (!uri || !cid) {
-      uri = `at://${authorDid}/site.standard.document/${rkey}`;
+    const articleUri = `at://${authorDid}/site.standard.document/${rkey}`;
+    
+    // Create PDS record (protocol-level repost)
+    let recordUri: string | null = null;
+    try {
       const pdsUrl = await resolvePds(authorDid);
       const fetchAgent = new BskyAgent({ service: pdsUrl });
-      const record = await fetchAgent.com.atproto.repo.getRecord({
-        repo: authorDid,
-        collection: 'site.standard.document',
-        rkey
+      const recRes = await fetchAgent.com.atproto.repo.getRecord({
+        repo: authorDid, collection: 'site.standard.document', rkey
       });
-      cid = record.data.cid;
+      const res = await agent.com.atproto.repo.createRecord({
+        repo: sessionDid,
+        collection: 'app.bsky.feed.repost',
+        record: {
+          subject: { uri: articleUri, cid: recRes.data.cid },
+          createdAt: new Date().toISOString()
+        }
+      });
+      recordUri = res.data.uri;
+    } catch (err) {
+      logger.debug({ err }, 'PDS repost record creation failed (non-fatal)');
     }
     
-    await agent.com.atproto.repo.createRecord({
-      repo: sessionDid,
-      collection: 'app.bsky.feed.repost',
-      record: {
-        subject: { uri, cid },
-        createdAt: new Date().toISOString()
-      }
-    });
+    // Track locally
+    await db.query(
+      `INSERT INTO article_interactions (article_uri, actor_did, interaction_type, record_uri)
+       VALUES ($1, $2, 'repost', $3) ON CONFLICT (article_uri, actor_did, interaction_type) DO NOTHING`,
+      [articleUri, sessionDid, recordUri]
+    );
+    
     return c.json({ success: true });
   } catch (err: any) {
     logger.error({ err }, 'Failed to repost article');
@@ -1619,46 +1643,25 @@ app.get('/api/stats', async (c) => {
   if (!authorDid || !rkey) return c.json({ error: 'Missing parameters' }, 400);
   
   const sessionDid = await getSession(c);
+  const articleUri = `at://${authorDid}/site.standard.document/${rkey}`;
   
   try {
-    const botAgent = await getLongformBot();
-    if (!botAgent) return c.json({ likes: 0, reposts: 0, liked: false, reposted: false });
+    const { rows } = await db.query(
+      `SELECT interaction_type, count(*)::int AS count,
+              bool_or(actor_did = $2) AS by_session
+       FROM article_interactions
+       WHERE article_uri = $1
+       GROUP BY interaction_type`,
+      [articleUri, sessionDid || '']
+    );
     
-    // Resolve PDS to get CID
-    const pdsUrl = await resolvePds(authorDid);
-    const fetchAgent = new BskyAgent({ service: pdsUrl });
-    const record = await fetchAgent.com.atproto.repo.getRecord({
-      repo: authorDid,
-      collection: 'site.standard.document',
-      rkey
-    });
-    
-    const uri = `at://${authorDid}/site.standard.document/${rkey}`;
-    const cid = record.data.cid;
-    
-    const [likesRes, repostsRes] = await Promise.all([
-      botAgent.app.bsky.feed.getLikes({ uri, cid }).catch(() => null),
-      botAgent.app.bsky.feed.getRepostedBy({ uri, cid }).catch(() => null)
-    ]);
-    
-    let liked = false;
-    let reposted = false;
-    
-    if (sessionDid) {
-      if (likesRes?.data?.likes) {
-        liked = likesRes.data.likes.some((l: any) => l.actor.did === sessionDid);
-      }
-      if (repostsRes?.data?.repostedBy) {
-        reposted = repostsRes.data.repostedBy.some((r: any) => r.did === sessionDid);
-      }
+    let likes = 0, reposts = 0, liked = false, reposted = false;
+    for (const row of rows) {
+      if (row.interaction_type === 'like') { likes = row.count; liked = row.by_session; }
+      if (row.interaction_type === 'repost') { reposts = row.count; reposted = row.by_session; }
     }
     
-    return c.json({
-      likes: likesRes?.data?.likes?.length || 0,
-      reposts: repostsRes?.data?.repostedBy?.length || 0,
-      liked,
-      reposted
-    });
+    return c.json({ likes, reposts, liked, reposted });
   } catch (err: any) {
     logger.error({ err }, 'Failed to get stats');
     return c.json({ likes: 0, reposts: 0, liked: false, reposted: false });
