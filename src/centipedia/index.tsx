@@ -15,6 +15,7 @@ import { SubmitPage } from './views/submit.js';
 import { MyCitationsPage } from './views/my-citations.js';
 import { ProfilePage } from './views/profile.js';
 import { SearchPage } from './views/search.js';
+import { TopicPage } from './views/topic.js';
 import { NotFoundPage } from './views/notfound.js';
 import type { ProfileData, ProfileCitation, TrustStats, ContributedArticle } from './views/profile.js';
 import type { SearchResult } from './views/search.js';
@@ -515,6 +516,85 @@ app.get('/profile/:identifier', async (c) => {
     trustStats={trustStats}
     isEndorsed={isEndorsed}
     contributedArticles={contributedArticles}
+  />) as unknown as string);
+});
+
+// --- Topics page ---
+
+app.get('/topics/:topic', async (c) => {
+  const topic = decodeURIComponent(c.req.param('topic'));
+  const sessionDid = await getSession(c);
+  const sessionProfile = sessionDid ? await getProfileForNav(sessionDid) : null;
+
+  // Fetch citations for this topic
+  const { rows: citationRows } = await db.query(
+    `SELECT c.id, c.url, c.title, c.status, c.excerpt, c.submitted_by, c.article_rkey, c.created_at,
+       (SELECT count(*) FROM centipedia_endorsement_citations e WHERE e.citation_id = c.id) AS endorsements
+     FROM centipedia_citations c
+     WHERE c.topic = $1
+     ORDER BY (SELECT count(*) FROM centipedia_endorsement_citations e WHERE e.citation_id = c.id) DESC, c.created_at DESC`,
+    [topic]
+  );
+
+  // Get endorsement status for logged-in user
+  let endorsedIds = new Set<number>();
+  if (sessionDid) {
+    const { rows: myEndorsements } = await db.query(
+      `SELECT citation_id FROM centipedia_endorsement_citations WHERE did = $1 AND citation_id = ANY($2::int[])`,
+      [sessionDid, citationRows.map((r: any) => r.id)]
+    );
+    endorsedIds = new Set(myEndorsements.map((r: any) => r.citation_id));
+  }
+
+  // Resolve submitter handles
+  const submitterDids = [...new Set(citationRows.map((r: any) => r.submitted_by).filter(Boolean))];
+  const handleMap: Record<string, string> = {};
+  for (const sd of submitterDids) {
+    try {
+      const res = await fetch(`https://public.api.bsky.app/xrpc/app.bsky.actor.getProfile?actor=${encodeURIComponent(sd)}`).then(r => r.json()) as any;
+      if (res?.handle) handleMap[sd] = res.handle;
+    } catch {}
+  }
+
+  const citations = citationRows.map((r: any) => ({
+    ...r,
+    endorsements: Number(r.endorsements),
+    submitter_handle: handleMap[r.submitted_by] || null,
+    userEndorsed: endorsedIds.has(r.id),
+  }));
+
+  // Fetch articles linked to this topic
+  const { rows: articleRkeys } = await db.query(
+    `SELECT DISTINCT article_rkey FROM centipedia_citations WHERE topic = $1 AND article_rkey IS NOT NULL`,
+    [topic]
+  );
+
+  const articles: any[] = [];
+  for (const { article_rkey } of articleRkeys) {
+    try {
+      // Fetch article metadata from the versions table
+      const { rows: [ver] } = await db.query(
+        `SELECT title, word_count, summary, created_at FROM centipedia_article_versions
+         WHERE rkey = $1 ORDER BY version DESC LIMIT 1`,
+        [article_rkey]
+      );
+      if (ver) {
+        articles.push({
+          rkey: article_rkey,
+          title: ver.title || topic,
+          description: ver.summary || null,
+          word_count: ver.word_count || 0,
+          published_at: ver.created_at?.toISOString() || null,
+        });
+      }
+    } catch {}
+  }
+
+  return c.html((<TopicPage
+    topic={topic}
+    citations={citations}
+    articles={articles}
+    sessionProfile={sessionProfile}
   />) as unknown as string);
 });
 

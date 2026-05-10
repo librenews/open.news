@@ -383,6 +383,144 @@ function textToBlocks(text: string): any[] {
   return blocks;
 }
 
+// ─── Article regeneration ────────────────────────────────────────────────────
+
+const MIN_NEW_CITATIONS_FOR_REGEN = 2;
+
+async function checkAndRegenerateArticles(): Promise<number> {
+  // Find topics where new accepted citations exist but aren't linked to the article yet
+  const { rows: regenTopics } = await db.query(
+    `SELECT c.topic, 
+       (SELECT article_rkey FROM centipedia_citations WHERE topic = c.topic AND article_rkey IS NOT NULL LIMIT 1) AS existing_rkey,
+       count(*) AS new_count
+     FROM centipedia_citations c
+     WHERE c.status = 'accepted' AND c.article_rkey IS NULL AND c.topic IS NOT NULL
+       AND EXISTS (SELECT 1 FROM centipedia_citations c2 WHERE c2.topic = c.topic AND c2.article_rkey IS NOT NULL)
+     GROUP BY c.topic
+     HAVING count(*) >= $1
+     ORDER BY new_count DESC LIMIT 3`,
+    [MIN_NEW_CITATIONS_FOR_REGEN]
+  );
+
+  let regenerated = 0;
+  for (const { topic, existing_rkey, new_count } of regenTopics) {
+    logger.info({ topic, newCitations: new_count, rkey: existing_rkey }, 'Regenerating article with new citations');
+    try {
+      await regenerateArticle(topic, existing_rkey);
+      regenerated++;
+    } catch (err: any) {
+      logger.error({ err, topic }, 'Article regeneration failed');
+    }
+  }
+
+  return regenerated;
+}
+
+async function regenerateArticle(topic: string, rkey: string): Promise<void> {
+  // Gather ALL accepted citations for this topic (old + new)
+  const { rows: allCitations } = await db.query(
+    `SELECT id, url, title, excerpt FROM centipedia_citations
+     WHERE status = 'accepted' AND topic = $1
+     ORDER BY created_at ASC`,
+    [topic]
+  );
+
+  if (allCitations.length < MIN_CITATIONS_FOR_ARTICLE) return;
+
+  const sourcesText = allCitations.map((c: any, i: number) =>
+    `[${i + 1}] ${c.title || c.url}\nURL: ${c.url}\nExcerpt: ${c.excerpt || 'No excerpt available'}`
+  ).join('\n\n');
+
+  const messages: LLMMessage[] = [
+    {
+      role: 'system',
+      content: `You are an encyclopedia writer for Centipedia. An article about "${topic}" already exists but new sources have been added. Rewrite the article incorporating ALL the provided sources for a more comprehensive, up-to-date entry.
+
+RULES:
+- Write in an encyclopedic, neutral tone (similar to Wikipedia)
+- Structure with clear sections using ## headings
+- Reference the provided sources naturally in the text
+- Be thorough but concise — aim for 800-1500 words (longer than initial version since more sources)
+- Include a brief introduction paragraph before the first heading
+- Do NOT include a title heading (it will be added separately)
+- Do NOT include a references section (citations are handled separately)
+- Write factual, verifiable content based on the sources provided`
+    },
+    {
+      role: 'user',
+      content: `Rewrite the encyclopedia article about: "${topic}"\n\nAll available sources (${allCitations.length} total):\n\n${sourcesText}`
+    }
+  ];
+
+  const result = await llm.complete(messages, { maxTokens: 3000 });
+  const articleText = result.text.trim();
+
+  if (articleText.length < 100) {
+    logger.warn({ topic }, 'LLM produced insufficient content for regeneration, skipping');
+    return;
+  }
+
+  const blocks = textToBlocks(articleText);
+
+  const bot = await getCentipediaBot();
+  if (!bot || !bot.session) {
+    logger.error('Bot not available, cannot regenerate article');
+    return;
+  }
+
+  const record = {
+    $type: 'site.standard.document',
+    title: topic,
+    description: articleText.substring(0, 200).trim() + '…',
+    publishedAt: new Date().toISOString(),
+    content: {
+      pages: [{
+        $type: 'pub.leaflet.pages.linearDocument',
+        blocks,
+      }]
+    }
+  };
+
+  try {
+    await bot.com.atproto.repo.putRecord({
+      repo: bot.session.did,
+      collection: 'site.standard.document',
+      rkey,
+      record,
+    });
+
+    logger.info({ topic, rkey, totalCitations: allCitations.length }, 'Regenerated article');
+
+    // Link the new citations to the article
+    const unlinkedIds = allCitations.filter((c: any) => !c.article_rkey).map((c: any) => c.id);
+    if (unlinkedIds.length > 0) {
+      await db.query(
+        `UPDATE centipedia_citations SET article_rkey = $1 WHERE id = ANY($2::int[])`,
+        [rkey, unlinkedIds]
+      );
+    }
+
+    // Save version snapshot
+    const wordCount = articleText.split(/\s+/).length;
+    const contentHash = Buffer.from(articleText).toString('base64').substring(0, 64);
+    const { rows: [{ max_version }] } = await db.query(
+      'SELECT COALESCE(MAX(version), 0) AS max_version FROM centipedia_article_versions WHERE rkey = $1',
+      [rkey]
+    );
+    await db.query(
+      `INSERT INTO centipedia_article_versions (rkey, version, title, content_hash, word_count, citations_used, summary, generated_by, content_snapshot)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      [rkey, Number(max_version) + 1, topic, contentHash, wordCount, allCitations.length,
+       `Regenerated with ${allCitations.length} citations (+${unlinkedIds.length} new)`, 'agent', JSON.stringify(blocks)]
+    );
+    logger.info({ rkey, version: Number(max_version) + 1 }, 'Saved regenerated article version');
+
+  } catch (err: any) {
+    logger.error({ err, topic, rkey }, 'Failed to regenerate article');
+    throw err;
+  }
+}
+
 // ─── Agent loop ──────────────────────────────────────────────────────────────
 
 let running = false;
@@ -396,6 +534,11 @@ async function tick() {
       const articles = await checkAndSynthesizeArticles();
       if (articles > 0) {
         logger.info({ articles }, 'Synthesis cycle produced new articles');
+      }
+      // Also check if existing articles need regeneration
+      const regenerated = await checkAndRegenerateArticles();
+      if (regenerated > 0) {
+        logger.info({ regenerated }, 'Regeneration cycle updated articles');
       }
     }
   } catch (err: any) {
