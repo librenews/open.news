@@ -13,7 +13,7 @@ import type { CentipediaCitation } from './views/home.js';
 import { ProfilePage } from './views/profile.js';
 import { SearchPage } from './views/search.js';
 import { NotFoundPage } from './views/notfound.js';
-import type { ProfileData } from './views/profile.js';
+import type { ProfileData, ProfileStory } from './views/profile.js';
 import type { SearchResult } from './views/search.js';
 import { authRouter, getSession, getCentipediaAuthClient } from './routes/auth.js';
 import { Agent, BskyAgent } from '@atproto/api';
@@ -254,7 +254,7 @@ app.get('/profile/:identifier', async (c) => {
     [did]
   );
 
-  const stories: LongformStory[] = rows.map((r: any) => {
+  const stories: ProfileStory[] = rows.map((r: any) => {
     const rkey = r.uri.split('/').pop();
     const collection = r.collection;
     let readUrl: string | null = null;
