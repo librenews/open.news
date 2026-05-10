@@ -282,6 +282,8 @@ Write the article in plain text with ## headings for sections. Use plain paragra
     title: topic,
     description: articleText.substring(0, 200).trim() + '…',
     publishedAt: new Date().toISOString(),
+    site: `https://${config.CENTIPEDIA_DOMAIN}`,
+    path: `/article/${rkey}`,
     content: {
       pages: [{
         $type: 'pub.leaflet.pages.linearDocument',
@@ -624,6 +626,8 @@ RULES:
     title: topic,
     description: articleText.substring(0, 200).trim() + '…',
     publishedAt: new Date().toISOString(),
+    site: `https://${config.CENTIPEDIA_DOMAIN}`,
+    path: `/article/${rkey}`,
     content: {
       pages: [{
         $type: 'pub.leaflet.pages.linearDocument',
