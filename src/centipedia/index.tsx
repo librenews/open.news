@@ -28,6 +28,7 @@ import { hocuspocusDb } from './lib/hocuspocusDb.js';
 import { WebSocketServer } from 'ws';
 import { db } from '../db/client.js';
 import { searchSiteStandardArticles } from '../track/opensearch.js';
+import { startResearchAgent } from './agents/research.js';
 
 process.on('unhandledRejection', (err) => {
   logger.warn({ err }, 'Caught unhandled promise rejection in Longform (likely a background OAuth token getter)');
@@ -1273,6 +1274,9 @@ async function start() {
       });
     }
   });
+
+  // Start the research agent
+  startResearchAgent();
 }
 
 start().catch((err) => {
