@@ -324,16 +324,16 @@ app.get('/feed.xml', async (c) => {
     const botDid = config.CENTIPEDIA_BOT_DID || 'did:plc:srdudtvbpm5ck3i4mjdoasdy';
     const baseUrl = `https://${config.CENTIPEDIA_DOMAIN}`;
 
-    // Fetch recent articles from versions table
+    // Only show first-published articles (version 1) — regenerations don't re-surface
     const { rows: articles } = await db.query(
-      `SELECT DISTINCT ON (rkey) rkey, title, word_count, summary, created_at
+      `SELECT rkey, title, word_count, summary, created_at
        FROM centipedia_article_versions
-       ORDER BY rkey, version DESC`,
+       WHERE version = 1
+       ORDER BY created_at DESC
+       LIMIT 50`,
     );
 
-    // Sort by most recent
-    articles.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-    const recent = articles.slice(0, 50);
+    const recent = articles;
 
     const updated = recent.length > 0 ? new Date(recent[0].created_at).toISOString() : new Date().toISOString();
 
