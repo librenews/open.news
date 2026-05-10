@@ -79,12 +79,13 @@ const PAGE_STYLES = `
 `;
 
 export function TopicPage({
-  topic, citations, articles, sessionProfile,
+  topic, citations, articles, sessionProfile, botDid,
 }: {
   topic: string;
   citations: TopicCitation[];
   articles: TopicArticle[];
   sessionProfile?: UserProfile | null;
+  botDid: string;
 }) {
   const acceptedCount = citations.filter(c => c.status === 'accepted').length;
   return (
@@ -125,7 +126,7 @@ export function TopicPage({
                   const minRead = Math.max(1, Math.ceil(a.word_count / 200));
                   return (
                     <div class="topic-article-card">
-                      <a href={`/post/did:plc:srdudtvbpm5ck3i4mjdoasdy/${a.rkey}`}>
+                      <a href={`/post/${botDid}/${a.rkey}`}>
                         <div class="topic-article-title">{a.title}</div>
                         {a.description && (
                           <div class="topic-article-desc">
@@ -181,7 +182,7 @@ export function TopicPage({
                         <span>{timeAgo(c.created_at)}</span>
                         {c.submitter_handle && <span>by <a href={`/profile/${c.submitter_handle}`} style="color: var(--text-muted); text-decoration: none;">{c.submitter_handle}</a></span>}
                         {c.article_rkey && (
-                          <a href={`/post/did:plc:srdudtvbpm5ck3i4mjdoasdy/${c.article_rkey}`} style="color: var(--accent); text-decoration: none; font-weight: 600;">→ Article</a>
+                          <a href={`/post/${botDid}/${c.article_rkey}`} style="color: var(--accent); text-decoration: none; font-weight: 600;">→ Article</a>
                         )}
                       </div>
                     </div>

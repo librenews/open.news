@@ -61,6 +61,41 @@ setInterval(() => {
 
 const app = new Hono();
 
+// Bot DID — single source of truth, falls back to config
+const BOT_DID = config.CENTIPEDIA_BOT_DID || 'did:plc:srdudtvbpm5ck3i4mjdoasdy';
+
+// --- Health endpoint ---
+app.get('/health', async (c) => {
+  try {
+    await db.query('SELECT 1');
+    return c.json({ status: 'ok', service: 'centipedia', uptime: process.uptime() });
+  } catch {
+    return c.json({ status: 'error', service: 'centipedia', error: 'database unreachable' }, 503);
+  }
+});
+
+// --- Global error handler ---
+app.onError((err, c) => {
+  logger.error({ err, path: c.req.path, method: c.req.method }, 'Unhandled request error');
+  if (c.req.header('accept')?.includes('application/json')) {
+    return c.json({ error: 'Internal server error' }, 500);
+  }
+  return c.html(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Error — Centipedia</title>
+    <style>body{font-family:system-ui;display:flex;justify-content:center;align-items:center;min-height:100vh;margin:0;background:#f8f9fa;color:#1a1a1a}
+    .err{text-align:center}.err h1{font-size:4rem;margin:0;opacity:0.2}.err p{color:#666;margin-top:1rem}.err a{color:#4f46e5;text-decoration:none}</style>
+    </head><body><div class="err"><h1>500</h1><p>Something went wrong.</p><p><a href="/">← Back to Centipedia</a></p></div></body></html>`, 500);
+});
+
+app.notFound((c) => {
+  if (c.req.header('accept')?.includes('application/json')) {
+    return c.json({ error: 'Not found' }, 404);
+  }
+  return c.html(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Not Found — Centipedia</title>
+    <style>body{font-family:system-ui;display:flex;justify-content:center;align-items:center;min-height:100vh;margin:0;background:#f8f9fa;color:#1a1a1a}
+    .err{text-align:center}.err h1{font-size:4rem;margin:0;opacity:0.2}.err p{color:#666;margin-top:1rem}.err a{color:#4f46e5;text-decoration:none}</style>
+    </head><body><div class="err"><h1>404</h1><p>This page doesn't exist.</p><p><a href="/">← Back to Centipedia</a></p></div></body></html>`, 404);
+});
+
 app.use('/logo.jpg', serveStatic({ root: './src/centipedia/public', path: 'logo.jpg' }));
 app.use('/favicon.png', serveStatic({ root: './src/centipedia/public', path: 'favicon.jpeg' }));
 
@@ -235,7 +270,7 @@ app.get('/', async (c) => {
   // Fetch published articles from bot's repo
   let articles: { rkey: string; title: string; excerpt: string; publishedAt: string; did: string }[] = [];
   try {
-    const botDid = 'did:plc:srdudtvbpm5ck3i4mjdoasdy';
+    const botDid = BOT_DID;
     const pdsUrl = await resolvePds(botDid);
     const listAgent = new BskyAgent({ service: pdsUrl }) as any;
     const { data } = await listAgent.com.atproto.repo.listRecords({
@@ -314,6 +349,7 @@ app.get('/my-citations', async (c) => {
     citations={citations.map((r: any) => ({ ...r, endorsements: Number(r.endorsements) }))}
     profile={profile}
     stats={{ total, accepted, pending, totalEndorsements }}
+    botDid={BOT_DID}
   />) as unknown as string);
 });
 
@@ -321,7 +357,7 @@ app.get('/my-citations', async (c) => {
 
 app.get('/feed.xml', async (c) => {
   try {
-    const botDid = config.CENTIPEDIA_BOT_DID || 'did:plc:srdudtvbpm5ck3i4mjdoasdy';
+    const botDid = BOT_DID;
     const baseUrl = `https://${config.CENTIPEDIA_DOMAIN}`;
 
     // Only show first-published articles (version 1) — regenerations don't re-surface
@@ -443,7 +479,7 @@ app.get('/search', async (c) => {
           did: '',
           title: `📎 ${ch.title || ch.url}`,
           site: ch.topic || null,
-          path: ch.article_rkey ? `/post/did:plc:srdudtvbpm5ck3i4mjdoasdy/${ch.article_rkey}` : null,
+          path: ch.article_rkey ? `/post/${BOT_DID}/${ch.article_rkey}` : null,
           publishedAt: ch.created_at?.toISOString() || null,
           wordCount: 0,
           highlight: ch.excerpt || null,
@@ -599,6 +635,7 @@ app.get('/profile/:identifier', async (c) => {
     author={authorData}
     sessionProfile={sessionProfile}
     domain={config.CENTIPEDIA_DOMAIN}
+    botDid={BOT_DID}
     citations={profileCitations}
     trustStats={trustStats}
     isEndorsed={isEndorsed}
@@ -682,6 +719,7 @@ app.get('/topics/:topic', async (c) => {
     citations={citations}
     articles={articles}
     sessionProfile={sessionProfile}
+    botDid={BOT_DID}
   />) as unknown as string);
 });
 

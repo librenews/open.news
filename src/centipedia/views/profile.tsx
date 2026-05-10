@@ -121,13 +121,14 @@ const PAGE_STYLES = `
 `;
 
 export function ProfilePage({
-  author, sessionProfile, domain,
+  author, sessionProfile, domain, botDid,
   citations = [], trustStats, isEndorsed = false,
   contributedArticles = [],
 }: {
   author: ProfileData;
   sessionProfile?: UserProfile | null;
   domain: string;
+  botDid: string;
   citations?: ProfileCitation[];
   trustStats?: TrustStats;
   isEndorsed?: boolean;
@@ -241,7 +242,7 @@ export function ProfilePage({
                           </span>
                         )}
                         {c.article_rkey && (
-                          <a href={`/post/did:plc:srdudtvbpm5ck3i4mjdoasdy/${c.article_rkey}`} style="color: var(--accent); text-decoration: none; font-weight: 600;">→ Article</a>
+                          <a href={`/post/${botDid}/${c.article_rkey}`} style="color: var(--accent); text-decoration: none; font-weight: 600;">→ Article</a>
                         )}
                       </div>
                     </div>
@@ -261,7 +262,7 @@ export function ProfilePage({
                 contributedArticles.map(a => (
                   <div class="story-item">
                     <div class="story-item-content">
-                      <a href={`/post/did:plc:srdudtvbpm5ck3i4mjdoasdy/${a.rkey}`}>
+                      <a href={`/post/${botDid}/${a.rkey}`}>
                         <h3 class="story-item-title">{a.topic}</h3>
                         <div class="story-item-meta">
                           <span>{a.userCitations} citation{a.userCitations !== 1 ? 's' : ''} contributed</span>

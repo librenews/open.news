@@ -56,11 +56,12 @@ function timeAgo(dateStr: string): string {
 }
 
 export function MyCitationsPage({
-  citations, profile, stats,
+  citations, profile, stats, botDid,
 }: {
   citations: MyCitation[];
   profile: UserProfile;
   stats: { total: number; accepted: number; pending: number; totalEndorsements: number };
+  botDid: string;
 }) {
   return (
     <html lang="en">
@@ -124,7 +125,7 @@ export function MyCitationsPage({
                           </span>
                         )}
                         {c.article_rkey && (
-                          <a href={`/post/did:plc:srdudtvbpm5ck3i4mjdoasdy/${c.article_rkey}`} class="my-citation-article">→ View article</a>
+                          <a href={`/post/${botDid}/${c.article_rkey}`} class="my-citation-article">→ View article</a>
                         )}
                       </div>
                     </div>
