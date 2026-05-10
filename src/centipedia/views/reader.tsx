@@ -214,7 +214,7 @@ h3.article-heading { font-size: 1.25rem; }
 .cite-marker { display: inline; font-size: 0.7em; font-weight: 700; color: var(--accent); text-decoration: none; vertical-align: super; line-height: 1; padding: 0 0.1em; cursor: pointer; transition: opacity 0.15s; font-family: var(--font-sans); }
 .cite-marker:hover { opacity: 0.7; text-decoration: underline; }
 .ref-item:target { background: rgba(99,102,241,0.06); border-color: var(--accent); }
-html { scroll-behavior: smooth; }
+.ref-item[id] { scroll-margin-top: 5rem; }
 
 /* References */
 .references-section { border-top: 1px solid var(--border); padding-top: 2rem; margin-top: 3rem; }
@@ -727,6 +727,29 @@ export function ArticleReaderPage({
                 items.sort((a, b) => Number(a.dataset.order) - Number(b.dataset.order));
                 items.forEach(item => refList.appendChild(item));
               }
+            });
+          });
+          // Inline citation click — smooth scroll with reliable offset
+          document.querySelectorAll('.cite-marker').forEach(link => {
+            link.addEventListener('click', (e) => {
+              e.preventDefault();
+              const refId = link.getAttribute('href')?.replace('#', '');
+              if (!refId) return;
+              const target = document.getElementById(refId);
+              if (!target) return;
+              // Scroll with offset
+              const y = target.getBoundingClientRect().top + window.scrollY - 80;
+              window.scrollTo({ top: y, behavior: 'smooth' });
+              // Flash highlight
+              target.style.transition = 'background 0.3s, border-color 0.3s';
+              target.style.background = 'rgba(99,102,241,0.08)';
+              target.style.borderColor = 'var(--accent)';
+              setTimeout(() => {
+                target.style.background = '';
+                target.style.borderColor = '';
+              }, 2000);
+              // Update hash without jumping
+              history.replaceState(null, '', '#' + refId);
             });
           });
         `}} />
