@@ -64,6 +64,29 @@ const app = new Hono();
 // Bot DID — single source of truth, falls back to config
 const BOT_DID = config.CENTIPEDIA_BOT_DID || 'did:plc:srdudtvbpm5ck3i4mjdoasdy';
 
+// Topic slug helpers
+function slugifyTopic(topic: string): string {
+  return topic.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+}
+
+async function resolveTopicSlug(slug: string): Promise<string | null> {
+  // Try exact match first (already a real topic name)
+  const { rows: exact } = await db.query(
+    'SELECT DISTINCT topic FROM centipedia_citations WHERE topic = $1 LIMIT 1',
+    [slug]
+  );
+  if (exact.length > 0) return exact[0].topic;
+
+  // Try slug match — find topics whose slugified version matches
+  const { rows: all } = await db.query(
+    'SELECT DISTINCT topic FROM centipedia_citations WHERE topic IS NOT NULL'
+  );
+  for (const row of all) {
+    if (slugifyTopic(row.topic) === slug) return row.topic;
+  }
+  return null;
+}
+
 // --- Health endpoint ---
 app.get('/health', async (c) => {
   try {
@@ -374,7 +397,7 @@ app.get('/feed.xml', async (c) => {
     const updated = recent.length > 0 ? new Date(recent[0].created_at).toISOString() : new Date().toISOString();
 
     const entries = recent.map((a: any) => {
-      const articleUrl = `${baseUrl}/post/${botDid}/${a.rkey}`;
+      const articleUrl = `${baseUrl}/article/${a.rkey}`;
       const pubDate = new Date(a.created_at).toISOString();
       return `  <entry>
     <title>${escapeXml(a.title)}</title>
@@ -479,7 +502,7 @@ app.get('/search', async (c) => {
           did: '',
           title: `📎 ${ch.title || ch.url}`,
           site: ch.topic || null,
-          path: ch.article_rkey ? `/post/${BOT_DID}/${ch.article_rkey}` : null,
+          path: ch.article_rkey ? `/article/${ch.article_rkey}` : null,
           publishedAt: ch.created_at?.toISOString() || null,
           wordCount: 0,
           highlight: ch.excerpt || null,
@@ -646,7 +669,11 @@ app.get('/profile/:identifier', async (c) => {
 // --- Topics page ---
 
 app.get('/topics/:topic', async (c) => {
-  const topic = decodeURIComponent(c.req.param('topic'));
+  const rawParam = decodeURIComponent(c.req.param('topic'));
+  const topic = await resolveTopicSlug(rawParam);
+  if (!topic) {
+    return c.html((<NotFoundPage />) as unknown as string, 404);
+  }
   const sessionDid = await getSession(c);
   const sessionProfile = sessionDid ? await getProfileForNav(sessionDid) : null;
 
@@ -827,13 +854,13 @@ app.get('/posts', async (c) => {
   }
 });
 
-app.get('/post/:did/:rkey', async (c) => {
-  const did = c.req.param('did');
+// --- Clean article URL (primary) ---
+
+app.get('/article/:rkey', async (c) => {
   const rkey = c.req.param('rkey');
+  const did = BOT_DID;
   
   try {
-    // Always fetch public records via the author's PDS directly.
-    // Using the logged-in user's OAuth session to read another user's repo fails.
     const sessionDid = await getSession(c);
     let agentToUse;
     try {
@@ -843,7 +870,7 @@ app.get('/post/:did/:rkey', async (c) => {
       agentToUse = new BskyAgent({ service: 'https://public.api.bsky.app' }) as any;
     }
     
-    // Try multiple collection types — site.standard.document first, then pub.leaflet.document
+    // Try multiple collection types
     const collections = ['site.standard.document', 'pub.leaflet.document'];
     let record: any = null;
     for (const collection of collections) {
@@ -854,20 +881,17 @@ app.get('/post/:did/:rkey', async (c) => {
           rkey: rkey
         });
         break;
-      } catch (e) {
-        // Try next collection
-      }
+      } catch (e) {}
     }
     if (!record) {
       return c.html((<Layout title="Post Not Found"><h1>Post Not Found</h1><p>Could not find this article.</p></Layout>) as unknown as string, 404);
     }
     
-    // Fetch author profile
     const authorProfile = await fetchUserProfile(did);
     const sessionProfile = sessionDid ? await fetchUserProfile(sessionDid) : undefined;
     
     const doc = record.data.value as any;
-    const canonicalUrl = `https://${config.CENTIPEDIA_DOMAIN}/post/${did}/${rkey}`;
+    const canonicalUrl = `https://${config.CENTIPEDIA_DOMAIN}/article/${rkey}`;
     const excerpt = extractExcerpt(doc);
     const ogImageUrl = extractFirstImageUrl(doc, did);
 
@@ -902,7 +926,7 @@ app.get('/post/:did/:rkey', async (c) => {
       userEndorsed: userEndorsedSet.has(r.id),
     }));
 
-    // Resolve contributor profiles (unique submitter DIDs)
+    // Resolve contributor profiles
     const contributorDids = [...new Set(citationRows.filter((r: any) => r.submitted_by).map((r: any) => r.submitted_by))] as string[];
     const contributors = await Promise.all(
       contributorDids.map(async (cdid: string) => {
@@ -925,9 +949,15 @@ app.get('/post/:did/:rkey', async (c) => {
       contributors={contributors}
     />) as unknown as string);
   } catch (err: any) {
-    logger.error({ err, did, rkey }, 'Failed to load post for reader');
+    logger.error({ err, rkey }, 'Failed to load article');
     return c.html((<NotFoundPage />) as unknown as string, 404);
   }
+});
+
+// Legacy redirect: /post/:did/:rkey → /article/:rkey
+app.get('/post/:did/:rkey', (c) => {
+  const rkey = c.req.param('rkey');
+  return c.redirect(`/article/${rkey}`, 301);
 });
 
 app.get('/blob/:did/:cid', async (c) => {

@@ -530,7 +530,7 @@ export function ArticleReaderPage({
                     <div style="margin-top: 0.25rem;">
                       <div class="infobox-label" style="margin-bottom: 0.35rem;">Topics</div>
                       <div class="infobox-topics">
-                        {topics.map(t => <a href={`/topics/${encodeURIComponent(t!)}`} class="infobox-topic">{t}</a>)}
+                        {topics.map(t => <a href={`/topics/${t!.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')}`} class="infobox-topic">{t}</a>)}
                       </div>
                     </div>
                   ) : null;

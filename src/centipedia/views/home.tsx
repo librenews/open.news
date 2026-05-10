@@ -147,7 +147,7 @@ export function HomePage({
                 <h2 class="section-title">Articles</h2>
                 <div class="articles-grid">
                   {articles.map(a => (
-                    <a href={`/post/${a.did}/${a.rkey}`} class="article-card">
+                    <a href={`/article/${a.rkey}`} class="article-card">
                       <div class="article-card-title">{a.title}</div>
                       {a.excerpt && <div class="article-card-excerpt">{a.excerpt}</div>}
                       <div class="article-card-meta">

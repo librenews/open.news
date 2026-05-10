@@ -114,7 +114,7 @@ export function SearchPage({
                   } else if (collection === 'com.whtwnd.blog.entry') {
                     readUrl = `https://whtwnd.com/${r.authorHandle}/${rkey}`;
                   } else {
-                    readUrl = `https://${domain}/post/${r.did}/${rkey}`;
+                    readUrl = `/article/${rkey}`;
                   }
                   const minRead = Math.max(1, Math.ceil(r.wordCount / 200));
                   const ago = timeAgo(r.publishedAt);

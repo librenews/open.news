@@ -69,7 +69,7 @@ export function TopicsPage({
             ) : (
               <div class="topics-grid">
                 {topics.map(t => (
-                  <a href={`/topics/${encodeURIComponent(t.topic)}`} class="topic-card">
+                  <a href={`/topics/${t.topic.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')}`} class="topic-card">
                     <div class="topic-name">{t.topic}</div>
                     <div class="topic-meta">
                       <span><strong>{t.count}</strong> citations</span>

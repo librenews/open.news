@@ -125,7 +125,7 @@ export function MyCitationsPage({
                           </span>
                         )}
                         {c.article_rkey && (
-                          <a href={`/post/${botDid}/${c.article_rkey}`} class="my-citation-article">→ View article</a>
+                          <a href={`/article/${c.article_rkey}`} class="my-citation-article">→ View article</a>
                         )}
                       </div>
                     </div>

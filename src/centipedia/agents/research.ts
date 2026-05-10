@@ -305,7 +305,7 @@ Write the article in plain text with ## headings for sections. Use plain paragra
     logger.info({ rkey, version: Number(max_version) + 1 }, 'Saved article version snapshot');
 
     // Announce on Bluesky
-    const articleUrl = `https://${config.CENTIPEDIA_DOMAIN}/post/${bot.session.did}/${rkey}`;
+    const articleUrl = `https://${config.CENTIPEDIA_DOMAIN}/article/${rkey}`;
     await announceArticle(topic, articleUrl);
 
   } catch (err: any) {
@@ -518,7 +518,7 @@ RULES:
     logger.info({ rkey, version: Number(max_version) + 1 }, 'Saved regenerated article version');
 
     // Announce regeneration on Bluesky
-    const articleUrl = `https://${config.CENTIPEDIA_DOMAIN}/post/${bot.session.did}/${rkey}`;
+    const articleUrl = `https://${config.CENTIPEDIA_DOMAIN}/article/${rkey}`;
     await announceArticle(topic, articleUrl, true);
 
   } catch (err: any) {
