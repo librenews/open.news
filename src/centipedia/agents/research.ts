@@ -217,7 +217,8 @@ async function synthesizeArticle(topic: string): Promise<void> {
 RULES:
 - Write in an encyclopedic, neutral tone (similar to Wikipedia)
 - Structure with clear sections using ## headings
-- Reference the provided sources naturally in the text
+- Use inline citation markers like [1], [2], [3] to reference sources where claims are made
+- Each citation marker corresponds to the numbered source in the Available Sources list
 - Be thorough but concise — aim for 600-1200 words
 - Include a brief introduction paragraph before the first heading
 - Do NOT include a title heading (it will be added separately)
@@ -225,7 +226,7 @@ RULES:
 - Write factual, verifiable content based on the sources provided
 
 OUTPUT FORMAT:
-Write the article in plain text with ## headings for sections. Use plain paragraphs, no bullet lists unless necessary.`
+Write the article in plain text with ## headings for sections. Use plain paragraphs, no bullet lists unless necessary. Include [N] citation markers inline where you reference specific sources.`
     },
     {
       role: 'user',
@@ -439,7 +440,8 @@ async function regenerateArticle(topic: string, rkey: string): Promise<void> {
 RULES:
 - Write in an encyclopedic, neutral tone (similar to Wikipedia)
 - Structure with clear sections using ## headings
-- Reference the provided sources naturally in the text
+- Use inline citation markers like [1], [2], [3] to reference sources where claims are made
+- Each citation marker corresponds to the numbered source in the Available Sources list
 - Be thorough but concise — aim for 800-1500 words (longer than initial version since more sources)
 - Include a brief introduction paragraph before the first heading
 - Do NOT include a title heading (it will be added separately)

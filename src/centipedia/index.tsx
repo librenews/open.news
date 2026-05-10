@@ -317,6 +317,68 @@ app.get('/my-citations', async (c) => {
   />) as unknown as string);
 });
 
+// --- Atom Feed ---
+
+app.get('/feed.xml', async (c) => {
+  try {
+    const botDid = config.CENTIPEDIA_BOT_DID || 'did:plc:srdudtvbpm5ck3i4mjdoasdy';
+    const baseUrl = `https://${config.CENTIPEDIA_DOMAIN}`;
+
+    // Fetch recent articles from versions table
+    const { rows: articles } = await db.query(
+      `SELECT DISTINCT ON (rkey) rkey, title, word_count, summary, created_at
+       FROM centipedia_article_versions
+       ORDER BY rkey, version DESC`,
+    );
+
+    // Sort by most recent
+    articles.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    const recent = articles.slice(0, 50);
+
+    const updated = recent.length > 0 ? new Date(recent[0].created_at).toISOString() : new Date().toISOString();
+
+    const entries = recent.map((a: any) => {
+      const articleUrl = `${baseUrl}/post/${botDid}/${a.rkey}`;
+      const pubDate = new Date(a.created_at).toISOString();
+      return `  <entry>
+    <title>${escapeXml(a.title)}</title>
+    <link href="${articleUrl}" />
+    <id>${articleUrl}</id>
+    <updated>${pubDate}</updated>
+    <summary>${escapeXml(a.summary || `Encyclopedia article about ${a.title}`)}</summary>
+    <content type="text">${escapeXml(a.summary || '')} — ${a.word_count} words</content>
+    <author><name>Centipedia</name></author>
+  </entry>`;
+    }).join('\n');
+
+    const feed = `<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>Centipedia</title>
+  <subtitle>The agentic encyclopedia — knowledge synthesized from community-curated citations</subtitle>
+  <link href="${baseUrl}/feed.xml" rel="self" />
+  <link href="${baseUrl}" />
+  <id>${baseUrl}/</id>
+  <updated>${updated}</updated>
+  <icon>${baseUrl}/favicon.png</icon>
+${entries}
+</feed>`;
+
+    return new Response(feed, {
+      headers: {
+        'Content-Type': 'application/atom+xml; charset=utf-8',
+        'Cache-Control': 'public, max-age=300',
+      },
+    });
+  } catch (err: any) {
+    logger.error({ err }, 'Failed to generate Atom feed');
+    return c.text('Feed unavailable', 500);
+  }
+});
+
+function escapeXml(str: string): string {
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
+}
+
 app.get('/search', async (c) => {
   const q = (c.req.query('q') || '').trim();
   const sort = (c.req.query('sort') || 'relevant') as 'relevant' | 'latest';

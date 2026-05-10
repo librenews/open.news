@@ -37,7 +37,7 @@ function extractBlobCid(imageRef: any): string {
 
 function renderBlocks(blocks: LeafletBlock[], did: string): string {
   if (!Array.isArray(blocks)) return '';
-  return blocks.map(b => {
+  const raw = blocks.map(b => {
     const block = b.block as any;
     if (!block) return '';
     switch (block.$type as string) {
@@ -79,6 +79,11 @@ function renderBlocks(blocks: LeafletBlock[], did: string): string {
       }
     }
   }).join('');
+
+  // Post-process: convert [N] citation markers to clickable superscript links
+  return raw.replace(/\[(\d{1,2})\]/g, (match, num) => {
+    return `<a href="#ref-${num}" class="cite-marker" title="Reference ${num}">[${num}]</a>`;
+  });
 }
 
 // --- Extract helpers for metadata ---
@@ -204,6 +209,12 @@ h3.article-heading { font-size: 1.25rem; }
 .infobox-topics { display: flex; flex-wrap: wrap; gap: 0.35rem; }
 .infobox-topic { padding: 0.2rem 0.5rem; background: var(--bg-secondary); border-radius: 99px; font-size: 0.7rem; color: var(--text-secondary); text-decoration: none; transition: background 0.15s; }
 .infobox-topic:hover { background: var(--border); }
+
+/* Inline citation markers */
+.cite-marker { display: inline; font-size: 0.7em; font-weight: 700; color: var(--accent); text-decoration: none; vertical-align: super; line-height: 1; padding: 0 0.1em; cursor: pointer; transition: opacity 0.15s; font-family: var(--font-sans); }
+.cite-marker:hover { opacity: 0.7; text-decoration: underline; }
+.ref-item:target { background: rgba(99,102,241,0.06); border-color: var(--accent); }
+html { scroll-behavior: smooth; }
 
 /* References */
 .references-section { border-top: 1px solid var(--border); padding-top: 2rem; margin-top: 3rem; }
@@ -433,7 +444,7 @@ export function ArticleReaderPage({
                   </div>
                   <div class="ref-list" id="ref-list">
                     {citations.map((c, i) => (
-                      <div class="ref-item" data-cid={c.id} data-endorsements={c.endorsements} data-order={i}>
+                      <div class="ref-item" id={`ref-${i + 1}`} data-cid={c.id} data-endorsements={c.endorsements} data-order={i}>
                         <button
                           class={`ref-endorse ${c.userEndorsed ? 'endorsed' : ''}`}
                           data-citation-id={c.id}
