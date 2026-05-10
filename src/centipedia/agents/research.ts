@@ -242,6 +242,21 @@ Write the article in plain text with ## headings for sections. Use plain paragra
     return;
   }
 
+  // Generate link keywords — maps key terms to citation indexes for inline external links
+  let linkKeywords: { keyword: string; citationIndex: number }[] = [];
+  try {
+    const kwResult = await llm.complete([
+      { role: 'system', content: `You extract link keywords from an article. Given article text and numbered sources, identify 1-3 key terms per source that should be hyperlinked to that source. Return ONLY a JSON array like: [{"keyword":"AT Protocol","citationIndex":1},{"keyword":"decentralized identifiers","citationIndex":3}]. Choose specific, meaningful terms (2-4 words). Do not pick single common words. Do not pick terms that appear in headings.` },
+      { role: 'user', content: `Article:\n${articleText.substring(0, 2000)}\n\nSources:\n${sourcesText}` }
+    ], { maxTokens: 500 });
+    const jsonMatch = kwResult.text.match(/\[[\s\S]*\]/);
+    if (jsonMatch) {
+      linkKeywords = JSON.parse(jsonMatch[0]);
+    }
+  } catch (err) {
+    logger.warn({ err, topic }, 'Failed to generate link keywords, continuing without');
+  }
+
   // Generate a slug rkey
   const rkey = topic
     .toLowerCase()
@@ -251,6 +266,9 @@ Write the article in plain text with ## headings for sections. Use plain paragra
 
   // Build Leaflet-style blocks from the generated text
   const blocks = textToBlocks(articleText);
+
+  // Inject keyword link facets into text blocks
+  injectKeywordFacets(blocks, linkKeywords, citations);
 
   // Publish to AT Protocol under bot DID
   const bot = await getCentipediaBot();
@@ -289,7 +307,7 @@ Write the article in plain text with ## headings for sections. Use plain paragra
       [rkey, citationIds]
     );
 
-    // Save version snapshot
+    // Save version snapshot with link keywords
     const wordCount = articleText.split(/\s+/).length;
     const contentHash = Buffer.from(articleText).toString('base64').substring(0, 64);
     const { rows: [{ max_version }] } = await db.query(
@@ -297,12 +315,12 @@ Write the article in plain text with ## headings for sections. Use plain paragra
       [rkey]
     );
     await db.query(
-      `INSERT INTO centipedia_article_versions (rkey, version, title, content_hash, word_count, citations_used, summary, generated_by, content_snapshot)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      `INSERT INTO centipedia_article_versions (rkey, version, title, content_hash, word_count, citations_used, summary, generated_by, content_snapshot, link_keywords)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
       [rkey, Number(max_version) + 1, topic, contentHash, wordCount, citations.length,
-       `Synthesized from ${citations.length} citations`, 'agent', JSON.stringify(blocks)]
+       `Synthesized from ${citations.length} citations`, 'agent', JSON.stringify(blocks), JSON.stringify(linkKeywords)]
     );
-    logger.info({ rkey, version: Number(max_version) + 1 }, 'Saved article version snapshot');
+    logger.info({ rkey, version: Number(max_version) + 1, keywords: linkKeywords.length }, 'Saved article version snapshot');
 
     // Announce on Bluesky
     const articleUrl = `https://${config.CENTIPEDIA_DOMAIN}/article/${rkey}`;
@@ -384,6 +402,58 @@ function textToBlocks(text: string): any[] {
   return blocks;
 }
 
+/**
+ * Inject keyword link facets into text blocks.
+ * For each keyword, find the first occurrence in a text block and add a
+ * byte-range facet with app.bsky.richtext.facet#link pointing to the source URL.
+ */
+function injectKeywordFacets(
+  blocks: any[],
+  keywords: { keyword: string; citationIndex: number }[],
+  citations: { id: number; url: string; title?: string | null; excerpt?: string | null }[]
+): void {
+  if (!keywords || keywords.length === 0) return;
+  const linked = new Set<string>();
+  const encoder = new TextEncoder();
+
+  for (const kw of keywords) {
+    const kwLower = kw.keyword.toLowerCase();
+    if (linked.has(kwLower)) continue;
+    const idx = kw.citationIndex - 1; // 1-indexed
+    if (idx < 0 || idx >= citations.length) continue;
+    const url = citations[idx].url;
+    if (!url) continue;
+
+    // Search through text blocks for first occurrence
+    for (const block of blocks) {
+      const inner = block.block;
+      if (!inner || inner.$type !== 'pub.leaflet.blocks.text') continue;
+      const plaintext: string = inner.plaintext || '';
+      const matchIdx = plaintext.toLowerCase().indexOf(kwLower);
+      if (matchIdx === -1) continue;
+
+      // Calculate byte offsets (AT Protocol uses UTF-8 byte indexes)
+      const beforeBytes = encoder.encode(plaintext.substring(0, matchIdx));
+      const matchBytes = encoder.encode(plaintext.substring(matchIdx, matchIdx + kw.keyword.length));
+
+      inner.facets = inner.facets || [];
+      inner.facets.push({
+        index: {
+          byteStart: beforeBytes.length,
+          byteEnd: beforeBytes.length + matchBytes.length,
+        },
+        features: [{
+          $type: 'app.bsky.richtext.facet#link',
+          uri: url,
+        }]
+      });
+
+      linked.add(kwLower);
+      break; // Only link first occurrence across all blocks
+    }
+  }
+}
+
 // ─── Article regeneration ────────────────────────────────────────────────────
 
 const MIN_NEW_CITATIONS_FOR_REGEN = 2;
@@ -462,7 +532,25 @@ RULES:
     return;
   }
 
+  // Generate link keywords for regenerated article
+  let linkKeywords: { keyword: string; citationIndex: number }[] = [];
+  try {
+    const kwResult = await llm.complete([
+      { role: 'system', content: `You extract link keywords from an article. Given article text and numbered sources, identify 1-3 key terms per source that should be hyperlinked to that source. Return ONLY a JSON array like: [{"keyword":"AT Protocol","citationIndex":1},{"keyword":"decentralized identifiers","citationIndex":3}]. Choose specific, meaningful terms (2-4 words). Do not pick single common words. Do not pick terms that appear in headings.` },
+      { role: 'user', content: `Article:\n${articleText.substring(0, 2000)}\n\nSources:\n${sourcesText}` }
+    ], { maxTokens: 500 });
+    const jsonMatch = kwResult.text.match(/\[[\s\S]*\]/);
+    if (jsonMatch) {
+      linkKeywords = JSON.parse(jsonMatch[0]);
+    }
+  } catch (err) {
+    logger.warn({ err, topic }, 'Failed to generate link keywords for regeneration');
+  }
+
   const blocks = textToBlocks(articleText);
+
+  // Inject keyword link facets into text blocks
+  injectKeywordFacets(blocks, linkKeywords, allCitations);
 
   const bot = await getCentipediaBot();
   if (!bot || !bot.session) {
@@ -502,7 +590,7 @@ RULES:
       );
     }
 
-    // Save version snapshot
+    // Save version snapshot with link keywords
     const wordCount = articleText.split(/\s+/).length;
     const contentHash = Buffer.from(articleText).toString('base64').substring(0, 64);
     const { rows: [{ max_version }] } = await db.query(
@@ -510,12 +598,12 @@ RULES:
       [rkey]
     );
     await db.query(
-      `INSERT INTO centipedia_article_versions (rkey, version, title, content_hash, word_count, citations_used, summary, generated_by, content_snapshot)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      `INSERT INTO centipedia_article_versions (rkey, version, title, content_hash, word_count, citations_used, summary, generated_by, content_snapshot, link_keywords)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
       [rkey, Number(max_version) + 1, topic, contentHash, wordCount, allCitations.length,
-       `Regenerated with ${allCitations.length} citations (+${unlinkedIds.length} new)`, 'agent', JSON.stringify(blocks)]
+       `Regenerated with ${allCitations.length} citations (+${unlinkedIds.length} new)`, 'agent', JSON.stringify(blocks), JSON.stringify(linkKeywords)]
     );
-    logger.info({ rkey, version: Number(max_version) + 1 }, 'Saved regenerated article version');
+    logger.info({ rkey, version: Number(max_version) + 1, keywords: linkKeywords.length }, 'Saved regenerated article version');
 
     // Announce regeneration on Bluesky
     const articleUrl = `https://${config.CENTIPEDIA_DOMAIN}/article/${rkey}`;

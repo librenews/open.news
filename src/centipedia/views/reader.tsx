@@ -11,10 +11,63 @@ function escapeHtml(str: string): string {
 
 function renderFacets(plaintext: string, facets: any[]): string {
   if (!facets || !Array.isArray(facets) || facets.length === 0) return escapeHtml(plaintext);
+
+  // Separate byte-range facets from full-block facets
+  const rangedFacets = facets.filter(f => f?.index?.byteStart !== undefined && f?.index?.byteEnd !== undefined);
+  const fullBlockFacets = facets.filter(f => !f?.index || f.index.byteStart === undefined);
+
+  // If we have ranged facets, render with byte-range precision
+  if (rangedFacets.length > 0) {
+    const textBytes = new TextEncoder().encode(plaintext);
+    // Sort by byteStart descending so replacements don't shift indexes
+    const sorted = [...rangedFacets].sort((a, b) => b.index.byteStart - a.index.byteStart);
+
+    let segments: { start: number; end: number; html: string }[] = [];
+    for (const facet of sorted) {
+      const { byteStart, byteEnd } = facet.index;
+      const slice = new TextDecoder().decode(textBytes.slice(byteStart, byteEnd));
+      const features = facet.features || [];
+
+      let html = escapeHtml(slice);
+      for (const feat of features) {
+        if (feat.$type === 'app.bsky.richtext.facet#link' && feat.uri) {
+          html = `<a href="${escapeHtml(feat.uri)}" target="_blank" rel="noopener noreferrer" class="source-link" title="Source">${html}</a>`;
+        }
+        if (feat.$type === 'pub.leaflet.richtext.facet#bold') html = `<b>${html}</b>`;
+        if (feat.$type === 'pub.leaflet.richtext.facet#italic') html = `<i>${html}</i>`;
+      }
+      segments.push({ start: byteStart, end: byteEnd, html });
+    }
+
+    // Build output by filling gaps with escaped plaintext
+    let result = '';
+    let cursor = 0;
+    // Re-sort ascending for output
+    segments.sort((a, b) => a.start - b.start);
+    for (const seg of segments) {
+      if (seg.start > cursor) {
+        result += escapeHtml(new TextDecoder().decode(textBytes.slice(cursor, seg.start)));
+      }
+      result += seg.html;
+      cursor = seg.end;
+    }
+    if (cursor < textBytes.length) {
+      result += escapeHtml(new TextDecoder().decode(textBytes.slice(cursor)));
+    }
+
+    // Apply any full-block formatting on top
+    const isBold = fullBlockFacets.some(f => f?.features?.some?.((feat: any) => feat?.$type === 'pub.leaflet.richtext.facet#bold'));
+    const isItalic = fullBlockFacets.some(f => f?.features?.some?.((feat: any) => feat?.$type === 'pub.leaflet.richtext.facet#italic'));
+    if (isBold) result = `<b>${result}</b>`;
+    if (isItalic) result = `<i>${result}</i>`;
+    return result;
+  }
+
+  // Fallback: full-block facets (legacy behavior)
   let result = escapeHtml(plaintext);
-  const isBold = facets.some(f => f?.features?.some?.((feat: any) => feat?.$type === 'pub.leaflet.richtext.facet#bold'));
-  const isItalic = facets.some(f => f?.features?.some?.((feat: any) => feat?.$type === 'pub.leaflet.richtext.facet#italic'));
-  const linkFacet = facets.find(f => f?.features?.some?.((feat: any) => feat?.$type === 'app.bsky.richtext.facet#link'));
+  const isBold = fullBlockFacets.some(f => f?.features?.some?.((feat: any) => feat?.$type === 'pub.leaflet.richtext.facet#bold'));
+  const isItalic = fullBlockFacets.some(f => f?.features?.some?.((feat: any) => feat?.$type === 'pub.leaflet.richtext.facet#italic'));
+  const linkFacet = fullBlockFacets.find(f => f?.features?.some?.((feat: any) => feat?.$type === 'app.bsky.richtext.facet#link'));
   if (isBold) result = `<b>${result}</b>`;
   if (isItalic) result = `<i>${result}</i>`;
   if (linkFacet) {
@@ -35,7 +88,7 @@ function extractBlobCid(imageRef: any): string {
   return '';
 }
 
-function renderBlocks(blocks: LeafletBlock[], did: string, citationUrls?: string[]): string {
+function renderBlocks(blocks: LeafletBlock[], did: string): string {
   if (!Array.isArray(blocks)) return '';
   const raw = blocks.map(b => {
     const block = b.block as any;
@@ -80,15 +133,8 @@ function renderBlocks(blocks: LeafletBlock[], did: string, citationUrls?: string
     }
   }).join('');
 
-  // Post-process: convert [N] citation markers to clickable superscript links
-  // Links go directly to the external source URL (new tab) with a title showing the ref number
+  // Post-process: convert [N] citation markers to in-page reference links
   return raw.replace(/\[(\d{1,2})\]/g, (match, num) => {
-    const idx = parseInt(num, 10) - 1;
-    if (citationUrls && citationUrls[idx]) {
-      const url = citationUrls[idx];
-      return `<a href="${url}" target="_blank" rel="noopener noreferrer" class="cite-marker" title="Source [${num}]" data-ref="${num}">[${num}]</a>`;
-    }
-    // Fallback: scroll to reference section if URL unknown
     return `<a href="#ref-${num}" class="cite-marker" title="Reference ${num}">[${num}]</a>`;
   });
 }
@@ -222,6 +268,9 @@ h3.article-heading { font-size: 1.25rem; }
 .cite-marker:hover { opacity: 0.7; text-decoration: underline; }
 .ref-item:target { background: rgba(99,102,241,0.06); border-color: var(--accent); }
 .ref-item[id] { scroll-margin-top: 5rem; }
+/* Keyword source links — inline external links to citation sources */
+.source-link { color: var(--accent); text-decoration: none; border-bottom: 1px dotted var(--accent); transition: all 0.15s; }
+.source-link:hover { border-bottom-style: solid; opacity: 0.85; }
 
 /* References */
 .references-section { border-top: 1px solid var(--border); padding-top: 2rem; margin-top: 3rem; }
@@ -333,10 +382,7 @@ export function ArticleReaderPage({
       return { text, id, level: b.block.level || 2 };
     });
 
-  // Build citation URL map for inline [N] links
-  const citationUrls = (citations || []).map(c => c.url);
-
-  const renderedContent = renderBlocks(blocks, did, citationUrls);
+  const renderedContent = renderBlocks(blocks, did);
 
   // JSON-LD structured data
   const jsonLd = {
@@ -739,9 +785,8 @@ export function ArticleReaderPage({
               }
             });
           });
-          // Inline citation click — only handle #ref- anchor links (fallback)
-          // External source links (target="_blank") open naturally in new tabs
-          document.querySelectorAll('.cite-marker[href^="#ref-"]').forEach(link => {
+          // Inline citation click — smooth scroll with reliable offset
+          document.querySelectorAll('.cite-marker').forEach(link => {
             link.addEventListener('click', (e) => {
               e.preventDefault();
               const refId = link.getAttribute('href')?.replace('#', '');
