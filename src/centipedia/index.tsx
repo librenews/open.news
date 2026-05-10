@@ -78,6 +78,13 @@ async function resolveTopicSlug(slug: string): Promise<string | null> {
   );
   if (exact.length > 0) return exact[0].topic;
 
+  // Try case-insensitive match (handles URL-encoded topic names)
+  const { rows: icase } = await db.query(
+    'SELECT DISTINCT topic FROM centipedia_citations WHERE lower(topic) = lower($1) LIMIT 1',
+    [slug]
+  );
+  if (icase.length > 0) return icase[0].topic;
+
   // Try slug match — find topics whose slugified version matches
   const { rows: all } = await db.query(
     'SELECT DISTINCT topic FROM centipedia_citations WHERE topic IS NOT NULL'

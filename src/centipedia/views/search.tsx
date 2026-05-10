@@ -125,7 +125,7 @@ export function SearchPage({
                   const ago = timeAgo(r.publishedAt);
 
                   // Determine meta link
-                  const metaHref = isCitation && r.site ? `/topics/${encodeURIComponent(r.site)}` : isArticle ? null : `/profile/${r.authorHandle}`;
+                  const metaHref = isCitation && r.site ? `/topics/${r.site.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')}` : isArticle ? null : `/profile/${r.authorHandle}`;
                   const isExternal = isCitation && !r.path;
 
                   return (
