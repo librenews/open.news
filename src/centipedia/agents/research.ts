@@ -524,7 +524,7 @@ function injectKeywordFacets(
 
 // ─── Article regeneration ────────────────────────────────────────────────────
 
-const MIN_NEW_CITATIONS_FOR_REGEN = 2;
+const MIN_NEW_CITATIONS_FOR_REGEN = 1;
 
 async function checkAndRegenerateArticles(): Promise<number> {
   // Find topics where new accepted citations exist but aren't linked to the article yet

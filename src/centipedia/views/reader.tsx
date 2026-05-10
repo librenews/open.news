@@ -643,7 +643,7 @@ export function ArticleReaderPage({
                 section.style.display = '';
                 list.innerHTML = data.versions.map(v => {
                   const d = new Date(v.created_at);
-                  const dateStr = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                  const dateStr = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) + ' at ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
                   return '<div class="version-item"><div class="version-header"><span class="version-label">v' + v.version + '</span><span class="version-date">' + dateStr + '</span></div><div class="version-summary">' + (v.summary || '') + '</div><div class="version-stats">' + v.word_count + ' words · ' + v.citations_used + ' sources</div></div>';
                 }).join('');
               }
