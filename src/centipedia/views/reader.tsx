@@ -239,6 +239,15 @@ h3.article-heading { font-size: 1.25rem; }
 .network-score { display: inline-flex; align-items: center; gap: 0.15rem; padding: 0.1rem 0.35rem; border-radius: 4px; font-size: 0.55rem; font-weight: 700; font-family: var(--font-sans); background: rgba(99,102,241,0.1); color: #6366f1; margin-left: 0.35rem; }
 .ref-item.network-boosted { border-color: rgba(99,102,241,0.25); background: rgba(99,102,241,0.03); }
 
+/* Version history */
+.version-item { padding: 0.5rem 0; border-bottom: 1px solid var(--border); }
+.version-item:last-child { border-bottom: none; }
+.version-header { display: flex; justify-content: space-between; align-items: center; }
+.version-label { font-size: 0.75rem; font-weight: 600; color: var(--text-main); }
+.version-date { font-size: 0.65rem; color: var(--text-muted); }
+.version-summary { font-size: 0.7rem; color: var(--text-secondary); margin-top: 0.15rem; }
+.version-stats { font-size: 0.6rem; color: var(--text-muted); margin-top: 0.1rem; }
+
 @media (max-width: 1024px) { .article-sidebar { display: none; } }
 `;
 
@@ -531,12 +540,37 @@ export function ArticleReaderPage({
                 </ul>
               </div>
             )}
+
+            {/* Version History (loaded dynamically) */}
+            <div class="sidebar-section" id="version-history-section" style="display: none;">
+              <div class="sidebar-section-title">Version History</div>
+              <div id="version-history-list"></div>
+            </div>
           </aside>
         </div>
 
         <script dangerouslySetInnerHTML={{__html: `
           const authorDid = '${did}';
           const rkey = '${rkey}';
+
+          // Version history
+          (async function() {
+            try {
+              const res = await fetch('/api/article-versions/' + rkey);
+              if (!res.ok) return;
+              const data = await res.json();
+              if (data.versions && data.versions.length > 0) {
+                const section = document.getElementById('version-history-section');
+                const list = document.getElementById('version-history-list');
+                section.style.display = '';
+                list.innerHTML = data.versions.map(v => {
+                  const d = new Date(v.created_at);
+                  const dateStr = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                  return '<div class="version-item"><div class="version-header"><span class="version-label">v' + v.version + '</span><span class="version-date">' + dateStr + '</span></div><div class="version-summary">' + (v.summary || '') + '</div><div class="version-stats">' + v.word_count + ' words · ' + v.citations_used + ' sources</div></div>';
+                }).join('');
+              }
+            } catch(e) {}
+          })();
 
           // Comments
           (async function() {

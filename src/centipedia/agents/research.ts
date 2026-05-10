@@ -288,6 +288,21 @@ Write the article in plain text with ## headings for sections. Use plain paragra
       [rkey, citationIds]
     );
 
+    // Save version snapshot
+    const wordCount = articleText.split(/\s+/).length;
+    const contentHash = Buffer.from(articleText).toString('base64').substring(0, 64);
+    const { rows: [{ max_version }] } = await db.query(
+      'SELECT COALESCE(MAX(version), 0) AS max_version FROM centipedia_article_versions WHERE rkey = $1',
+      [rkey]
+    );
+    await db.query(
+      `INSERT INTO centipedia_article_versions (rkey, version, title, content_hash, word_count, citations_used, summary, generated_by, content_snapshot)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      [rkey, Number(max_version) + 1, topic, contentHash, wordCount, citations.length,
+       `Synthesized from ${citations.length} citations`, 'agent', JSON.stringify(blocks)]
+    );
+    logger.info({ rkey, version: Number(max_version) + 1 }, 'Saved article version snapshot');
+
     // Announce on Bluesky
     const articleUrl = `https://${config.CENTIPEDIA_DOMAIN}/post/${bot.session.did}/${rkey}`;
     await announceArticle(topic, articleUrl);

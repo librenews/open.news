@@ -950,6 +950,24 @@ app.post('/api/endorse/domain', async (c) => {
   }
 });
 
+// --- Article version history API ---
+
+app.get('/api/article-versions/:rkey', async (c) => {
+  const rkey = c.req.param('rkey');
+  try {
+    const { rows: versions } = await db.query(
+      `SELECT version, title, word_count, citations_used, summary, generated_by, created_at
+       FROM centipedia_article_versions WHERE rkey = $1
+       ORDER BY version DESC`,
+      [rkey]
+    );
+    return c.json({ rkey, versions });
+  } catch (err: any) {
+    logger.error({ err }, 'Failed to fetch article versions');
+    return c.json({ error: 'Internal error' }, 500);
+  }
+});
+
 // --- "Your Network" trust-weighted scores API ---
 
 app.get('/api/network-scores', async (c) => {
