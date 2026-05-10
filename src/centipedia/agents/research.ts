@@ -515,6 +515,10 @@ RULES:
     );
     logger.info({ rkey, version: Number(max_version) + 1 }, 'Saved regenerated article version');
 
+    // Announce regeneration on Bluesky
+    const articleUrl = `https://${config.CENTIPEDIA_DOMAIN}/post/${bot.session.did}/${rkey}`;
+    await announceArticle(topic, articleUrl, true);
+
   } catch (err: any) {
     logger.error({ err, topic, rkey }, 'Failed to regenerate article');
     throw err;

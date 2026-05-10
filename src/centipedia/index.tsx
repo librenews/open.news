@@ -35,6 +35,30 @@ process.on('unhandledRejection', (err) => {
   logger.warn({ err }, 'Caught unhandled promise rejection in Longform (likely a background OAuth token getter)');
 });
 
+// ─── Rate limiting ───────────────────────────────────────────────────────────
+
+const rateLimitStore = new Map<string, number[]>();
+
+function rateLimit(key: string, maxRequests: number, windowMs: number): boolean {
+  const now = Date.now();
+  const timestamps = rateLimitStore.get(key) || [];
+  const valid = timestamps.filter(t => now - t < windowMs);
+  if (valid.length >= maxRequests) return false;
+  valid.push(now);
+  rateLimitStore.set(key, valid);
+  return true;
+}
+
+// Cleanup stale entries every 5 minutes
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, timestamps] of rateLimitStore) {
+    const valid = timestamps.filter(t => now - t < 300_000);
+    if (valid.length === 0) rateLimitStore.delete(key);
+    else rateLimitStore.set(key, valid);
+  }
+}, 300_000);
+
 const app = new Hono();
 
 app.use('/logo.jpg', serveStatic({ root: './src/centipedia/public', path: 'logo.jpg' }));
@@ -263,7 +287,8 @@ app.get('/topics', async (c) => {
 app.get('/submit', async (c) => {
   const sessionDid = await getSession(c);
   const profile = sessionDid ? await fetchUserProfile(sessionDid) : null;
-  return c.html((<SubmitPage profile={profile} />) as unknown as string);
+  const prefillTopic = c.req.query('topic') || undefined;
+  return c.html((<SubmitPage profile={profile} prefillTopic={prefillTopic} />) as unknown as string);
 });
 
 app.get('/my-citations', async (c) => {
@@ -836,6 +861,13 @@ app.get('/blob/:did/:cid', async (c) => {
 
 app.post('/api/citations', async (c) => {
   const sessionDid = await getSession(c);
+  if (!sessionDid) return c.json({ error: 'Not authenticated' }, 401);
+
+  // Rate limit: 10 citations per minute per user
+  if (!rateLimit(`cite:${sessionDid}`, 10, 60_000)) {
+    return c.json({ error: 'Too many submissions. Please wait a moment.' }, 429);
+  }
+
   const body = await c.req.json();
   const url = body.url?.trim();
   const topic = body.topic?.trim() || null;
@@ -852,16 +884,33 @@ app.post('/api/citations', async (c) => {
   }
 
   try {
+    // Normalize URL for dedup
+    const parsed = new URL(url);
+    const normalizedUrl = parsed.origin.toLowerCase() + parsed.pathname.replace(/\/+$/, '') + parsed.search;
+
+    // Check for duplicate
+    const { rows: existing } = await db.query(
+      'SELECT id, status FROM centipedia_citations WHERE url = $1 OR url = $2',
+      [url, normalizedUrl]
+    );
+    if (existing.length > 0) {
+      const dup = existing[0];
+      return c.json({
+        error: `This URL has already been submitted (status: ${dup.status})`,
+        existingId: dup.id,
+      }, 409);
+    }
+
     const { rows: [inserted] } = await db.query(
       'INSERT INTO centipedia_citations (url, submitted_by, topic, excerpt, status) VALUES ($1, $2, $3, $4, $5) RETURNING id',
-      [url, sessionDid || null, topic, excerpt, 'pending']
+      [normalizedUrl, sessionDid || null, topic, excerpt, 'pending']
     );
-    logger.info({ url, topic, submitter: sessionDid }, 'New citation submitted');
+    logger.info({ url: normalizedUrl, topic, submitter: sessionDid }, 'New citation submitted');
 
     // Auto-fetch title in background (don't block the response)
     const citationId = inserted.id;
-    fetchAndSetTitle(citationId, url).catch(err => {
-      logger.warn({ err, citationId, url }, 'Failed to auto-fetch citation title');
+    fetchAndSetTitle(citationId, normalizedUrl).catch(err => {
+      logger.warn({ err, citationId, url: normalizedUrl }, 'Failed to auto-fetch citation title');
     });
 
     return c.json({ ok: true });
@@ -876,6 +925,7 @@ app.post('/api/citations', async (c) => {
 app.post('/api/endorse/citation', async (c) => {
   const sessionDid = await getSession(c);
   if (!sessionDid) return c.json({ error: 'Not authenticated' }, 401);
+  if (!rateLimit(`endorse:${sessionDid}`, 30, 60_000)) return c.json({ error: 'Too many actions' }, 429);
 
   const { citationId } = await c.req.json();
   if (!citationId) return c.json({ error: 'Missing citationId' }, 400);
@@ -921,6 +971,7 @@ app.post('/api/endorse/citation', async (c) => {
 app.post('/api/endorse/submitter', async (c) => {
   const sessionDid = await getSession(c);
   if (!sessionDid) return c.json({ error: 'Not authenticated' }, 401);
+  if (!rateLimit(`endorse:${sessionDid}`, 30, 60_000)) return c.json({ error: 'Too many actions' }, 429);
 
   const { subjectDid, topic } = await c.req.json();
   if (!subjectDid) return c.json({ error: 'Missing subjectDid' }, 400);
@@ -966,6 +1017,7 @@ app.post('/api/endorse/submitter', async (c) => {
 app.post('/api/endorse/domain', async (c) => {
   const sessionDid = await getSession(c);
   if (!sessionDid) return c.json({ error: 'Not authenticated' }, 401);
+  if (!rateLimit(`endorse:${sessionDid}`, 30, 60_000)) return c.json({ error: 'Too many actions' }, 429);
 
   const { domain, topic } = await c.req.json();
   if (!domain) return c.json({ error: 'Missing domain' }, 400);

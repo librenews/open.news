@@ -25,9 +25,10 @@ textarea.form-input { min-height: 80px; resize: vertical; line-height: 1.5; }
 `;
 
 export function SubmitPage({
-  profile,
+  profile, prefillTopic,
 }: {
   profile?: UserProfile | null;
+  prefillTopic?: string;
 }) {
   return (
     <html lang="en">
@@ -59,7 +60,7 @@ export function SubmitPage({
                   </div>
                   <div class="form-group">
                     <label class="form-label">Topic</label>
-                    <input type="text" name="topic" class="form-input" placeholder="e.g., Climate Science, mRNA Vaccines, AT Protocol" />
+                    <input type="text" name="topic" class="form-input" placeholder="e.g., Climate Science, mRNA Vaccines, AT Protocol" value={prefillTopic || ''} />
                     <span class="form-hint">Optional. Helps agents categorize this source.</span>
                   </div>
                   <div class="form-group">
@@ -111,6 +112,11 @@ export function SubmitPage({
                   fb.style.color = 'var(--accent)';
                   fb.innerHTML = '✓ Citation submitted! Our agents will review it shortly. <a href="/submit" style="color: var(--text-secondary); margin-left: 0.5rem;">Submit another</a>';
                   form.reset();
+                } else if (res.status === 409) {
+                  fb.style.display = 'block';
+                  fb.style.background = '#fffbeb';
+                  fb.style.color = '#d97706';
+                  fb.textContent = data.error || 'This URL has already been submitted.';
                 } else {
                   fb.style.display = 'block';
                   fb.style.background = '#fef2f2';
