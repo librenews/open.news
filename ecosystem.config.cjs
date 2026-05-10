@@ -105,5 +105,16 @@ module.exports = {
       error_file: '/var/log/opennews/longform-error.log',
       out_file: '/var/log/opennews/longform-out.log',
     },
+    {
+      name: 'centipedia',
+      script: 'node',
+      args: '--import tsx/esm --import ./src/lib/instrument.ts src/centipedia/index.tsx',
+      cwd: '/home/opennews/open-news',
+      instances: 1, autorestart: true, watch: false,
+      max_memory_restart: '256M',
+      env: { ...envVars, CENTIPEDIA_PORT: '4600', CENTIPEDIA_DOMAIN: 'centipedia.org', OTEL_SERVICE_NAME: 'centipedia' },
+      error_file: '/var/log/opennews/centipedia-error.log',
+      out_file: '/var/log/opennews/centipedia-out.log',
+    },
   ],
 };
