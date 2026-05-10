@@ -80,18 +80,36 @@ const PAGE_STYLES = `
 .endorse-btn.endorsed { border-color: #10b981; color: #10b981; background: rgba(16, 185, 129, 0.08); }
 .endorse-btn.endorsed:hover { border-color: #ef4444; color: #ef4444; background: rgba(239, 68, 68, 0.08); }
 .endorse-count { font-size: 0.65rem; font-weight: 700; min-width: 0.8rem; text-align: center; }
+
+/* Article cards */
+.article-card { display: block; padding: 1.25rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; color: inherit; transition: all 0.15s; }
+.article-card:hover { border-color: var(--text-muted); background: var(--bg-secondary); transform: translateY(-1px); }
+.article-card-title { font-family: var(--font-sans); font-size: 1.05rem; font-weight: 700; margin-bottom: 0.4rem; letter-spacing: -0.02em; }
+.article-card-excerpt { font-size: 0.85rem; color: var(--text-secondary); line-height: 1.5; margin-bottom: 0.5rem; }
+.article-card-meta { font-size: 0.7rem; color: var(--text-muted); font-family: var(--font-sans); }
+.articles-grid { display: flex; flex-direction: column; gap: 0.75rem; }
 `;
+
+export interface HomeArticle {
+  rkey: string;
+  title: string;
+  excerpt: string;
+  publishedAt: string;
+  did: string;
+}
 
 export function HomePage({
   citations,
   profile,
   domain,
   stats,
+  articles = [],
 }: {
   citations: CentipediaCitation[];
   profile?: UserProfile | null;
   domain: string;
   stats: { articles: number; citations: number; topics: number };
+  articles?: HomeArticle[];
 }) {
   return (
     <html lang="en">
@@ -122,6 +140,24 @@ export function HomePage({
                 <div class="stat"><span class="stat-num">{stats.topics}</span> topics</div>
               </div>
             </div>
+
+            {/* Published articles */}
+            {articles.length > 0 && (
+              <div class="citations-section">
+                <h2 class="section-title">Articles</h2>
+                <div class="articles-grid">
+                  {articles.map(a => (
+                    <a href={`/post/${a.did}/${a.rkey}`} class="article-card">
+                      <div class="article-card-title">{a.title}</div>
+                      {a.excerpt && <div class="article-card-excerpt">{a.excerpt}</div>}
+                      <div class="article-card-meta">
+                        {a.publishedAt ? timeAgo(a.publishedAt) : ''}
+                      </div>
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Citation submission */}
             <div class="submit-section">

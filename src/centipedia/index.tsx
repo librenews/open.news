@@ -12,6 +12,7 @@ import { HomePage } from './views/home.js';
 import type { CentipediaCitation } from './views/home.js';
 import { TopicsPage } from './views/topics.js';
 import { SubmitPage } from './views/submit.js';
+import { MyCitationsPage } from './views/my-citations.js';
 import { ProfilePage } from './views/profile.js';
 import { SearchPage } from './views/search.js';
 import { NotFoundPage } from './views/notfound.js';
@@ -73,6 +74,48 @@ async function restoreSession(c: any, sessionDid: string): Promise<import('@atpr
   }
 }
 
+/**
+ * Fetch a URL and extract the <title> tag, then update the citation record.
+ * Runs in background — callers should .catch() errors.
+ */
+async function fetchAndSetTitle(citationId: number, url: string): Promise<void> {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+    const res = await fetch(url, {
+      signal: controller.signal,
+      headers: { 'User-Agent': 'Centipedia/1.0 (citation-fetcher)' },
+      redirect: 'follow',
+    });
+    clearTimeout(timeout);
+
+    if (!res.ok) return;
+    const contentType = res.headers.get('content-type') || '';
+    if (!contentType.includes('text/html')) return;
+
+    const reader = res.body?.getReader();
+    if (!reader) return;
+    let htmlStr = '';
+    while (htmlStr.length < 32768) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      htmlStr += new TextDecoder().decode(value);
+      if (htmlStr.includes('</title>')) break;
+    }
+    reader.cancel().catch(() => {});
+
+    const match = htmlStr.match(/<title[^>]*>([^<]+)<\/title>/i);
+    if (match?.[1]) {
+      const title = match[1].trim().substring(0, 500);
+      await db.query('UPDATE centipedia_citations SET title = $1 WHERE id = $2 AND title IS NULL', [title, citationId]);
+      logger.info({ citationId, title }, 'Auto-fetched citation title');
+    }
+  } catch (err: any) {
+    if (err.name === 'AbortError') return;
+    throw err;
+  }
+}
+
 app.get('/', async (c) => {
   const sessionDid = await getSession(c);
   const docId = c.req.query('doc');
@@ -131,11 +174,37 @@ app.get('/', async (c) => {
       (SELECT count(DISTINCT topic) FROM centipedia_citations WHERE topic IS NOT NULL) AS topics
   `);
 
+  // Fetch published articles from bot's repo
+  let articles: { rkey: string; title: string; excerpt: string; publishedAt: string; did: string }[] = [];
+  try {
+    const botDid = 'did:plc:srdudtvbpm5ck3i4mjdoasdy';
+    const pdsUrl = await resolvePds(botDid);
+    const listAgent = new BskyAgent({ service: pdsUrl }) as any;
+    const { data } = await listAgent.com.atproto.repo.listRecords({
+      repo: botDid,
+      collection: 'site.standard.document',
+      limit: 10,
+    });
+    articles = (data.records || []).map((r: any) => {
+      const doc = r.value;
+      return {
+        rkey: r.uri.split('/').pop(),
+        title: doc.title || 'Untitled',
+        excerpt: extractExcerpt(doc, 160),
+        publishedAt: doc.publishedAt || '',
+        did: botDid,
+      };
+    });
+  } catch (err: any) {
+    logger.warn({ err }, 'Failed to fetch bot articles for home page');
+  }
+
   return c.html((<HomePage
     citations={citationsWithEndorsements as CentipediaCitation[]}
     profile={profile}
     domain={config.CENTIPEDIA_DOMAIN}
-    stats={{ articles: Number(statsRow.articles), citations: Number(statsRow.citations), topics: Number(statsRow.topics) }}
+    stats={{ articles: articles.length, citations: Number(statsRow.citations), topics: Number(statsRow.topics) }}
+    articles={articles}
   />) as unknown as string);
 });
 
@@ -161,6 +230,32 @@ app.get('/submit', async (c) => {
   const sessionDid = await getSession(c);
   const profile = sessionDid ? await fetchUserProfile(sessionDid) : null;
   return c.html((<SubmitPage profile={profile} />) as unknown as string);
+});
+
+app.get('/my-citations', async (c) => {
+  const sessionDid = await getSession(c);
+  if (!sessionDid) return c.redirect('/login');
+  const profile = await fetchUserProfile(sessionDid);
+
+  const { rows: citations } = await db.query(
+    `SELECT c.id, c.url, c.title, c.topic, c.excerpt, c.status, c.created_at, c.article_rkey,
+       (SELECT count(*) FROM centipedia_endorsement_citations e WHERE e.citation_id = c.id) AS endorsements
+     FROM centipedia_citations c
+     WHERE c.submitted_by = $1
+     ORDER BY c.created_at DESC`,
+    [sessionDid]
+  );
+
+  const total = citations.length;
+  const accepted = citations.filter((r: any) => r.status === 'accepted').length;
+  const pending = citations.filter((r: any) => r.status === 'pending').length;
+  const totalEndorsements = citations.reduce((sum: number, r: any) => sum + Number(r.endorsements), 0);
+
+  return c.html((<MyCitationsPage
+    citations={citations.map((r: any) => ({ ...r, endorsements: Number(r.endorsements) }))}
+    profile={profile}
+    stats={{ total, accepted, pending, totalEndorsements }}
+  />) as unknown as string);
 });
 
 app.get('/search', async (c) => {
@@ -207,6 +302,37 @@ app.get('/search', async (c) => {
       });
     } catch (err: any) {
       logger.error({ err, q }, 'Search failed');
+    }
+
+    // Also search local citations
+    try {
+      const { rows: citationHits } = await db.query(
+        `SELECT c.id, c.url, c.title, c.topic, c.excerpt, c.article_rkey, c.created_at,
+           (SELECT count(*) FROM centipedia_endorsement_citations e WHERE e.citation_id = c.id) AS endorsements
+         FROM centipedia_citations c
+         WHERE (c.title ILIKE '%' || $1 || '%' OR c.url ILIKE '%' || $1 || '%' OR c.topic ILIKE '%' || $1 || '%')
+         AND c.status = 'accepted'
+         ORDER BY endorsements DESC LIMIT 10`,
+        [q]
+      );
+      // Append citation results as search results
+      for (const ch of citationHits) {
+        results.push({
+          uri: ch.url,
+          did: '',
+          title: `📎 ${ch.title || ch.url}`,
+          site: ch.topic || null,
+          path: ch.article_rkey ? `/post/did:plc:srdudtvbpm5ck3i4mjdoasdy/${ch.article_rkey}` : null,
+          publishedAt: ch.created_at?.toISOString() || null,
+          wordCount: 0,
+          highlight: ch.excerpt || null,
+          authorHandle: 'citation',
+          authorName: `${ch.endorsements} endorsements`,
+          authorAvatar: '',
+        });
+      }
+    } catch (err: any) {
+      logger.warn({ err }, 'Citation search failed');
     }
   }
 
@@ -584,11 +710,18 @@ app.post('/api/citations', async (c) => {
   }
 
   try {
-    await db.query(
-      'INSERT INTO centipedia_citations (url, submitted_by, topic, excerpt, status) VALUES ($1, $2, $3, $4, $5)',
+    const { rows: [inserted] } = await db.query(
+      'INSERT INTO centipedia_citations (url, submitted_by, topic, excerpt, status) VALUES ($1, $2, $3, $4, $5) RETURNING id',
       [url, sessionDid || null, topic, excerpt, 'pending']
     );
     logger.info({ url, topic, submitter: sessionDid }, 'New citation submitted');
+
+    // Auto-fetch title in background (don't block the response)
+    const citationId = inserted.id;
+    fetchAndSetTitle(citationId, url).catch(err => {
+      logger.warn({ err, citationId, url }, 'Failed to auto-fetch citation title');
+    });
+
     return c.json({ ok: true });
   } catch (err: any) {
     logger.error({ err }, 'Failed to store citation');
