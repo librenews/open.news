@@ -6,7 +6,7 @@ import { config } from '../lib/config.js';
 import { logger } from '../lib/logger.js';
 import { EditorPage } from './views/editor.js';
 import { PostsPage } from './views/posts.js';
-import { ReaderPage } from './views/reader.js';
+import { ArticleReaderPage, extractFirstImageUrl, extractExcerpt } from './views/reader.js';
 import { Layout } from './views/layout.js';
 import { HomePage } from './views/home.js';
 import type { CentipediaCitation } from './views/home.js';
@@ -486,36 +486,24 @@ app.get('/post/:did/:rkey', async (c) => {
     const sessionProfile = sessionDid ? await fetchUserProfile(sessionDid) : undefined;
     
     const doc = record.data.value as any;
+    const canonicalUrl = `https://${config.CENTIPEDIA_DOMAIN}/post/${did}/${rkey}`;
+    const excerpt = extractExcerpt(doc);
+    const ogImageUrl = extractFirstImageUrl(doc, did);
     
-    // Extract description from first text block if no description is provided
-    let excerpt = '';
-    if (doc.content?.pages?.[0]?.blocks) {
-      const textBlock = doc.content.pages[0].blocks.find((b: any) => b.block?.$type === 'pub.leaflet.blocks.text');
-      if (textBlock && textBlock.block?.plaintext) {
-        excerpt = textBlock.block.plaintext.substring(0, 160).trim() + '...';
-      }
-    }
-    
-    const og = {
-      title: doc.title,
-      description: excerpt || 'Read this article on Longform',
-      url: `https://${config.CENTIPEDIA_DOMAIN}/post/${did}/${rkey}`,
-    };
-    
-    return c.html((
-      <Layout title={`${doc.title} - ${config.CENTIPEDIA_DOMAIN}`} profile={sessionProfile} og={og}>
-        {ReaderPage(doc, did, authorProfile)}
-      </Layout>
-    ) as unknown as string);
+    return c.html((<ArticleReaderPage
+      doc={doc}
+      did={did}
+      rkey={rkey}
+      authorProfile={authorProfile}
+      sessionProfile={sessionProfile}
+      domain={config.CENTIPEDIA_DOMAIN}
+      canonicalUrl={canonicalUrl}
+      ogImageUrl={ogImageUrl}
+      excerpt={excerpt}
+    />) as unknown as string);
   } catch (err: any) {
     logger.error({ err, did, rkey }, 'Failed to load post for reader');
-    return c.html((
-      <Layout title="Post Not Found">
-        <h1>Post Error</h1>
-        <p>Failed to load the post. Error details:</p>
-        <pre style="background: #1a1a1a; color: #ff5555; padding: 1rem; border-radius: 8px; overflow-x: auto;"><code>${err.message}\n\n${err.stack}</code></pre>
-      </Layout>
-    ) as unknown as string);
+    return c.html((<NotFoundPage />) as unknown as string, 404);
   }
 });
 
