@@ -477,7 +477,47 @@ app.get('/post/:did/:rkey', async (c) => {
     const canonicalUrl = `https://${config.CENTIPEDIA_DOMAIN}/post/${did}/${rkey}`;
     const excerpt = extractExcerpt(doc);
     const ogImageUrl = extractFirstImageUrl(doc, did);
-    
+
+    // Fetch citations linked to this article
+    const { rows: citationRows } = await db.query(
+      `SELECT c.id, c.url, c.title, c.submitted_by, c.topic, c.excerpt, c.status, c.created_at,
+         (SELECT count(*) FROM centipedia_endorsement_citations e WHERE e.citation_id = c.id) AS endorsements
+       FROM centipedia_citations c
+       WHERE c.article_rkey = $1 AND c.status = 'accepted'
+       ORDER BY endorsements DESC, c.created_at ASC`,
+      [rkey]
+    );
+
+    // Fetch endorsement status for logged-in user
+    let userEndorsedSet = new Set<number>();
+    if (sessionDid) {
+      const { rows: endorsed } = await db.query(
+        'SELECT citation_id FROM centipedia_endorsement_citations WHERE did = $1',
+        [sessionDid]
+      );
+      userEndorsedSet = new Set(endorsed.map((r: any) => r.citation_id));
+    }
+
+    const articleCitations = citationRows.map((r: any) => ({
+      id: r.id,
+      url: r.url,
+      title: r.title || r.url,
+      submittedBy: r.submitted_by,
+      topic: r.topic,
+      excerpt: r.excerpt,
+      endorsements: Number(r.endorsements),
+      userEndorsed: userEndorsedSet.has(r.id),
+    }));
+
+    // Resolve contributor profiles (unique submitter DIDs)
+    const contributorDids = [...new Set(citationRows.filter((r: any) => r.submitted_by).map((r: any) => r.submitted_by))] as string[];
+    const contributors = await Promise.all(
+      contributorDids.map(async (cdid: string) => {
+        const p = await fetchUserProfile(cdid);
+        return { did: cdid, handle: p.handle, displayName: p.displayName, avatar: p.avatar };
+      })
+    );
+
     return c.html((<ArticleReaderPage
       doc={doc}
       did={did}
@@ -488,6 +528,8 @@ app.get('/post/:did/:rkey', async (c) => {
       canonicalUrl={canonicalUrl}
       ogImageUrl={ogImageUrl}
       excerpt={excerpt}
+      citations={articleCitations}
+      contributors={contributors}
     />) as unknown as string);
   } catch (err: any) {
     logger.error({ err, did, rkey }, 'Failed to load post for reader');

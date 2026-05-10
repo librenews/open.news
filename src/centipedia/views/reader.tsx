@@ -182,16 +182,76 @@ h3.article-heading { font-size: 1.25rem; }
 .comment-action { background: none; border: none; cursor: pointer; color: var(--text-muted); display: flex; align-items: center; gap: 0.25rem; font-family: var(--font-sans); font-size: 0.75rem; padding: 0; transition: color 0.15s; }
 .comment-action:hover { color: var(--text-main); }
 
-/* TOC sidebar */
-.article-sidebar { width: 220px; flex-shrink: 0; padding: 1.5rem; position: sticky; top: var(--header-height); height: calc(100vh - var(--header-height)); overflow-y: auto; }
-.toc-title { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); margin-bottom: 0.75rem; }
+/* TOC + infobox sidebar */
+.article-sidebar { width: 240px; flex-shrink: 0; padding: 1.5rem; position: sticky; top: var(--header-height); height: calc(100vh - var(--header-height)); overflow-y: auto; border-left: 1px solid var(--border); }
+.sidebar-section { margin-bottom: 1.5rem; }
+.sidebar-section-title { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); margin-bottom: 0.75rem; }
 .toc-list { list-style: none; display: flex; flex-direction: column; gap: 0.4rem; }
 .toc-item { font-size: 0.8rem; }
 .toc-item a { color: var(--text-secondary); text-decoration: none; transition: color 0.15s; display: block; padding: 0.15rem 0; }
 .toc-item a:hover { color: var(--text-main); }
 .toc-item.depth-3 { padding-left: 0.75rem; }
+
+/* Infobox */
+.infobox { display: flex; flex-direction: column; gap: 0.6rem; }
+.infobox-row { display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem; }
+.infobox-label { color: var(--text-muted); }
+.infobox-value { font-weight: 600; color: var(--text-main); }
+.confidence-badge { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 99px; font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+.confidence-high { background: rgba(16,185,129,0.1); color: #10b981; }
+.confidence-medium { background: rgba(245,158,11,0.1); color: #f59e0b; }
+.confidence-low { background: rgba(239,68,68,0.1); color: #ef4444; }
+.infobox-topics { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.infobox-topic { padding: 0.2rem 0.5rem; background: var(--bg-secondary); border-radius: 99px; font-size: 0.7rem; color: var(--text-secondary); text-decoration: none; transition: background 0.15s; }
+.infobox-topic:hover { background: var(--border); }
+
+/* References */
+.references-section { border-top: 1px solid var(--border); padding-top: 2rem; margin-top: 3rem; }
+.references-title { font-family: var(--font-sans); font-size: 1.1rem; font-weight: 600; margin-bottom: 1rem; letter-spacing: -0.01em; }
+.ref-list { display: flex; flex-direction: column; gap: 0.75rem; }
+.ref-item { display: flex; gap: 0.75rem; padding: 0.75rem; border: 1px solid var(--border); border-radius: 8px; transition: background 0.15s; }
+.ref-item:hover { background: var(--bg-secondary); }
+.ref-endorse { display: flex; flex-direction: column; align-items: center; gap: 0.1rem; padding: 0.3rem 0.35rem; border: 1px solid var(--border); border-radius: 6px; background: transparent; color: var(--text-muted); cursor: pointer; transition: all 0.15s; flex-shrink: 0; font-family: var(--font-sans); }
+.ref-endorse:hover { border-color: var(--text-secondary); color: var(--text-secondary); }
+.ref-endorse.endorsed { border-color: #10b981; color: #10b981; background: rgba(16,185,129,0.06); }
+.ref-endorse-count { font-size: 0.6rem; font-weight: 700; }
+.ref-body { flex: 1; min-width: 0; }
+.ref-number { font-size: 0.7rem; font-weight: 700; color: var(--text-muted); margin-bottom: 0.15rem; }
+.ref-title { font-family: var(--font-sans); font-size: 0.85rem; font-weight: 600; color: var(--accent); text-decoration: none; word-break: break-word; }
+.ref-title:hover { text-decoration: underline; }
+.ref-excerpt { font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.25rem; line-height: 1.5; }
+.ref-meta { font-size: 0.7rem; color: var(--text-muted); margin-top: 0.25rem; font-family: var(--font-sans); }
+
+/* Contributors */
+.contributors-section { border-top: 1px solid var(--border); padding-top: 1.5rem; margin-top: 2rem; }
+.contributors-title { font-family: var(--font-sans); font-size: 0.85rem; font-weight: 600; margin-bottom: 0.75rem; color: var(--text-secondary); }
+.contributors-row { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+.contributor-avatar { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; border: 2px solid var(--bg); margin-right: -0.5rem; transition: transform 0.15s; }
+.contributor-avatar:hover { transform: scale(1.15); z-index: 1; }
+.contributors-count { font-size: 0.8rem; color: var(--text-muted); margin-left: 0.75rem; }
+
 @media (max-width: 1024px) { .article-sidebar { display: none; } }
 `;
+
+// --- Types ---
+
+export interface ArticleCitation {
+  id: number;
+  url: string;
+  title: string;
+  submittedBy: string | null;
+  topic: string | null;
+  excerpt: string | null;
+  endorsements: number;
+  userEndorsed: boolean;
+}
+
+export interface Contributor {
+  did: string;
+  handle: string;
+  displayName: string;
+  avatar: string;
+}
 
 // --- Component ---
 
@@ -205,11 +265,14 @@ export interface ReaderProps {
   canonicalUrl: string;
   ogImageUrl: string | null;
   excerpt: string;
+  citations?: ArticleCitation[];
+  contributors?: Contributor[];
 }
 
 export function ArticleReaderPage({
   doc, did, rkey, authorProfile, sessionProfile, domain,
   canonicalUrl, ogImageUrl, excerpt,
+  citations = [], contributors = [],
 }: ReaderProps) {
   const title = doc.title || 'Untitled';
   const date = new Date(doc.publishedAt || Date.now());
@@ -340,6 +403,57 @@ export function ArticleReaderPage({
                 <meta itemprop="wordCount" content={String(wordCount)} />
               </article>
 
+              {/* References */}
+              {citations.length > 0 && (
+                <section class="references-section" aria-label="References">
+                  <h2 class="references-title">References ({citations.length})</h2>
+                  <div class="ref-list">
+                    {citations.map((c, i) => (
+                      <div class="ref-item">
+                        <button
+                          class={`ref-endorse ${c.userEndorsed ? 'endorsed' : ''}`}
+                          data-citation-id={c.id}
+                          title="Endorse this source"
+                        >
+                          <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M12 19V5M5 12l7-7 7 7" />
+                          </svg>
+                          <span class="ref-endorse-count">{c.endorsements || ''}</span>
+                        </button>
+                        <div class="ref-body">
+                          <div class="ref-number">[{i + 1}]</div>
+                          <a href={c.url} target="_blank" rel="noopener noreferrer" class="ref-title">{c.title}</a>
+                          {c.excerpt && <div class="ref-excerpt">{c.excerpt}</div>}
+                          <div class="ref-meta">
+                            {c.topic && <span>{c.topic} · </span>}
+                            {(() => { try { return new URL(c.url).hostname.replace(/^www\./, ''); } catch { return ''; } })()}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              {/* Contributors */}
+              {contributors.length > 0 && (
+                <section class="contributors-section">
+                  <div class="contributors-title">Contributors</div>
+                  <div class="contributors-row">
+                    {contributors.map(c => (
+                      <a href={`/profile/${c.handle}`} title={`@${c.handle}`}>
+                        {c.avatar ? (
+                          <img src={c.avatar} alt={c.displayName} class="contributor-avatar" />
+                        ) : (
+                          <div class="contributor-avatar" style="background: var(--text-muted); display: flex; align-items: center; justify-content: center; color: var(--bg); font-weight: 700; font-size: 0.75rem;">{c.displayName.charAt(0).toUpperCase()}</div>
+                        )}
+                      </a>
+                    ))}
+                    <span class="contributors-count">{contributors.length} {contributors.length === 1 ? 'person' : 'people'} contributed sources</span>
+                  </div>
+                </section>
+              )}
+
               {/* Comments */}
               <section class="comments-section" aria-label="Discussion">
                 <h2 class="comments-title">Discussion in the ATmosphere</h2>
@@ -350,19 +464,59 @@ export function ArticleReaderPage({
             </div>
           </main>
 
-          {/* Table of contents sidebar */}
-          {toc.length > 2 && (
-            <aside class="article-sidebar" aria-label="Table of contents">
-              <div class="toc-title">On This Page</div>
-              <ul class="toc-list">
-                {toc.map(h => (
-                  <li class={`toc-item ${h.level >= 3 ? 'depth-3' : ''}`}>
-                    <a href={`#${h.id}`}>{h.text}</a>
-                  </li>
-                ))}
-              </ul>
-            </aside>
-          )}
+          {/* Sidebar: infobox + TOC */}
+          <aside class="article-sidebar" aria-label="Article info">
+            {/* Infobox */}
+            <div class="sidebar-section">
+              <div class="sidebar-section-title">Article Info</div>
+              <div class="infobox">
+                <div class="infobox-row">
+                  <span class="infobox-label">Citations</span>
+                  <span class="infobox-value">{citations.length}</span>
+                </div>
+                <div class="infobox-row">
+                  <span class="infobox-label">Contributors</span>
+                  <span class="infobox-value">{contributors.length}</span>
+                </div>
+                <div class="infobox-row">
+                  <span class="infobox-label">Words</span>
+                  <span class="infobox-value">{wordCount.toLocaleString()}</span>
+                </div>
+                <div class="infobox-row">
+                  <span class="infobox-label">Confidence</span>
+                  <span class={`confidence-badge ${citations.length >= 5 ? 'confidence-high' : citations.length >= 3 ? 'confidence-medium' : 'confidence-low'}`}>
+                    {citations.length >= 5 ? 'High' : citations.length >= 3 ? 'Medium' : 'Low'}
+                  </span>
+                </div>
+                {/* Topics */}
+                {(() => {
+                  const topics = [...new Set(citations.map(c => c.topic).filter(Boolean))];
+                  return topics.length > 0 ? (
+                    <div style="margin-top: 0.25rem;">
+                      <div class="infobox-label" style="margin-bottom: 0.35rem;">Topics</div>
+                      <div class="infobox-topics">
+                        {topics.map(t => <a href={`/topics/${encodeURIComponent(t!)}`} class="infobox-topic">{t}</a>)}
+                      </div>
+                    </div>
+                  ) : null;
+                })()}
+              </div>
+            </div>
+
+            {/* TOC */}
+            {toc.length > 2 && (
+              <div class="sidebar-section">
+                <div class="sidebar-section-title">On This Page</div>
+                <ul class="toc-list">
+                  {toc.map(h => (
+                    <li class={`toc-item ${h.level >= 3 ? 'depth-3' : ''}`}>
+                      <a href={`#${h.id}`}>{h.text}</a>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </aside>
         </div>
 
         <script dangerouslySetInnerHTML={{__html: `
@@ -432,6 +586,26 @@ export function ArticleReaderPage({
               if (data.reposted) document.getElementById('btn-repost').style.color = '#10b981';
             } catch(e) {}
           })();
+
+          // Reference endorsement handlers
+          document.querySelectorAll('.ref-endorse').forEach(btn => {
+            btn.addEventListener('click', async () => {
+              const citationId = Number(btn.dataset.citationId);
+              try {
+                const res = await fetch('/api/endorse/citation', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ citationId })
+                });
+                if (res.status === 401) { location.href = '/login'; return; }
+                const data = await res.json();
+                if (res.ok) {
+                  btn.classList.toggle('endorsed', data.endorsed);
+                  btn.querySelector('.ref-endorse-count').textContent = data.count || '';
+                }
+              } catch(e) {}
+            });
+          });
         `}} />
       </body>
     </html>
