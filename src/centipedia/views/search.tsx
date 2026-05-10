@@ -106,40 +106,55 @@ export function SearchPage({
                 </div>
               ) : (
                 results.map((r) => {
-                  const rkey = r.uri.split('/').pop();
-                  const collection = r.uri.split('/')[3];
+                  const isCitation = r.authorHandle === 'citation';
+                  const isArticle = r.authorHandle === 'centipedia';
                   let readUrl: string;
-                  if (r.site && r.path && r.site.startsWith('http')) {
+                  if (isArticle && r.path) {
+                    readUrl = r.path;
+                  } else if (isCitation && r.path) {
+                    readUrl = r.path;
+                  } else if (isCitation) {
+                    readUrl = r.uri; // external citation URL
+                  } else if (r.site && r.path && r.site.startsWith('http')) {
                     readUrl = `${r.site}${r.path}`;
-                  } else if (collection === 'com.whtwnd.blog.entry') {
-                    readUrl = `https://whtwnd.com/${r.authorHandle}/${rkey}`;
                   } else {
+                    const rkey = r.uri.split('/').pop();
                     readUrl = `/article/${rkey}`;
                   }
-                  const minRead = Math.max(1, Math.ceil(r.wordCount / 200));
+                  const minRead = r.wordCount > 0 ? Math.max(1, Math.ceil(r.wordCount / 200)) : 0;
                   const ago = timeAgo(r.publishedAt);
+
+                  // Determine meta link
+                  const metaHref = isCitation && r.site ? `/topics/${encodeURIComponent(r.site)}` : isArticle ? null : `/profile/${r.authorHandle}`;
+                  const isExternal = isCitation && !r.path;
 
                   return (
                     <div class="result-card">
-                      <a href={readUrl} class="result-link" target="_blank" rel="noopener noreferrer">
+                      <a href={readUrl} class="result-link" {...(isExternal ? { target: '_blank', rel: 'noopener noreferrer' } : {})}>
                         <h3 class="result-title">{r.title || 'Untitled'}</h3>
                         {r.highlight && (
                           <div class="result-highlight" dangerouslySetInnerHTML={{__html: r.highlight}} />
                         )}
                       </a>
                       <div class="result-meta">
-                        <a href={`/profile/${r.authorHandle}`} class="result-author">
-                          {r.authorAvatar ? (
-                            <img src={r.authorAvatar} alt="" />
-                          ) : (
-                            <div class="result-author-placeholder">{(r.authorName || r.authorHandle).charAt(0).toUpperCase()}</div>
-                          )}
-                          {r.authorName || r.authorHandle}
-                        </a>
-                        <span>·</span>
-                        {ago && <span>{ago}</span>}
-                        {ago && <span>·</span>}
-                        <span>{minRead} min read</span>
+                        {metaHref ? (
+                          <a href={metaHref} class="result-author">
+                            {r.authorAvatar ? (
+                              <img src={r.authorAvatar} alt="" />
+                            ) : (
+                              <div class="result-author-placeholder">{(r.authorName || r.authorHandle).charAt(0).toUpperCase()}</div>
+                            )}
+                            {r.authorName || r.authorHandle}
+                          </a>
+                        ) : (
+                          <span class="result-author" style="cursor: default;">
+                            <div class="result-author-placeholder">C</div>
+                            Centipedia
+                          </span>
+                        )}
+                        {ago && <><span>·</span><span>{ago}</span></>}
+                        {minRead > 0 && <><span>·</span><span>{minRead} min read</span></>}
+                        {r.highlight && isCitation && <><span>·</span><span>{r.highlight}</span></>}
                       </div>
                     </div>
                   );
