@@ -27,3 +27,4 @@ logs/
 .pm2/
 node
 open-news@*
+src/centipedia/public/.DS_Store
