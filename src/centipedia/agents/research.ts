@@ -19,6 +19,7 @@ import { llm } from '../../services/llm.js';
 import type { LLMMessage } from '../../services/llm.js';
 import { getCentipediaBot, announceArticle } from '../bot.js';
 import { config } from '../../lib/config.js';
+import { warmRecord, invalidateList } from '../../lib/pdsCache.js';
 
 const POLL_INTERVAL_MS = 30_000;
 const MIN_CITATIONS_FOR_ARTICLE = 2;
@@ -301,6 +302,10 @@ Write the article in plain text with ## headings for sections. Use plain paragra
     });
 
     logger.info({ uri: res.data.uri, topic, rkey }, 'Published synthesized article');
+
+    // Warm cache immediately — zero PDS reads on next page load
+    await warmRecord(bot.session.did, 'site.standard.document', rkey, record);
+    await invalidateList(bot.session.did, 'site.standard.document');
 
     // Link citations to the article
     const citationIds = citations.map((c: any) => c.id);
@@ -645,6 +650,10 @@ RULES:
     });
 
     logger.info({ topic, rkey, totalCitations: allCitations.length }, 'Regenerated article');
+
+    // Warm cache immediately
+    await warmRecord(bot.session.did, 'site.standard.document', rkey, record);
+    await invalidateList(bot.session.did, 'site.standard.document');
 
     // Link the new citations to the article
     const unlinkedIds = allCitations.filter((c: any) => !c.article_rkey).map((c: any) => c.id);

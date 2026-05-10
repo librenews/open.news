@@ -19,6 +19,7 @@ import { authRouter, getSession, getLongformAuthClient } from './routes/auth.js'
 import { Agent, BskyAgent } from '@atproto/api';
 import { serializeTiptapToLeaflet } from './lib/leafletExporter.js';
 import { resolvePds } from '../lib/pds.js';
+import { getCachedRecordMulti, getCachedProfile } from '../lib/pdsCache.js';
 import { announcePublication, getLongformBot } from './bot.js';
 import { Server as HocuspocusServer } from '@hocuspocus/server';
 import { hocuspocusDb } from './lib/hocuspocusDb.js';
@@ -490,53 +491,23 @@ app.get('/post/:did/:rkey', async (c) => {
   const rkey = c.req.param('rkey');
   
   try {
-    // Unauthenticated fetch to public AppView since records are public
-    // Wait, site.standard.document isn't guaranteed to be indexed by public AppView yet.
-    // Let's use the authenticated agent if there's a session, otherwise we'd hit the specific PDS directly.
-    // For MVP, we'll try to fetch it via the public AppView, and fallback if needed, 
-    // but the safest approach since we don't have the PDS URL is to use the AppView's atproto endpoints!
     const sessionDid = await getSession(c);
-    let agentToUse;
     
-    if (sessionDid) {
-      const oauthSession = await restoreSession(c, sessionDid);
-      if (oauthSession) {
-        agentToUse = new Agent(oauthSession);
-      }
-    } else {
-      // Resolve the author's specific PDS for unauthenticated fetching
-      try {
-        const pdsUrl = await resolvePds(did);
-        agentToUse = new BskyAgent({ service: pdsUrl }) as any;
-      } catch (e) {
-        agentToUse = new BskyAgent({ service: 'https://public.api.bsky.app' }) as any;
-      }
-    }
-    
-    // Try multiple collection types — site.standard.document first, then pub.leaflet.document
-    const collections = ['site.standard.document', 'pub.leaflet.document'];
-    let record: any = null;
-    for (const collection of collections) {
-      try {
-        record = await agentToUse.com.atproto.repo.getRecord({
-          repo: did,
-          collection,
-          rkey: rkey
-        });
-        break;
-      } catch (e) {
-        // Try next collection
-      }
-    }
-    if (!record) {
+    // Cache-first: try Redis, then PDS
+    const result = await getCachedRecordMulti(
+      did,
+      ['site.standard.document', 'pub.leaflet.document'],
+      rkey
+    );
+    if (!result) {
       return c.html((<Layout title="Post Not Found"><h1>Post Not Found</h1><p>Could not find this article.</p></Layout>) as unknown as string, 404);
     }
     
-    // Fetch author profile
-    const authorProfile = await fetchUserProfile(did);
-    const sessionProfile = sessionDid ? await fetchUserProfile(sessionDid) : undefined;
+    // Fetch author profile (cached)
+    const authorProfile = await getCachedProfile(did);
+    const sessionProfile = sessionDid ? await getCachedProfile(sessionDid) : undefined;
     
-    const doc = record.data.value as any;
+    const doc = result.record as any;
     
     // Extract description from first text block if no description is provided
     let excerpt = '';

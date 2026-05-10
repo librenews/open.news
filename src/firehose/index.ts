@@ -9,6 +9,7 @@ import { logger } from '../lib/logger.js';
 import { enqueueJob } from '../web/jobEnqueue.js';
 import { xaddPost } from '../lib/redis.js';
 import { logModeration } from '../db/queries/moderation.js';
+import { warmRecord, invalidateRecord } from '../lib/pdsCache.js';
 
 const CURSOR_PERSIST_INTERVAL_MS = 30_000;
 const DID_REFRESH_INTERVAL_MS = 60_000;
@@ -201,6 +202,9 @@ function handleEvent(event: JetstreamEvent): void {
       }
       return;
     }
+
+    // Warm the PDS record cache for fast page loads
+    warmRecord(did, commit.collection, commit.rkey, commit.record).catch(() => {});
 
     // 1. Enqueue indexing job for this specific post (high priority for live events)
     enqueueJob('indexSiteStandard', {

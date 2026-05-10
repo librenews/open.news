@@ -23,6 +23,7 @@ import { authRouter, getSession, getCentipediaAuthClient } from './routes/auth.j
 import { Agent, BskyAgent } from '@atproto/api';
 import { serializeTiptapToLeaflet } from './lib/leafletExporter.js';
 import { resolvePds } from '../lib/pds.js';
+import { getCachedRecord, getCachedRecordMulti, getCachedListRecords, getCachedProfile, warmRecord, invalidateList } from '../lib/pdsCache.js';
 import { announceArticle, getCentipediaBot } from './bot.js';
 import { Server as HocuspocusServer } from '@hocuspocus/server';
 import { hocuspocusDb } from './lib/hocuspocusDb.js';
@@ -290,18 +291,12 @@ app.get('/', async (c) => {
       (SELECT count(DISTINCT topic) FROM centipedia_citations WHERE topic IS NOT NULL) AS topics
   `);
 
-  // Fetch published articles from bot's repo
+  // Fetch published articles from bot's repo (cached)
   let articles: { rkey: string; title: string; excerpt: string; publishedAt: string; did: string }[] = [];
   try {
     const botDid = BOT_DID;
-    const pdsUrl = await resolvePds(botDid);
-    const listAgent = new BskyAgent({ service: pdsUrl }) as any;
-    const { data } = await listAgent.com.atproto.repo.listRecords({
-      repo: botDid,
-      collection: 'site.standard.document',
-      limit: 10,
-    });
-    articles = (data.records || []).map((r: any) => {
+    const records = await getCachedListRecords(botDid, 'site.standard.document', 10, botDid);
+    articles = records.map((r: any) => {
       const doc = r.value;
       return {
         rkey: r.uri.split('/').pop(),
@@ -862,35 +857,22 @@ app.get('/article/:rkey', async (c) => {
   
   try {
     const sessionDid = await getSession(c);
-    let agentToUse;
-    try {
-      const pdsUrl = await resolvePds(did);
-      agentToUse = new BskyAgent({ service: pdsUrl }) as any;
-    } catch (e) {
-      agentToUse = new BskyAgent({ service: 'https://public.api.bsky.app' }) as any;
-    }
     
-    // Try multiple collection types
-    const collections = ['site.standard.document', 'pub.leaflet.document'];
-    let record: any = null;
-    for (const collection of collections) {
-      try {
-        record = await agentToUse.com.atproto.repo.getRecord({
-          repo: did,
-          collection,
-          rkey: rkey
-        });
-        break;
-      } catch (e) {}
-    }
-    if (!record) {
+    // Cache-first: try Redis, then PDS
+    const result = await getCachedRecordMulti(
+      did,
+      ['site.standard.document', 'pub.leaflet.document'],
+      rkey,
+      BOT_DID
+    );
+    if (!result) {
       return c.html((<Layout title="Post Not Found"><h1>Post Not Found</h1><p>Could not find this article.</p></Layout>) as unknown as string, 404);
     }
     
-    const authorProfile = await fetchUserProfile(did);
-    const sessionProfile = sessionDid ? await fetchUserProfile(sessionDid) : undefined;
+    const authorProfile = await getCachedProfile(did);
+    const sessionProfile = sessionDid ? await getCachedProfile(sessionDid) : undefined;
     
-    const doc = record.data.value as any;
+    const doc = result.record as any;
     const canonicalUrl = `https://${config.CENTIPEDIA_DOMAIN}/article/${rkey}`;
     const excerpt = extractExcerpt(doc);
     const ogImageUrl = extractFirstImageUrl(doc, did);
