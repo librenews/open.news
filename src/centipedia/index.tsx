@@ -679,7 +679,7 @@ app.get('/topics/:topic', async (c) => {
     return c.html((<NotFoundPage />) as unknown as string, 404);
   }
   const sessionDid = await getSession(c);
-  const sessionProfile = sessionDid ? await getProfileForNav(sessionDid) : null;
+  const sessionProfile = sessionDid ? await fetchUserProfile(sessionDid) : null;
 
   // Fetch citations for this topic
   const { rows: citationRows } = await db.query(
@@ -704,12 +704,10 @@ app.get('/topics/:topic', async (c) => {
   // Resolve submitter handles
   const submitterDids = [...new Set(citationRows.map((r: any) => r.submitted_by).filter(Boolean))];
   const handleMap: Record<string, string> = {};
-  for (const sd of submitterDids) {
-    try {
-      const res = await fetch(`https://public.api.bsky.app/xrpc/app.bsky.actor.getProfile?actor=${encodeURIComponent(sd)}`).then(r => r.json()) as any;
-      if (res?.handle) handleMap[sd] = res.handle;
-    } catch {}
-  }
+  await Promise.all(submitterDids.map(async (sd) => {
+    const p = await getCachedProfile(sd as string);
+    if (p.handle) handleMap[sd as string] = p.handle;
+  }));
 
   const citations = citationRows.map((r: any) => ({
     ...r,
