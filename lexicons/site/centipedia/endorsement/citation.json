@@ -1,0 +1,30 @@
+{
+  "lexicon": 1,
+  "id": "site.centipedia.endorsement.citation",
+  "defs": {
+    "main": {
+      "type": "record",
+      "description": "An endorsement of a specific citation/source URL as credible.",
+      "key": "tid",
+      "record": {
+        "type": "object",
+        "required": ["subject", "createdAt"],
+        "properties": {
+          "subject": {
+            "type": "string",
+            "description": "AT-URI of the citation record, or a direct URL for external citations."
+          },
+          "topic": {
+            "type": "string",
+            "maxLength": 100,
+            "description": "Optional topic scope for this endorsement."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "datetime"
+          }
+        }
+      }
+    }
+  }
+}

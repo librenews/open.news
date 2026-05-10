@@ -1,0 +1,31 @@
+{
+  "lexicon": 1,
+  "id": "site.centipedia.endorsement.submitter",
+  "defs": {
+    "main": {
+      "type": "record",
+      "description": "An endorsement of a person as a trustworthy source contributor.",
+      "key": "tid",
+      "record": {
+        "type": "object",
+        "required": ["subject", "createdAt"],
+        "properties": {
+          "subject": {
+            "type": "string",
+            "format": "did",
+            "description": "DID of the endorsed submitter."
+          },
+          "topic": {
+            "type": "string",
+            "maxLength": 100,
+            "description": "Optional topic scope — endorsing this person's expertise in a specific area."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "datetime"
+          }
+        }
+      }
+    }
+  }
+}

@@ -230,6 +230,15 @@ h3.article-heading { font-size: 1.25rem; }
 .contributor-avatar:hover { transform: scale(1.15); z-index: 1; }
 .contributors-count { font-size: 0.8rem; color: var(--text-muted); margin-left: 0.75rem; }
 
+/* Trust view toggle */
+.trust-toggle { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem; }
+.trust-toggle-btn { padding: 0.35rem 0.8rem; border: 1px solid var(--border); border-radius: 99px; background: transparent; color: var(--text-muted); font-size: 0.75rem; font-weight: 600; font-family: var(--font-sans); cursor: pointer; transition: all 0.15s; }
+.trust-toggle-btn:hover { border-color: var(--text-secondary); color: var(--text-secondary); }
+.trust-toggle-btn.active { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+.trust-toggle-label { font-size: 0.7rem; color: var(--text-muted); margin-left: 0.25rem; }
+.network-score { display: inline-flex; align-items: center; gap: 0.15rem; padding: 0.1rem 0.35rem; border-radius: 4px; font-size: 0.55rem; font-weight: 700; font-family: var(--font-sans); background: rgba(99,102,241,0.1); color: #6366f1; margin-left: 0.35rem; }
+.ref-item.network-boosted { border-color: rgba(99,102,241,0.25); background: rgba(99,102,241,0.03); }
+
 @media (max-width: 1024px) { .article-sidebar { display: none; } }
 `;
 
@@ -406,10 +415,16 @@ export function ArticleReaderPage({
               {/* References */}
               {citations.length > 0 && (
                 <section class="references-section" aria-label="References">
-                  <h2 class="references-title">References ({citations.length})</h2>
-                  <div class="ref-list">
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                    <h2 class="references-title" style="margin-bottom: 0;">References ({citations.length})</h2>
+                    <div class="trust-toggle" id="trust-toggle">
+                      <button class="trust-toggle-btn active" data-view="global">Global</button>
+                      <button class="trust-toggle-btn" data-view="network">Your Network</button>
+                    </div>
+                  </div>
+                  <div class="ref-list" id="ref-list">
                     {citations.map((c, i) => (
-                      <div class="ref-item">
+                      <div class="ref-item" data-cid={c.id} data-endorsements={c.endorsements} data-order={i}>
                         <button
                           class={`ref-endorse ${c.userEndorsed ? 'endorsed' : ''}`}
                           data-citation-id={c.id}
@@ -604,6 +619,69 @@ export function ArticleReaderPage({
                   btn.querySelector('.ref-endorse-count').textContent = data.count || '';
                 }
               } catch(e) {}
+            });
+          });
+
+          // "Your Network" trust view toggle
+          let networkScoresCache = null;
+          const toggleBtns = document.querySelectorAll('#trust-toggle .trust-toggle-btn');
+          const refList = document.getElementById('ref-list');
+          
+          toggleBtns.forEach(btn => {
+            btn.addEventListener('click', async () => {
+              toggleBtns.forEach(b => b.classList.remove('active'));
+              btn.classList.add('active');
+              const view = btn.dataset.view;
+
+              if (view === 'network') {
+                // Fetch network scores if not cached
+                if (!networkScoresCache) {
+                  try {
+                    const res = await fetch('/api/network-scores?rkey=' + rkey);
+                    if (res.status === 401) { location.href = '/login'; return; }
+                    networkScoresCache = await res.json();
+                  } catch(e) {
+                    console.error('Failed to fetch network scores', e);
+                    return;
+                  }
+                }
+                // Apply network scores and re-sort
+                const items = [...refList.querySelectorAll('.ref-item')];
+                const scoreMap = {};
+                (networkScoresCache.scores || []).forEach(s => { scoreMap[s.citationId] = s.networkScore; });
+                
+                items.forEach(item => {
+                  const cid = Number(item.dataset.cid);
+                  const ns = scoreMap[cid] || 0;
+                  item.dataset.networkScore = ns;
+                  item.classList.toggle('network-boosted', ns > 0);
+                  // Add or update network score badge
+                  let badge = item.querySelector('.network-score');
+                  if (ns > 0) {
+                    if (!badge) {
+                      badge = document.createElement('span');
+                      badge.className = 'network-score';
+                      item.querySelector('.ref-meta')?.appendChild(badge);
+                    }
+                    badge.textContent = '⚡ ' + ns + ' trust';
+                  } else if (badge) {
+                    badge.remove();
+                  }
+                });
+                // Sort by network score desc, then endorsements
+                items.sort((a, b) => (Number(b.dataset.networkScore) - Number(a.dataset.networkScore)) || (Number(b.dataset.endorsements) - Number(a.dataset.endorsements)));
+                items.forEach(item => refList.appendChild(item));
+              } else {
+                // Reset to global order
+                const items = [...refList.querySelectorAll('.ref-item')];
+                items.forEach(item => {
+                  item.classList.remove('network-boosted');
+                  const badge = item.querySelector('.network-score');
+                  if (badge) badge.remove();
+                });
+                items.sort((a, b) => Number(a.dataset.order) - Number(b.dataset.order));
+                items.forEach(item => refList.appendChild(item));
+              }
             });
           });
         `}} />

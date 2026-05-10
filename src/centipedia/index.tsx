@@ -117,6 +117,38 @@ async function fetchAndSetTitle(citationId: number, url: string): Promise<void> 
   }
 }
 
+/**
+ * Write an endorsement record to the user's PDS (fire-and-forget).
+ * This makes endorsements portable across apps in the AT Protocol.
+ */
+async function writeEndorsementRecord(
+  c: any,
+  sessionDid: string,
+  collection: string,
+  record: Record<string, any>
+): Promise<void> {
+  try {
+    const oauthSession = await restoreSession(c, sessionDid);
+    if (!oauthSession) return;
+    const agent = new Agent(oauthSession as any);
+    const tid = Date.now().toString(36) + Math.random().toString(36).substring(2, 7);
+    await agent.com.atproto.repo.createRecord({
+      repo: sessionDid,
+      collection,
+      rkey: tid,
+      record: {
+        $type: collection,
+        ...record,
+        createdAt: new Date().toISOString(),
+      },
+    });
+    logger.info({ collection, sessionDid }, 'Wrote endorsement record to PDS');
+  } catch (err: any) {
+    // Non-fatal — the DB endorsement is the source of truth
+    logger.debug({ err, collection }, 'Failed to write endorsement to PDS (non-fatal)');
+  }
+}
+
 app.get('/', async (c) => {
   const sessionDid = await getSession(c);
   const docId = c.req.query('doc');
@@ -814,6 +846,8 @@ app.post('/api/endorse/citation', async (c) => {
         'INSERT INTO centipedia_endorsement_citations (did, citation_id) VALUES ($1, $2)',
         [sessionDid, citationId]
       );
+      // Write to PDS for portability
+      writeEndorsementRecord(c, sessionDid, 'site.centipedia.endorsement.citation', { subject: String(citationId) }).catch(() => {});
       const { rows: [{ count }] } = await db.query(
         'SELECT count(*) FROM centipedia_endorsement_citations WHERE citation_id = $1',
         [citationId]
@@ -858,6 +892,7 @@ app.post('/api/endorse/submitter', async (c) => {
         'INSERT INTO centipedia_endorsement_submitters (did, subject, topic) VALUES ($1, $2, $3)',
         [sessionDid, subjectDid, topicVal]
       );
+      writeEndorsementRecord(c, sessionDid, 'site.centipedia.endorsement.submitter', { subject: subjectDid, ...(topicVal ? { topic: topicVal } : {}) }).catch(() => {});
       const { rows: [{ count }] } = await db.query(
         'SELECT count(*) FROM centipedia_endorsement_submitters WHERE subject = $1',
         [subjectDid]
@@ -902,6 +937,7 @@ app.post('/api/endorse/domain', async (c) => {
         'INSERT INTO centipedia_endorsement_sources (did, domain, topic) VALUES ($1, $2, $3)',
         [sessionDid, normalizedDomain, topicVal]
       );
+      writeEndorsementRecord(c, sessionDid, 'site.centipedia.endorsement.source', { domain: normalizedDomain, ...(topicVal ? { topic: topicVal } : {}) }).catch(() => {});
       const { rows: [{ count }] } = await db.query(
         'SELECT count(*) FROM centipedia_endorsement_sources WHERE domain = $1',
         [normalizedDomain]
@@ -911,6 +947,90 @@ app.post('/api/endorse/domain', async (c) => {
   } catch (err: any) {
     logger.error({ err }, 'Failed to toggle domain endorsement');
     return c.json({ error: 'Failed to endorse' }, 500);
+  }
+});
+
+// --- "Your Network" trust-weighted scores API ---
+
+app.get('/api/network-scores', async (c) => {
+  const sessionDid = await getSession(c);
+  if (!sessionDid) return c.json({ error: 'Not authenticated' }, 401);
+
+  const rkey = c.req.query('rkey');
+  if (!rkey) return c.json({ error: 'Missing rkey' }, 400);
+
+  try {
+    // Step 1: Get people the viewer has endorsed (their trust graph)
+    const { rows: trustedPeople } = await db.query(
+      'SELECT DISTINCT subject FROM centipedia_endorsement_submitters WHERE did = $1',
+      [sessionDid]
+    );
+    const trustedDids = trustedPeople.map((r: any) => r.subject);
+
+    // Step 2: Get domains the viewer trusts
+    const { rows: trustedDomainRows } = await db.query(
+      'SELECT DISTINCT domain FROM centipedia_endorsement_sources WHERE did = $1',
+      [sessionDid]
+    );
+    const trustedDomains = trustedDomainRows.map((r: any) => r.domain);
+
+    // Step 3: For each citation on this article, compute network score
+    const { rows: citations } = await db.query(
+      `SELECT c.id, c.url, c.submitted_by,
+         (SELECT count(*) FROM centipedia_endorsement_citations e WHERE e.citation_id = c.id) AS global_endorsements
+       FROM centipedia_citations c
+       WHERE c.article_rkey = $1 AND c.status = 'accepted'`,
+      [rkey]
+    );
+
+    const scores = await Promise.all(citations.map(async (cit: any) => {
+      let networkScore = 0;
+
+      // Points from trusted people endorsing this citation
+      if (trustedDids.length > 0) {
+        const { rows: [{ count: trustedEndorsements }] } = await db.query(
+          `SELECT count(*) FROM centipedia_endorsement_citations
+           WHERE citation_id = $1 AND did = ANY($2::text[])`,
+          [cit.id, trustedDids]
+        );
+        networkScore += Number(trustedEndorsements) * 3; // 3x weight for trusted endorsers
+      }
+
+      // Points if submitted by a trusted person
+      if (cit.submitted_by && trustedDids.includes(cit.submitted_by)) {
+        networkScore += 2;
+      }
+
+      // Points if from a trusted domain
+      try {
+        const citDomain = new URL(cit.url).hostname.replace(/^www\./, '');
+        if (trustedDomains.includes(citDomain)) {
+          networkScore += 1;
+        }
+      } catch {}
+
+      // Viewer's own endorsement
+      const { rows: ownEndorse } = await db.query(
+        'SELECT id FROM centipedia_endorsement_citations WHERE did = $1 AND citation_id = $2',
+        [sessionDid, cit.id]
+      );
+      if (ownEndorse.length > 0) networkScore += 5; // highest weight for own endorsement
+
+      return {
+        citationId: cit.id,
+        globalScore: Number(cit.global_endorsements),
+        networkScore,
+      };
+    }));
+
+    return c.json({
+      scores,
+      networkSize: trustedDids.length,
+      trustedDomains: trustedDomains.length,
+    });
+  } catch (err: any) {
+    logger.error({ err }, 'Failed to compute network scores');
+    return c.json({ error: 'Internal error' }, 500);
   }
 });
 
