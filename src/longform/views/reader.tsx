@@ -137,6 +137,20 @@ export function ReaderPage(doc: LeafletDocument, authorDid: string, profile: any
   return html`
     <article class="prose" style="margin-top: 2rem;">
       <header style="margin-bottom: 3rem;">
+        ${originalUrl ? html`
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; padding: 0.75rem 1.25rem; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 12px; font-family: var(--font-sans);">
+            <div style="display: flex; align-items: center; gap: 0.75rem;">
+              <div style="display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; background: var(--bg); border-radius: 6px; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
+                <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
+              </div>
+              <span style="font-weight: 700; font-size: 21px;">${pubTitle || 'External Publication'}</span>
+            </div>
+            <a href="${originalUrl}" target="_blank" rel="noopener noreferrer" style="color: var(--text-main); font-weight: 600; font-size: 14px; text-decoration: none; display: flex; align-items: center; gap: 0.35rem; padding: 0.4rem 0.8rem; border: 1px solid var(--border); border-radius: 99px; transition: background 0.15s;" onmouseover="this.style.background='var(--bg)'" onmouseout="this.style.background='transparent'">
+              Visit Post
+              <svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" stroke-width="2.5" fill="none"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+            </a>
+          </div>
+        ` : ''}
         <h1 style="font-family: var(--font-sans); font-size: 42px; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 1.5rem; line-height: 1.2;">
           ${doc.title}
         </h1>
@@ -164,21 +178,6 @@ export function ReaderPage(doc: LeafletDocument, authorDid: string, profile: any
       </header>
       
       <div class="content">
-        ${originalUrl ? html`
-          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 2rem; padding: 1rem 1.5rem; background: var(--bg-secondary); border-radius: 8px; font-family: var(--font-sans);">
-            <div style="display: flex; align-items: center; gap: 0.75rem;">
-              <div style="display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; background: var(--bg); border-radius: 6px; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
-                <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
-              </div>
-              <span style="font-weight: 600; font-size: 15px;">${pubTitle || 'External Publication'}</span>
-            </div>
-            <a href="${originalUrl}" target="_blank" rel="noopener noreferrer" style="color: var(--text-main); font-weight: 600; font-size: 13px; text-decoration: none; display: flex; align-items: center; gap: 0.35rem; padding: 0.4rem 0.8rem; border: 1px solid var(--border); border-radius: 99px; transition: background 0.15s;" onmouseover="this.style.background='var(--bg)'" onmouseout="this.style.background='transparent'">
-              Visit Post
-              <svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" stroke-width="2.5" fill="none"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
-            </a>
-          </div>
-        ` : ''}
-        
         ${isMarkdownString 
           ? rawMarkdown.split('\\n\\n').map(p => html`<p style="margin-top: 1.25rem; margin-bottom: 1.25rem; min-height: 1.5rem; word-break: break-word;">${raw(p.replace(/\\n/g, '<br />'))}</p>`)
           : renderLeafletBlocks(blocks, authorDid)}
