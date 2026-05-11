@@ -172,6 +172,25 @@ export function ReaderPage(doc: LeafletDocument, authorDid: string, profile: any
   const pubTitle = (doc as any).publicationTitle || null;
 
   return html`
+    <style>
+      .markdown-body img {
+        max-width: 100%;
+        height: auto;
+        border-radius: 8px;
+        display: block;
+        margin: 1.5rem auto;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      }
+      .markdown-body img ~ em {
+        display: block;
+        text-align: center;
+        font-size: 0.85em;
+        color: var(--text-muted);
+        margin-top: 0.5rem;
+        margin-bottom: 1.5rem;
+        line-height: 1.4;
+      }
+    </style>
     <article class="prose" style="margin-top: 2rem;">
       <header style="margin-bottom: 3rem;">
         ${originalUrl ? html`
