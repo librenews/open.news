@@ -504,6 +504,19 @@ app.get('/post/:did/:rkey', async (c) => {
         logger.warn({ err, uri: doc.site }, 'Failed to lookup publication details');
       }
     }
+
+    // Check if unsupported format for logging
+    let hasBlocks = false;
+    if (doc.content?.pages && doc.content.pages.length > 0) {
+      hasBlocks = (doc.content.pages[0].blocks || []).length > 0;
+    } else if (doc.pages && doc.pages.length > 0) {
+      hasBlocks = (doc.pages[0].blocks || []).length > 0;
+    }
+    const isMarkdownString = typeof doc.content === 'string';
+
+    if (!hasBlocks && !isMarkdownString) {
+      logger.warn({ did, rkey }, 'Encountered unsupported document format in native reader');
+    }
     
     // Extract description from first text block if no description is provided
     let excerpt = '';

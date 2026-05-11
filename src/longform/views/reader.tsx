@@ -180,7 +180,22 @@ export function ReaderPage(doc: LeafletDocument, authorDid: string, profile: any
       <div class="content">
         ${isMarkdownString 
           ? rawMarkdown.split('\\n\\n').map(p => html`<p style="margin-top: 1.25rem; margin-bottom: 1.25rem; min-height: 1.5rem; word-break: break-word;">${raw(p.replace(/\\n/g, '<br />'))}</p>`)
-          : renderLeafletBlocks(blocks, authorDid)}
+          : blocks.length > 0 
+            ? renderLeafletBlocks(blocks, authorDid)
+            : html`
+                <div style="text-align: center; padding: 4rem 2rem; background: var(--bg-secondary); border-radius: 12px; margin-top: 2rem;">
+                  <svg viewBox="0 0 24 24" width="48" height="48" stroke="var(--text-muted)" stroke-width="1.5" fill="none" style="margin-bottom: 1rem;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="9" y1="15" x2="15" y2="15"></line></svg>
+                  <h3 style="font-family: var(--font-sans); font-size: 1.25rem; font-weight: 600; margin-bottom: 0.5rem; color: var(--text-main);">Unsupported Format</h3>
+                  <p style="color: var(--text-secondary); margin-bottom: 1.5rem; max-width: 400px; margin-left: auto; margin-right: auto; line-height: 1.5;">This article uses a formatting structure that our native reader doesn't support yet. We've logged this format so we can add support for it soon!</p>
+                  ${originalUrl ? html`
+                    <a href="${originalUrl}" target="_blank" rel="noopener noreferrer" style="display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1.5rem; background: var(--accent); color: var(--bg); font-weight: 600; font-family: var(--font-sans); text-decoration: none; border-radius: 99px; transition: opacity 0.2s;" onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'">
+                      Read on Original Site
+                      <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2.5" fill="none"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+                    </a>
+                  ` : ''}
+                </div>
+              `
+        }
       </div>
     </article>
     
