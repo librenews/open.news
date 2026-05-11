@@ -514,7 +514,7 @@ app.get('/post/:did/:rkey', async (c) => {
     }
     const isMarkdownString = typeof doc.content === 'string';
 
-    if (!hasBlocks && !isMarkdownString) {
+    if (!hasBlocks && !isMarkdownString && !doc.textContent) {
       logger.warn({ did, rkey }, 'Encountered unsupported document format in native reader');
     }
     
