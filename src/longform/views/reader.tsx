@@ -159,7 +159,7 @@ export function ReaderPage(doc: LeafletDocument, authorDid: string, profile: any
       </header>
       
       <div class="content">
-        {originalUrl ? html`
+        ${originalUrl ? html`
           <div style="margin-bottom: 2rem; padding: 1rem; background: var(--bg-secondary); border-radius: 8px; font-size: 14px;">
             <span style="color: var(--text-muted);">This article was originally published at: </span>
             <a href="${originalUrl}" target="_blank" rel="noopener noreferrer" style="color: inherit; font-weight: 600;">${originalUrl}</a>
