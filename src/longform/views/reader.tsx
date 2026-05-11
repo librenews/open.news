@@ -3,21 +3,57 @@ import { LeafletDocument, LeafletBlock } from '../../weblog/lexicons.js';
 import { marked } from 'marked';
 
 function renderFacets(plaintext: string, facets: any[]) {
-  if (!facets || !Array.isArray(facets) || facets.length === 0) return plaintext;
+  const escapeHtml = (str: string) => str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   
-  let result = plaintext;
-  const isBold = facets.some(f => f?.features?.some?.((feat: any) => feat?.$type === 'pub.leaflet.richtext.facet#bold'));
-  const isItalic = facets.some(f => f?.features?.some?.((feat: any) => feat?.$type === 'pub.leaflet.richtext.facet#italic'));
-  const linkFacet = facets.find(f => f?.features?.some?.((feat: any) => feat?.$type === 'app.bsky.richtext.facet#link'));
+  if (!facets || !Array.isArray(facets) || facets.length === 0) return escapeHtml(plaintext);
   
-  if (isBold) result = `<b>${result}</b>`;
-  if (isItalic) result = `<i>${result}</i>`;
+  const buf = Buffer.from(plaintext, 'utf8');
+  let result = '';
   
-  if (linkFacet) {
-    const linkObj = linkFacet.features.find((feat: any) => feat?.$type === 'app.bsky.richtext.facet#link');
-    if (linkObj && linkObj.uri) {
-       result = `<a href="${linkObj.uri}" style="color: inherit;">${result}</a>`;
+  const points = new Set<number>();
+  points.add(0);
+  points.add(buf.length);
+  for (const f of facets) {
+    if (f.index && typeof f.index.byteStart === 'number') points.add(f.index.byteStart);
+    if (f.index && typeof f.index.byteEnd === 'number') points.add(f.index.byteEnd);
+  }
+  const boundaries = Array.from(points).sort((a, b) => a - b);
+  
+  for (let i = 0; i < boundaries.length - 1; i++) {
+    const start = boundaries[i];
+    const end = boundaries[i + 1];
+    if (start >= buf.length) break;
+    
+    const segmentBuf = buf.subarray(start, end);
+    let segmentText = escapeHtml(segmentBuf.toString('utf8'));
+    
+    const activeFeatures: any[] = [];
+    for (const f of facets) {
+      if (f.index && f.index.byteStart <= start && f.index.byteEnd >= end) {
+        if (f.features && Array.isArray(f.features)) {
+          activeFeatures.push(...f.features);
+        }
+      }
     }
+    
+    let isBold = false;
+    let isItalic = false;
+    let linkUrl = '';
+    let mentionDid = '';
+    
+    for (const feat of activeFeatures) {
+      if (feat.$type === 'pub.leaflet.richtext.facet#bold' || feat.$type === 'app.bsky.richtext.facet#bold') isBold = true;
+      if (feat.$type === 'pub.leaflet.richtext.facet#italic' || feat.$type === 'app.bsky.richtext.facet#italic') isItalic = true;
+      if (feat.$type === 'pub.leaflet.richtext.facet#link' || feat.$type === 'app.bsky.richtext.facet#link') linkUrl = feat.uri;
+      if (feat.$type === 'pub.leaflet.richtext.facet#mention' || feat.$type === 'app.bsky.richtext.facet#mention') mentionDid = feat.did;
+    }
+    
+    if (isBold) segmentText = `<b>${segmentText}</b>`;
+    if (isItalic) segmentText = `<i>${segmentText}</i>`;
+    if (linkUrl) segmentText = `<a href="${linkUrl}" target="_blank" rel="noopener noreferrer" style="color: inherit; text-decoration: underline;">${segmentText}</a>`;
+    if (mentionDid) segmentText = `<a href="/profile/${mentionDid}" style="color: var(--accent); text-decoration: none; font-weight: 500;">${segmentText}</a>`;
+    
+    result += segmentText;
   }
   
   return result;
