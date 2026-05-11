@@ -563,7 +563,43 @@ app.get('/post/:did/:rkey/source', async (c) => {
     if (!result) {
       return c.json({ error: 'Not found' }, 404);
     }
-    return c.json(result.record);
+    return c.html(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="utf-8">
+          <title>Raw Record Source</title>
+          <style>
+            body { background: #1a1a1a; color: #e5e5e5; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; padding: 2rem; line-height: 1.5; margin: 0; }
+            pre { margin: 0; white-space: pre-wrap; word-break: break-word; font-size: 14px; }
+            .key { color: #81a1c1; }
+            .string { color: #a3be8c; }
+            .number { color: #b48ead; }
+            .boolean { color: #d08770; }
+            .null { color: #bf616a; }
+          </style>
+        </head>
+        <body>
+          <pre>${JSON.stringify(result.record, null, 2)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/("(\\\\u[a-zA-Z0-9]{4}|\\\\[^u]|[^\\\\"])*"(\\s*:)?|\\b(true|false|null)\\b|-?\\d+(?:\\.\\d*)?(?:[eE][+\\-]?\\d+)?)/g, function (match) {
+              let cls = 'number';
+              if (/^"/.test(match)) {
+                if (/:$/.test(match)) {
+                  cls = 'key';
+                } else {
+                  cls = 'string';
+                }
+              } else if (/true|false/.test(match)) {
+                cls = 'boolean';
+              } else if (/null/.test(match)) {
+                cls = 'null';
+              }
+              return '<span class="' + cls + '">' + match + '</span>';
+            })}</pre>
+        </body>
+      </html>
+    `);
   } catch (err: any) {
     return c.json({ error: err.message }, 500);
   }
