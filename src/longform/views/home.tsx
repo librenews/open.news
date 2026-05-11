@@ -49,7 +49,7 @@ function StoryCard({ story, domain }: { story: LongformStory; domain: string }) 
     <article class="story-card">
       <div class="story-card-inner">
         <div class="story-card-text">
-          <a href={readUrl} class="story-link" target="_blank" rel="noopener noreferrer">
+          <a href={readUrl} class="story-link">
             <h3 class="story-title">{story.title || 'Untitled'}</h3>
             {story.description && (
               <p class="story-excerpt">{story.description.length > 200 ? story.description.substring(0, 200) + '…' : story.description}</p>
@@ -80,7 +80,7 @@ function StoryCard({ story, domain }: { story: LongformStory; domain: string }) 
         </div>
         </div>
         {story.imageUrl && (
-          <a href={readUrl} class="story-thumb" target="_blank" rel="noopener noreferrer">
+          <a href={readUrl} class="story-thumb">
             <img src={story.imageUrl} alt="" loading="lazy" />
           </a>
         )}

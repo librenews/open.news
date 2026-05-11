@@ -623,7 +623,7 @@ export function ProfilePage({
               return (
                 <div class="story-item">
                   <div class="story-item-content">
-                    <a href={readUrl} target="_blank" rel="noopener noreferrer">
+                    <a href={readUrl}>
                       <h3 class="story-item-title">{s.title || 'Untitled'}</h3>
                       {s.description && (
                         <p class="story-item-excerpt">
@@ -640,7 +640,7 @@ export function ProfilePage({
                     </a>
                   </div>
                   {s.imageUrl && (
-                    <a href={readUrl} class="story-item-thumb" target="_blank" rel="noopener noreferrer">
+                    <a href={readUrl} class="story-item-thumb">
                       <img src={s.imageUrl} alt="" loading="lazy" />
                     </a>
                   )}

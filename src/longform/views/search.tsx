@@ -569,7 +569,7 @@ export function SearchPage({
 
                   return (
                     <div class="result-card">
-                      <a href={readUrl} class="result-link" target="_blank" rel="noopener noreferrer">
+                      <a href={readUrl} class="result-link">
                         <h3 class="result-title">{r.title || 'Untitled'}</h3>
                         {r.highlight && (
                           <div class="result-highlight" dangerouslySetInnerHTML={{__html: r.highlight}} />
