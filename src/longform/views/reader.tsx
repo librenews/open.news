@@ -1,5 +1,6 @@
 import { html, raw } from 'hono/html';
 import { LeafletDocument, LeafletBlock } from '../../weblog/lexicons.js';
+import { marked } from 'marked';
 
 function renderFacets(plaintext: string, facets: any[]) {
   if (!facets || !Array.isArray(facets) || facets.length === 0) return plaintext;
@@ -181,13 +182,15 @@ export function ReaderPage(doc: LeafletDocument, authorDid: string, profile: any
         </div>
       </header>
       
-      <div class="content">
+      <div class="content markdown-body" style="font-size: 18px; line-height: 1.6;">
         ${isMarkdownString 
-          ? rawMarkdown.split('\\n\\n').map(p => html`<p style="margin-top: 1.25rem; margin-bottom: 1.25rem; min-height: 1.5rem; word-break: break-word;">${raw(p.replace(/\\n/g, '<br />'))}</p>`)
+          ? raw(marked.parse(rawMarkdown, { async: false }) as string)
           : blocks.length > 0 
             ? renderLeafletBlocks(blocks, authorDid)
             : (doc as any).textContent
-              ? (doc as any).textContent.split('\\n\\n').map((p: string) => html`<p style="margin-top: 1.25rem; margin-bottom: 1.25rem; min-height: 1.5rem; word-break: break-word;">${raw(p.replace(/\\n/g, '<br />'))}</p>`)
+              ? (/^#{1,6}\s|^\*\s|^\d+\.\s|\*\*|__|_|`|\[.*\]\(.*\)/m.test((doc as any).textContent))
+                ? raw(marked.parse((doc as any).textContent, { async: false }) as string)
+                : (doc as any).textContent.split('\\n\\n').map((p: string) => html`<p style="margin-top: 1.25rem; margin-bottom: 1.25rem; min-height: 1.5rem; word-break: break-word;">${raw(p.replace(/\\n/g, '<br />'))}</p>`)
               : html`
                   <div style="text-align: center; padding: 4rem 2rem; background: var(--bg-secondary); border-radius: 12px; margin-top: 2rem;">
                     <svg viewBox="0 0 24 24" width="48" height="48" stroke="var(--text-muted)" stroke-width="1.5" fill="none" style="margin-bottom: 1rem;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="9" y1="15" x2="15" y2="15"></line></svg>
