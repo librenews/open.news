@@ -550,6 +550,25 @@ app.get('/post/:did/:rkey', async (c) => {
   }
 });
 
+app.get('/post/:did/:rkey/source', async (c) => {
+  const did = c.req.param('did');
+  const rkey = c.req.param('rkey');
+  
+  try {
+    const result = await getCachedRecordMulti(
+      did,
+      ['site.standard.document', 'pub.leaflet.document', 'com.whtwnd.blog.entry'],
+      rkey
+    );
+    if (!result) {
+      return c.json({ error: 'Not found' }, 404);
+    }
+    return c.json(result.record);
+  } catch (err: any) {
+    return c.json({ error: err.message }, 500);
+  }
+});
+
 app.get('/blob/:did/:cid', async (c) => {
   const did = c.req.param('did');
   const cid = c.req.param('cid');

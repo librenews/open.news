@@ -173,6 +173,10 @@ export function ReaderPage(doc: LeafletDocument, authorDid: string, profile: any
               <svg id="icon-repost" viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none"><path d="M17 1l4 4-4 4"></path><path d="M3 11V9a4 4 0 0 1 4-4h14"></path><path d="M7 23l-4-4 4-4"></path><path d="M21 13v2a4 4 0 0 1-4 4H3"></path></svg>
               <span id="count-repost">Repost</span>
             </button>
+            <a href="/post/${authorDid}/${rkey}/source" target="_blank" rel="noopener noreferrer" style="background: none; border: none; cursor: pointer; color: inherit; text-decoration: none; display: flex; align-items: center; gap: 0.4rem; font-family: var(--font-sans); font-size: 14px; transition: color 0.2s;" onmouseover="this.style.color='var(--text-main)'" onmouseout="this.style.color='inherit'" title="View raw AT Protocol record">
+              <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
+              <span>Source</span>
+            </a>
           </div>
         </div>
       </header>
