@@ -123,7 +123,20 @@ app.get('/api/admin/citations', async (c) => {
   const { rows: junctionRows } = await db.query(
     'SELECT * FROM centipedia_article_citations ORDER BY created_at DESC LIMIT 20'
   );
-  return c.json({ citations, junction: junctionRows });
+  // Run the actual regen candidate query for debugging
+  const { rows: regenCandidates } = await db.query(
+    `SELECT c.id, c.topic, c.status,
+       (SELECT ac.article_rkey FROM centipedia_article_citations ac
+        JOIN centipedia_citations c2 ON c2.id = ac.citation_id
+        WHERE lower(c2.topic) = lower(c.topic) LIMIT 1) AS existing_rkey,
+       NOT EXISTS (SELECT 1 FROM centipedia_article_citations ac WHERE ac.citation_id = c.id) AS unlinked,
+       EXISTS (SELECT 1 FROM centipedia_article_citations ac2
+         JOIN centipedia_citations c2 ON c2.id = ac2.citation_id
+         WHERE lower(c2.topic) = lower(c.topic)) AS has_article
+     FROM centipedia_citations c
+     WHERE c.status = 'accepted' AND c.topic IS NOT NULL`
+  );
+  return c.json({ citations, junction: junctionRows, regenCandidates });
 });
 
 // --- Health endpoint ---
