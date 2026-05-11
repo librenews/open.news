@@ -122,6 +122,10 @@ async function processPendingCitations(): Promise<number> {
     let topic = cit.topic;
     if (!topic) {
       topic = await inferTopic(content.title, content.text);
+    }
+    // Normalize topic to title case for consistent matching
+    topic = topic.trim().split(/\s+/).map((w: string) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+    if (topic !== cit.topic) {
       await db.query(
         'UPDATE centipedia_citations SET topic = $1 WHERE id = $2',
         [topic, cit.id]
@@ -183,7 +187,7 @@ async function checkAndSynthesizeArticles(): Promise<number> {
        AND NOT EXISTS (
          SELECT 1 FROM centipedia_article_citations ac2
          JOIN centipedia_citations c2 ON c2.id = ac2.citation_id
-         WHERE c2.topic = c.topic
+         WHERE lower(c2.topic) = lower(c.topic)
        )
      GROUP BY c.topic
      HAVING count(*) >= $1
@@ -209,7 +213,7 @@ async function synthesizeArticle(topic: string): Promise<void> {
   // Gather all accepted citations for this topic that aren't yet linked to any article
   const { rows: citations } = await db.query(
     `SELECT c.id, c.url, c.title, c.excerpt FROM centipedia_citations c
-     WHERE c.status = 'accepted' AND c.topic = $1
+     WHERE c.status = 'accepted' AND lower(c.topic) = lower($1)
        AND NOT EXISTS (SELECT 1 FROM centipedia_article_citations ac WHERE ac.citation_id = c.id)
      ORDER BY c.created_at ASC`,
     [topic]
@@ -560,7 +564,7 @@ export async function checkAndRegenerateArticles(): Promise<number> {
     `SELECT c.topic,
        (SELECT ac.article_rkey FROM centipedia_article_citations ac
         JOIN centipedia_citations c2 ON c2.id = ac.citation_id
-        WHERE c2.topic = c.topic LIMIT 1) AS existing_rkey,
+        WHERE lower(c2.topic) = lower(c.topic) LIMIT 1) AS existing_rkey,
        count(*) AS new_count
      FROM centipedia_citations c
      WHERE c.status = 'accepted' AND c.topic IS NOT NULL
@@ -570,7 +574,7 @@ export async function checkAndRegenerateArticles(): Promise<number> {
        AND EXISTS (
          SELECT 1 FROM centipedia_article_citations ac2
          JOIN centipedia_citations c2 ON c2.id = ac2.citation_id
-         WHERE c2.topic = c.topic
+         WHERE lower(c2.topic) = lower(c.topic)
        )
      GROUP BY c.topic
      HAVING count(*) >= $1
@@ -598,7 +602,7 @@ async function regenerateArticle(topic: string, rkey: string): Promise<void> {
     `SELECT c.id, c.url, c.title, c.excerpt,
        EXISTS (SELECT 1 FROM centipedia_article_citations ac WHERE ac.citation_id = c.id AND ac.article_rkey = $2) AS already_linked
      FROM centipedia_citations c
-     WHERE c.status = 'accepted' AND c.topic = $1
+     WHERE c.status = 'accepted' AND lower(c.topic) = lower($1)
      ORDER BY c.created_at ASC`,
     [topic, rkey]
   );
