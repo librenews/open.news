@@ -498,7 +498,7 @@ app.get('/post/:did/:rkey', async (c) => {
         const { rows } = await db.query('SELECT url, raw_record FROM site_publications WHERE uri = $1', [doc.site]);
         if (rows.length > 0) {
           doc.publicationUrl = rows[0].url;
-          doc.publicationTitle = rows[0].raw_record?.title || null;
+          doc.publicationTitle = rows[0].raw_record?.name || rows[0].raw_record?.title || null;
         } else {
           // Fallback: fetch from PDS on-demand if not in DB
           const [siteDid, , siteRkey] = doc.site.replace('at://', '').split('/');
@@ -513,7 +513,7 @@ app.get('/post/:did/:rkey', async (c) => {
             const pubUrl = (pdsRes.data.value as any).url;
             if (pubUrl && typeof pubUrl === 'string') {
               doc.publicationUrl = pubUrl;
-              doc.publicationTitle = (pdsRes.data.value as any).title || null;
+              doc.publicationTitle = (pdsRes.data.value as any).name || (pdsRes.data.value as any).title || null;
               await db.query(
                 'INSERT INTO site_publications (uri, url, raw_record) VALUES ($1, $2, $3) ON CONFLICT (uri) DO NOTHING',
                 [doc.site, pubUrl, pdsRes.data.value]
@@ -578,7 +578,7 @@ app.get('/post/:did/:rkey/source', async (c) => {
   try {
     const result = await getCachedRecordMulti(
       did,
-      ['site.standard.document', 'pub.leaflet.document', 'com.whtwnd.blog.entry'],
+      ['site.standard.document', 'pub.leaflet.document', 'com.whtwnd.blog.entry', 'site.standard.publication'],
       rkey
     );
     if (!result) {
