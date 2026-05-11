@@ -95,6 +95,21 @@ async function resolveTopicSlug(slug: string): Promise<string | null> {
   return null;
 }
 
+// --- Admin: manual regen trigger ---
+app.post('/api/admin/regen', async (c) => {
+  const sessionDid = await getSession(c);
+  if (!sessionDid) return c.json({ error: 'Unauthorized' }, 401);
+  
+  try {
+    const { checkAndRegenerateArticles } = await import('./agents/research.js');
+    const regenerated = await checkAndRegenerateArticles();
+    return c.json({ success: true, regenerated });
+  } catch (err: any) {
+    logger.error({ err }, 'Manual regen failed');
+    return c.json({ error: err.message }, 500);
+  }
+});
+
 // --- Health endpoint ---
 app.get('/health', async (c) => {
   try {

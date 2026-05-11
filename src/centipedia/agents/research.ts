@@ -554,7 +554,7 @@ function injectKeywordFacets(
 
 const MIN_NEW_CITATIONS_FOR_REGEN = 1;
 
-async function checkAndRegenerateArticles(): Promise<number> {
+export async function checkAndRegenerateArticles(): Promise<number> {
   // Find topics where new accepted citations exist but aren't linked to the existing article
   const { rows: regenTopics } = await db.query(
     `SELECT c.topic,
@@ -756,11 +756,11 @@ async function tick() {
       if (articles > 0) {
         logger.info({ articles }, 'Synthesis cycle produced new articles');
       }
-      // Also check if existing articles need regeneration
-      const regenerated = await checkAndRegenerateArticles();
-      if (regenerated > 0) {
-        logger.info({ regenerated }, 'Regeneration cycle updated articles');
-      }
+    }
+    // Always check regeneration — not just after accepting new citations
+    const regenerated = await checkAndRegenerateArticles();
+    if (regenerated > 0) {
+      logger.info({ regenerated }, 'Regeneration cycle updated articles');
     }
   } catch (err: any) {
     logger.error({ err }, 'Research agent tick failed');
