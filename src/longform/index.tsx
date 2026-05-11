@@ -492,6 +492,18 @@ app.get('/post/:did/:rkey', async (c) => {
     
     const doc = result.record as any;
     doc.rkey = rkey;
+
+    if (doc.site && doc.site.startsWith('at://')) {
+      try {
+        const { rows } = await db.query('SELECT url, raw_record FROM site_publications WHERE uri = $1', [doc.site]);
+        if (rows.length > 0) {
+          doc.publicationUrl = rows[0].url;
+          doc.publicationTitle = rows[0].raw_record?.title || null;
+        }
+      } catch (err) {
+        logger.warn({ err, uri: doc.site }, 'Failed to lookup publication details');
+      }
+    }
     
     // Extract description from first text block if no description is provided
     let excerpt = '';
