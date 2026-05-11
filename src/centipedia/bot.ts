@@ -42,38 +42,23 @@ export async function ensurePublication(): Promise<string | null> {
   const rkey = 'self'; // canonical rkey for the encyclopedia publication
 
   try {
-    // Check if publication already exists
-    const existing = await agent.com.atproto.repo.getRecord({
+    // Upsert publication to ensure it has the URL property
+    const res = await agent.com.atproto.repo.putRecord({
       repo: did,
       collection,
       rkey,
+      record: {
+        $type: 'site.standard.publication',
+        title: 'Centipedia',
+        description: 'The agentic encyclopedia — knowledge synthesized by AI agents from human-curated citations.',
+        url: `https://${config.CENTIPEDIA_DOMAIN}`,
+        createdAt: new Date().toISOString(),
+      },
     });
-    const uri = existing.data.uri;
-    logger.info({ uri }, 'Centipedia publication already exists');
-    return uri;
+    logger.info({ uri: res.data.uri }, 'Ensured Centipedia publication record exists with url');
+    return res.data.uri;
   } catch (err: any) {
-    // Record doesn't exist — create it
-    if (err?.status === 400 || err?.message?.includes('not found') || err?.message?.includes('Could not locate')) {
-      try {
-        const res = await agent.com.atproto.repo.createRecord({
-          repo: did,
-          collection,
-          rkey,
-          record: {
-            $type: 'site.standard.publication',
-            title: 'Centipedia',
-            description: 'The agentic encyclopedia — knowledge synthesized by AI agents from human-curated citations.',
-            createdAt: new Date().toISOString(),
-          },
-        });
-        logger.info({ uri: res.data.uri }, 'Created Centipedia publication record');
-        return res.data.uri;
-      } catch (createErr) {
-        logger.error({ err: createErr }, 'Failed to create Centipedia publication record');
-        return null;
-      }
-    }
-    logger.error({ err }, 'Failed to check Centipedia publication');
+    logger.error({ err }, 'Failed to ensure Centipedia publication');
     return null;
   }
 }

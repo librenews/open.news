@@ -120,7 +120,7 @@ app.get('/', async (c) => {
   let queryParams: any[] = [];
 
   if (view === 'following' && followedPubUris.length > 0) {
-    queryText = `SELECT s.uri, s.author_did, s.title, s.description, s.published_at, s.site, s.path, s.word_count,
+    queryText = `SELECT s.uri, s.author_did, s.title, s.description, s.published_at, COALESCE(p.url, s.site) as site, s.path, s.word_count,
        split_part(s.uri, '/', 4) AS collection,
        CASE WHEN s.uri LIKE '%/site.standard.document/%' OR s.uri LIKE '%/pub.leaflet.document/%'
          THEN jsonb_path_query_first(s.raw_record, '$.content.pages[0].blocks[*].block ? (@."$type" == "pub.leaflet.blocks.image").image.ref."$link"') #>> '{}'
@@ -131,6 +131,7 @@ app.get('/', async (c) => {
          ELSE NULL
        END AS publication_uri
      FROM site_standard_articles s
+     LEFT JOIN site_publications p ON p.uri = s.raw_record->>'site'
      WHERE s.word_count > 100
        AND s.language = 'eng'
        AND s.raw_record->>'site' = ANY($1)
@@ -138,7 +139,7 @@ app.get('/', async (c) => {
      LIMIT 40`;
     queryParams = [followedPubUris];
   } else {
-    queryText = `SELECT s.uri, s.author_did, s.title, s.description, s.published_at, s.site, s.path, s.word_count,
+    queryText = `SELECT s.uri, s.author_did, s.title, s.description, s.published_at, COALESCE(p.url, s.site) as site, s.path, s.word_count,
        split_part(s.uri, '/', 4) AS collection,
        CASE WHEN s.uri LIKE '%/site.standard.document/%' OR s.uri LIKE '%/pub.leaflet.document/%'
          THEN jsonb_path_query_first(s.raw_record, '$.content.pages[0].blocks[*].block ? (@."$type" == "pub.leaflet.blocks.image").image.ref."$link"') #>> '{}'
@@ -149,6 +150,7 @@ app.get('/', async (c) => {
          ELSE NULL
        END AS publication_uri
      FROM site_standard_articles s
+     LEFT JOIN site_publications p ON p.uri = s.raw_record->>'site'
      WHERE s.word_count > 100
        AND s.language = 'eng'
      ORDER BY s.published_at DESC NULLS LAST
@@ -327,7 +329,7 @@ app.get('/profile/:identifier', async (c) => {
 
   // Fetch their articles
   const { rows } = await db.query(
-    `SELECT uri, author_did, title, description, published_at, site, path, word_count,
+    `SELECT uri, author_did, title, description, published_at, COALESCE(p.url, s.site) as site, path, word_count,
        split_part(uri, '/', 4) AS collection,
        CASE WHEN uri LIKE '%/site.standard.document/%' OR uri LIKE '%/pub.leaflet.document/%'
          THEN jsonb_path_query_first(raw_record, '$.content.pages[0].blocks[*].block ? (@."$type" == "pub.leaflet.blocks.image").image.ref."$link"') #>> '{}'
@@ -337,7 +339,8 @@ app.get('/profile/:identifier', async (c) => {
          THEN raw_record->>'site'
          ELSE NULL
        END AS publication_uri
-     FROM site_standard_articles
+     FROM site_standard_articles s
+     LEFT JOIN site_publications p ON p.uri = s.raw_record->>'site'
      WHERE author_did = $1
      ORDER BY published_at DESC`,
     [did]
