@@ -173,40 +173,43 @@ export function ArticleSourcePage({
         <style dangerouslySetInnerHTML={{ __html: BASE_STYLES + HEADER_STYLES + NAV_STYLES + SOURCE_STYLES }} />
       </head>
       <body>
-        <TopHeader domain={domain} sessionProfile={sessionProfile} />
-        <LeftNav activePath="/article" sessionProfile={sessionProfile} />
+        <TopHeader profile={sessionProfile} />
 
-        <main class="main-content">
-          <div class="source-container">
-            <div class="source-header">
-              <h1>
-                Source: <code>{rkey}</code>
-              </h1>
-              <div class="source-actions">
-                <a href={`/article/${rkey}`} class="source-btn">← Back to Article</a>
-                <button id="copy-btn" class="source-btn" onclick="copySource()">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
-                  Copy JSON
-                </button>
+        <div class="app-shell">
+          <LeftNav active="" profile={sessionProfile} />
+
+          <main class="center-content">
+            <div class="source-container">
+              <div class="source-header">
+                <h1>
+                  Source: <code>{rkey}</code>
+                </h1>
+                <div class="source-actions">
+                  <a href={`/article/${rkey}`} class="source-btn">← Back to Article</a>
+                  <button id="copy-btn" class="source-btn" onclick="copySource()">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+                    Copy JSON
+                  </button>
+                </div>
+              </div>
+
+              <div class="source-meta">
+                <div class="source-meta-item"><strong>Collection:</strong> {collection}</div>
+                <div class="source-meta-item"><strong>AT-URI:</strong> {atUri}</div>
+                <div class="source-meta-item"><strong>Size:</strong> {sizeLabel}</div>
+              </div>
+
+              <div class="source-block">
+                <pre><code id="source-code" dangerouslySetInnerHTML={{ __html: syntaxHighlight(recordJson) }} /></pre>
+              </div>
+
+              <div class="source-footer">
+                <span>AT Protocol record from</span>
+                <a href={`https://pds.${domain}`} target="_blank" rel="noopener">{did}</a>
               </div>
             </div>
-
-            <div class="source-meta">
-              <div class="source-meta-item"><strong>Collection:</strong> {collection}</div>
-              <div class="source-meta-item"><strong>AT-URI:</strong> {atUri}</div>
-              <div class="source-meta-item"><strong>Size:</strong> {sizeLabel}</div>
-            </div>
-
-            <div class="source-block">
-              <pre><code id="source-code" dangerouslySetInnerHTML={{ __html: syntaxHighlight(recordJson) }} /></pre>
-            </div>
-
-            <div class="source-footer">
-              <span>AT Protocol record from</span>
-              <a href={`https://pds.${domain}`} target="_blank" rel="noopener">{did}</a>
-            </div>
-          </div>
-        </main>
+          </main>
+        </div>
 
         <script dangerouslySetInnerHTML={{ __html: `
           var rawJson = ${JSON.stringify(recordJson)};
