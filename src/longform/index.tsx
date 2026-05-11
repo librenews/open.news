@@ -499,9 +499,30 @@ app.get('/post/:did/:rkey', async (c) => {
         if (rows.length > 0) {
           doc.publicationUrl = rows[0].url;
           doc.publicationTitle = rows[0].raw_record?.title || null;
+        } else {
+          // Fallback: fetch from PDS on-demand if not in DB
+          const [siteDid, , siteRkey] = doc.site.replace('at://', '').split('/');
+          const pdsEndpoint = await resolvePds(siteDid);
+          if (pdsEndpoint) {
+            const agent = new BskyAgent({ service: pdsEndpoint });
+            const pdsRes = await agent.com.atproto.repo.getRecord({
+              repo: siteDid,
+              collection: 'site.standard.publication',
+              rkey: siteRkey
+            });
+            const pubUrl = (pdsRes.data.value as any).url;
+            if (pubUrl && typeof pubUrl === 'string') {
+              doc.publicationUrl = pubUrl;
+              doc.publicationTitle = (pdsRes.data.value as any).title || null;
+              await db.query(
+                'INSERT INTO site_publications (uri, url, raw_record) VALUES ($1, $2, $3) ON CONFLICT (uri) DO NOTHING',
+                [doc.site, pubUrl, pdsRes.data.value]
+              );
+            }
+          }
         }
       } catch (err) {
-        logger.warn({ err, uri: doc.site }, 'Failed to lookup publication details');
+        logger.warn({ err, uri: doc.site }, 'Failed to lookup or fetch publication details');
       }
     }
 
