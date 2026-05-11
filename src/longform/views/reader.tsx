@@ -170,6 +170,8 @@ export function ReaderPage(doc: LeafletDocument, authorDid: string, profile: any
           : null;
 
   const pubTitle = (doc as any).publicationTitle || null;
+  const isWhiteWind = (doc as any).$type === 'com.whtwnd.blog.entry';
+  const defaultTitle = isWhiteWind ? 'WhiteWind' : 'External Publication';
 
   return html`
     <style>
@@ -199,7 +201,7 @@ export function ReaderPage(doc: LeafletDocument, authorDid: string, profile: any
               <div style="display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; background: var(--bg); border-radius: 6px; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
                 <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
               </div>
-              <span style="font-weight: 700; font-size: 21px;">${pubTitle || 'External Publication'}</span>
+              <span style="font-weight: 700; font-size: 21px;">${pubTitle || defaultTitle}</span>
             </div>
             <a href="${originalUrl}" target="_blank" rel="noopener noreferrer" style="color: var(--text-main); font-weight: 600; font-size: 14px; text-decoration: none; display: flex; align-items: center; gap: 0.35rem; padding: 0.4rem 0.8rem; border: 1px solid var(--border); border-radius: 99px; transition: background 0.15s;" onmouseover="this.style.background='var(--bg)'" onmouseout="this.style.background='transparent'">
               Visit Post
