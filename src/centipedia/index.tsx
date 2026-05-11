@@ -17,6 +17,7 @@ import { ProfilePage } from './views/profile.js';
 import { SearchPage } from './views/search.js';
 import { TopicPage } from './views/topic.js';
 import { NotFoundPage } from './views/notfound.js';
+import { ArticleSourcePage } from './views/source.js';
 import type { ProfileData, ProfileCitation, TrustStats, ContributedArticle } from './views/profile.js';
 import type { SearchResult } from './views/search.js';
 import { authRouter, getSession, getCentipediaAuthClient } from './routes/auth.js';
@@ -996,6 +997,44 @@ app.get('/article/:rkey', async (c) => {
     />) as unknown as string);
   } catch (err: any) {
     logger.error({ err, rkey }, 'Failed to load article');
+    return c.html((<NotFoundPage />) as unknown as string, 404);
+  }
+});
+
+// --- View Source (raw AT Protocol record) ---
+
+app.get('/article/:rkey/source', async (c) => {
+  const rkey = c.req.param('rkey');
+  const did = BOT_DID;
+
+  try {
+    const sessionDid = await getSession(c);
+    const sessionProfile = sessionDid ? await getCachedProfile(sessionDid) : undefined;
+
+    const result = await getCachedRecordMulti(
+      did,
+      ['site.standard.document', 'pub.leaflet.document'],
+      rkey,
+      BOT_DID
+    );
+    if (!result) {
+      return c.html((<Layout title="Not Found"><h1>Record Not Found</h1><p>No document found for rkey: {rkey}</p></Layout>) as unknown as string, 404);
+    }
+
+    const doc = result.record as any;
+    const recordJson = JSON.stringify(result, null, 2);
+
+    return c.html((<ArticleSourcePage
+      rkey={rkey}
+      did={did}
+      recordJson={recordJson}
+      collection={result.uri?.split('/')[3] || 'site.standard.document'}
+      title={doc.title || rkey}
+      domain={config.CENTIPEDIA_DOMAIN}
+      sessionProfile={sessionProfile}
+    />) as unknown as string);
+  } catch (err: any) {
+    logger.error({ err, rkey }, 'Failed to load article source');
     return c.html((<NotFoundPage />) as unknown as string, 404);
   }
 });

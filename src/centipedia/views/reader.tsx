@@ -325,6 +325,10 @@ h3.article-heading { font-size: 1.25rem; }
 .version-date { font-size: 0.65rem; color: var(--text-muted); }
 .version-summary { font-size: 0.7rem; color: var(--text-secondary); margin-top: 0.15rem; }
 .version-stats { font-size: 0.6rem; color: var(--text-muted); margin-top: 0.1rem; }
+.view-source-link { display: flex; align-items: center; gap: 0.35rem; margin-top: 0.75rem; padding-top: 0.5rem; border-top: 1px solid var(--border); font-size: 0.7rem; font-family: var(--font-sans); color: var(--text-muted); text-decoration: none; transition: color 0.15s ease; }
+.view-source-link:hover { color: var(--accent); }
+.view-source-link svg { opacity: 0.6; transition: opacity 0.15s ease; }
+.view-source-link:hover svg { opacity: 1; }
 
 @media (max-width: 1024px) { .article-sidebar { display: none; } }
 `;
@@ -645,7 +649,7 @@ export function ArticleReaderPage({
                   const d = new Date(v.created_at);
                   const dateStr = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) + ' at ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
                   return '<div class="version-item"><div class="version-header"><span class="version-label">v' + v.version + '</span><span class="version-date">' + dateStr + '</span></div><div class="version-summary">' + (v.summary || '') + '</div><div class="version-stats">' + v.word_count + ' words · ' + v.citations_used + ' sources</div></div>';
-                }).join('');
+                }).join('') + '<a href="/article/' + rkey + '/source" class="view-source-link"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg> View AT Protocol Source</a>';
               }
             } catch(e) {}
           })();
