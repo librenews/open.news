@@ -110,6 +110,22 @@ app.post('/api/admin/regen', async (c) => {
   }
 });
 
+// --- Admin: citation diagnostics ---
+app.get('/api/admin/citations', async (c) => {
+  const sessionDid = await getSession(c);
+  if (!sessionDid) return c.json({ error: 'Unauthorized' }, 401);
+
+  const { rows: citations } = await db.query(
+    `SELECT c.id, c.url, c.title, c.topic, c.status, c.agent_notes,
+       (SELECT string_agg(ac.article_rkey, ',') FROM centipedia_article_citations ac WHERE ac.citation_id = c.id) AS linked_articles
+     FROM centipedia_citations c ORDER BY c.created_at DESC LIMIT 30`
+  );
+  const { rows: junctionRows } = await db.query(
+    'SELECT * FROM centipedia_article_citations ORDER BY created_at DESC LIMIT 20'
+  );
+  return c.json({ citations, junction: junctionRows });
+});
+
 // --- Health endpoint ---
 app.get('/health', async (c) => {
   try {
