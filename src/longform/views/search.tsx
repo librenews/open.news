@@ -563,12 +563,7 @@ export function SearchPage({
                 results.map((r) => {
                   const rkey = r.uri.split('/').pop();
                   const collection = r.uri.split('/')[3];
-                  let readUrl: string;
-                  if (r.site && r.path && r.site.startsWith('http')) {
-                    readUrl = `${r.site}${r.path}`;
-                  } else {
-                    readUrl = `https://${domain}/post/${r.did}/${rkey}`;
-                  }
+                  const readUrl = `https://${domain}/post/${r.did}/${rkey}`;
                   const minRead = Math.max(1, Math.ceil(r.wordCount / 200));
                   const ago = timeAgo(r.publishedAt);
 

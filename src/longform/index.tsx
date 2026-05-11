@@ -172,12 +172,8 @@ app.get('/', async (c) => {
     const rkey = r.uri.split('/').pop();
     const collection = r.collection;
 
-    // Build the correct read URL per collection type
+    // StoryCard will use /post/:did/:rkey (native reader)
     let readUrl: string | null = null;
-    if (r.site && r.path && r.site.startsWith('http')) {
-      readUrl = `${r.site}${r.path}`;
-    }
-    // else null — StoryCard will use /post/:did/:rkey (native reader)
 
     return {
       uri: r.uri,
@@ -348,9 +344,6 @@ app.get('/profile/:identifier', async (c) => {
     const rkey = r.uri.split('/').pop();
     const collection = r.collection;
     let readUrl: string | null = null;
-    if (r.site && r.path && r.site.startsWith('http')) {
-      readUrl = `${r.site}${r.path}`;
-    }
     return {
       uri: r.uri,
       authorDid: r.author_did,
