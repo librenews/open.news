@@ -17,7 +17,7 @@ import { db } from '../../db/client.js';
 import { logger } from '../../lib/logger.js';
 import { llm } from '../../services/llm.js';
 import type { LLMMessage } from '../../services/llm.js';
-import { getCentipediaBot, announceArticle } from '../bot.js';
+import { getCentipediaBot, announceArticle, ensurePublication } from '../bot.js';
 import { config } from '../../lib/config.js';
 import { warmRecord, invalidateList } from '../../lib/pdsCache.js';
 
@@ -290,13 +290,24 @@ Write the article in plain text with ## headings for sections. Use plain paragra
     return;
   }
 
-  const record = {
+  // Ensure publication record exists and get its AT-URI
+  const publicationUri = await ensurePublication();
+
+  // Build textContent from all blocks for cross-reader compatibility
+  const textContent = blocks
+    .map((b: any) => b.block?.plaintext || '')
+    .filter(Boolean)
+    .join('\n');
+
+  const now = new Date().toISOString();
+  const record: any = {
     $type: 'site.standard.document',
     title: topic,
     description: articleText.substring(0, 200).trim() + '…',
-    publishedAt: new Date().toISOString(),
-    site: `https://${config.CENTIPEDIA_DOMAIN}`,
+    publishedAt: now,
+    updatedAt: now,
     path: `/article/${rkey}`,
+    textContent,
     content: {
       pages: [{
         $type: 'pub.leaflet.pages.linearDocument',
@@ -304,6 +315,9 @@ Write the article in plain text with ## headings for sections. Use plain paragra
       }]
     }
   };
+  if (publicationUri) {
+    record.site = publicationUri;
+  }
 
   try {
     const res = await bot.com.atproto.repo.putRecord({
@@ -651,13 +665,24 @@ RULES:
     return;
   }
 
-  const record = {
+  // Ensure publication record exists and get its AT-URI
+  const publicationUri = await ensurePublication();
+
+  // Build textContent from all blocks for cross-reader compatibility
+  const textContent = blocks
+    .map((b: any) => b.block?.plaintext || '')
+    .filter(Boolean)
+    .join('\n');
+
+  const now = new Date().toISOString();
+  const record: any = {
     $type: 'site.standard.document',
     title: topic,
     description: articleText.substring(0, 200).trim() + '…',
-    publishedAt: new Date().toISOString(),
-    site: `https://${config.CENTIPEDIA_DOMAIN}`,
+    publishedAt: now,
+    updatedAt: now,
     path: `/article/${rkey}`,
+    textContent,
     content: {
       pages: [{
         $type: 'pub.leaflet.pages.linearDocument',
@@ -665,6 +690,9 @@ RULES:
       }]
     }
   };
+  if (publicationUri) {
+    record.site = publicationUri;
+  }
 
   try {
     await bot.com.atproto.repo.putRecord({
