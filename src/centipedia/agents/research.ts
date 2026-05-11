@@ -174,10 +174,18 @@ async function inferTopic(title: string, text: string): Promise<string> {
 async function checkAndSynthesizeArticles(): Promise<number> {
   // Find topics with enough accepted citations that don't have an article yet
   const { rows: readyTopics } = await db.query(
-    `SELECT topic, count(*) AS cnt
-     FROM centipedia_citations
-     WHERE status = 'accepted' AND article_rkey IS NULL AND topic IS NOT NULL
-     GROUP BY topic
+    `SELECT c.topic, count(*) AS cnt
+     FROM centipedia_citations c
+     WHERE c.status = 'accepted' AND c.topic IS NOT NULL
+       AND NOT EXISTS (
+         SELECT 1 FROM centipedia_article_citations ac WHERE ac.citation_id = c.id
+       )
+       AND NOT EXISTS (
+         SELECT 1 FROM centipedia_article_citations ac2
+         JOIN centipedia_citations c2 ON c2.id = ac2.citation_id
+         WHERE c2.topic = c.topic
+       )
+     GROUP BY c.topic
      HAVING count(*) >= $1
      ORDER BY cnt DESC LIMIT 5`,
     [MIN_CITATIONS_FOR_ARTICLE]
@@ -198,11 +206,12 @@ async function checkAndSynthesizeArticles(): Promise<number> {
 }
 
 async function synthesizeArticle(topic: string): Promise<void> {
-  // Gather all accepted citations for this topic
+  // Gather all accepted citations for this topic that aren't yet linked to any article
   const { rows: citations } = await db.query(
-    `SELECT id, url, title, excerpt FROM centipedia_citations
-     WHERE status = 'accepted' AND article_rkey IS NULL AND topic = $1
-     ORDER BY created_at ASC`,
+    `SELECT c.id, c.url, c.title, c.excerpt FROM centipedia_citations c
+     WHERE c.status = 'accepted' AND c.topic = $1
+       AND NOT EXISTS (SELECT 1 FROM centipedia_article_citations ac WHERE ac.citation_id = c.id)
+     ORDER BY c.created_at ASC`,
     [topic]
   );
 
@@ -310,12 +319,14 @@ Write the article in plain text with ## headings for sections. Use plain paragra
     await warmRecord(bot.session.did, 'site.standard.document', rkey, record);
     await invalidateList(bot.session.did, 'site.standard.document');
 
-    // Link citations to the article
+    // Link citations to the article via junction table
     const citationIds = citations.map((c: any) => c.id);
-    await db.query(
-      `UPDATE centipedia_citations SET article_rkey = $1 WHERE id = ANY($2::int[])`,
-      [rkey, citationIds]
-    );
+    for (const cid of citationIds) {
+      await db.query(
+        `INSERT INTO centipedia_article_citations (citation_id, article_rkey) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+        [cid, rkey]
+      );
+    }
 
     // Save version snapshot with link keywords
     const wordCount = articleText.split(/\s+/).length;
@@ -530,14 +541,23 @@ function injectKeywordFacets(
 const MIN_NEW_CITATIONS_FOR_REGEN = 1;
 
 async function checkAndRegenerateArticles(): Promise<number> {
-  // Find topics where new accepted citations exist but aren't linked to the article yet
+  // Find topics where new accepted citations exist but aren't linked to the existing article
   const { rows: regenTopics } = await db.query(
-    `SELECT c.topic, 
-       (SELECT article_rkey FROM centipedia_citations WHERE topic = c.topic AND article_rkey IS NOT NULL LIMIT 1) AS existing_rkey,
+    `SELECT c.topic,
+       (SELECT ac.article_rkey FROM centipedia_article_citations ac
+        JOIN centipedia_citations c2 ON c2.id = ac.citation_id
+        WHERE c2.topic = c.topic LIMIT 1) AS existing_rkey,
        count(*) AS new_count
      FROM centipedia_citations c
-     WHERE c.status = 'accepted' AND c.article_rkey IS NULL AND c.topic IS NOT NULL
-       AND EXISTS (SELECT 1 FROM centipedia_citations c2 WHERE c2.topic = c.topic AND c2.article_rkey IS NOT NULL)
+     WHERE c.status = 'accepted' AND c.topic IS NOT NULL
+       AND NOT EXISTS (
+         SELECT 1 FROM centipedia_article_citations ac WHERE ac.citation_id = c.id
+       )
+       AND EXISTS (
+         SELECT 1 FROM centipedia_article_citations ac2
+         JOIN centipedia_citations c2 ON c2.id = ac2.citation_id
+         WHERE c2.topic = c.topic
+       )
      GROUP BY c.topic
      HAVING count(*) >= $1
      ORDER BY new_count DESC LIMIT 3`,
@@ -561,10 +581,12 @@ async function checkAndRegenerateArticles(): Promise<number> {
 async function regenerateArticle(topic: string, rkey: string): Promise<void> {
   // Gather ALL accepted citations for this topic (old + new)
   const { rows: allCitations } = await db.query(
-    `SELECT id, url, title, excerpt FROM centipedia_citations
-     WHERE status = 'accepted' AND topic = $1
-     ORDER BY created_at ASC`,
-    [topic]
+    `SELECT c.id, c.url, c.title, c.excerpt,
+       EXISTS (SELECT 1 FROM centipedia_article_citations ac WHERE ac.citation_id = c.id AND ac.article_rkey = $2) AS already_linked
+     FROM centipedia_citations c
+     WHERE c.status = 'accepted' AND c.topic = $1
+     ORDER BY c.created_at ASC`,
+    [topic, rkey]
   );
 
   if (allCitations.length < MIN_CITATIONS_FOR_ARTICLE) return;
@@ -658,12 +680,12 @@ RULES:
     await warmRecord(bot.session.did, 'site.standard.document', rkey, record);
     await invalidateList(bot.session.did, 'site.standard.document');
 
-    // Link the new citations to the article
-    const unlinkedIds = allCitations.filter((c: any) => !c.article_rkey).map((c: any) => c.id);
-    if (unlinkedIds.length > 0) {
+    // Link the new citations to the article via junction table
+    const unlinkedIds = allCitations.filter((c: any) => !c.already_linked).map((c: any) => c.id);
+    for (const cid of unlinkedIds) {
       await db.query(
-        `UPDATE centipedia_citations SET article_rkey = $1 WHERE id = ANY($2::int[])`,
-        [rkey, unlinkedIds]
+        `INSERT INTO centipedia_article_citations (citation_id, article_rkey) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+        [cid, rkey]
       );
     }
 

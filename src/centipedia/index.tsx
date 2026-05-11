@@ -348,8 +348,9 @@ app.get('/my-citations', async (c) => {
   const profile = await fetchUserProfile(sessionDid);
 
   const { rows: citations } = await db.query(
-    `SELECT c.id, c.url, c.title, c.topic, c.excerpt, c.status, c.created_at, c.article_rkey, c.agent_notes,
-       (SELECT count(*) FROM centipedia_endorsement_citations e WHERE e.citation_id = c.id) AS endorsements
+    `SELECT c.id, c.url, c.title, c.topic, c.excerpt, c.status, c.created_at, c.agent_notes,
+       (SELECT count(*) FROM centipedia_endorsement_citations e WHERE e.citation_id = c.id) AS endorsements,
+       (SELECT string_agg(ac.article_rkey, ',') FROM centipedia_article_citations ac WHERE ac.citation_id = c.id) AS article_rkeys
      FROM centipedia_citations c
      WHERE c.submitted_by = $1
      ORDER BY c.created_at DESC`,
@@ -362,7 +363,7 @@ app.get('/my-citations', async (c) => {
   const totalEndorsements = citations.reduce((sum: number, r: any) => sum + Number(r.endorsements), 0);
 
   return c.html((<MyCitationsPage
-    citations={citations.map((r: any) => ({ ...r, endorsements: Number(r.endorsements) }))}
+    citations={citations.map((r: any) => ({ ...r, endorsements: Number(r.endorsements), article_rkey: r.article_rkeys?.split(',')[0] || null }))}
     profile={profile}
     stats={{ total, accepted, pending, totalEndorsements }}
     botDid={BOT_DID}
@@ -443,11 +444,11 @@ app.get('/search', async (c) => {
     try {
       // Search centipedia articles (topics that have published articles)
       const { rows: articleHits } = await db.query(
-        `SELECT DISTINCT c.topic, c.article_rkey,
-           (SELECT count(*) FROM centipedia_citations cc WHERE cc.topic = c.topic AND cc.status = 'accepted') AS citation_count
-         FROM centipedia_citations c
-         WHERE c.article_rkey IS NOT NULL
-           AND (c.topic ILIKE '%' || $1 || '%' OR c.article_rkey ILIKE '%' || $1 || '%')
+        `SELECT DISTINCT ac.article_rkey, c.topic,
+           (SELECT count(*) FROM centipedia_article_citations ac2 WHERE ac2.article_rkey = ac.article_rkey) AS citation_count
+         FROM centipedia_article_citations ac
+         JOIN centipedia_citations c ON c.id = ac.citation_id
+         WHERE (c.topic ILIKE '%' || $1 || '%' OR ac.article_rkey ILIKE '%' || $1 || '%')
            AND c.status = 'accepted'
          ORDER BY citation_count DESC
          LIMIT 10`,
@@ -472,8 +473,9 @@ app.get('/search', async (c) => {
 
       // Search local citations
       const { rows: citationHits } = await db.query(
-        `SELECT c.id, c.url, c.title, c.topic, c.excerpt, c.article_rkey, c.created_at,
-           (SELECT count(*) FROM centipedia_endorsement_citations e WHERE e.citation_id = c.id) AS endorsements
+        `SELECT c.id, c.url, c.title, c.topic, c.excerpt, c.created_at,
+           (SELECT count(*) FROM centipedia_endorsement_citations e WHERE e.citation_id = c.id) AS endorsements,
+           (SELECT ac.article_rkey FROM centipedia_article_citations ac WHERE ac.citation_id = c.id LIMIT 1) AS article_rkey
          FROM centipedia_citations c
          WHERE (c.title ILIKE '%' || $1 || '%' OR c.url ILIKE '%' || $1 || '%' OR c.topic ILIKE '%' || $1 || '%')
          AND c.status = 'accepted'
@@ -594,13 +596,14 @@ app.get('/profile/:identifier', async (c) => {
 
   // Fetch articles this user contributed to (via their citations)
   const { rows: contributedRows } = await db.query(
-    `SELECT DISTINCT c.article_rkey, 
+    `SELECT DISTINCT ac.article_rkey, 
        MIN(c.topic) AS topic,
        COUNT(c.id) AS user_citations,
        MIN(c.created_at) AS earliest_contribution
      FROM centipedia_citations c
-     WHERE c.submitted_by = $1 AND c.status = 'accepted' AND c.article_rkey IS NOT NULL
-     GROUP BY c.article_rkey
+     JOIN centipedia_article_citations ac ON ac.citation_id = c.id
+     WHERE c.submitted_by = $1 AND c.status = 'accepted'
+     GROUP BY ac.article_rkey
      ORDER BY earliest_contribution DESC`,
     [did]
   );
@@ -614,14 +617,15 @@ app.get('/profile/:identifier', async (c) => {
 
   // Fetch user's Centipedia citations
   const { rows: citationRows } = await db.query(
-    `SELECT c.id, c.url, c.title, c.topic, c.status, c.article_rkey, c.created_at,
-       (SELECT count(*) FROM centipedia_endorsement_citations e WHERE e.citation_id = c.id) AS endorsements
+    `SELECT c.id, c.url, c.title, c.topic, c.status, c.created_at,
+       (SELECT count(*) FROM centipedia_endorsement_citations e WHERE e.citation_id = c.id) AS endorsements,
+       (SELECT string_agg(ac.article_rkey, ',') FROM centipedia_article_citations ac WHERE ac.citation_id = c.id) AS article_rkeys
      FROM centipedia_citations c WHERE c.submitted_by = $1
      ORDER BY c.created_at DESC`,
     [did]
   );
   const profileCitations = citationRows.map((r: any) => ({
-    ...r, endorsements: Number(r.endorsements)
+    ...r, endorsements: Number(r.endorsements), article_rkey: r.article_rkeys?.split(',')[0] || null
   }));
 
   // Build trust stats
@@ -683,8 +687,9 @@ app.get('/topics/:topic', async (c) => {
 
   // Fetch citations for this topic
   const { rows: citationRows } = await db.query(
-    `SELECT c.id, c.url, c.title, c.status, c.excerpt, c.submitted_by, c.article_rkey, c.created_at,
-       (SELECT count(*) FROM centipedia_endorsement_citations e WHERE e.citation_id = c.id) AS endorsements
+    `SELECT c.id, c.url, c.title, c.status, c.excerpt, c.submitted_by, c.created_at,
+       (SELECT count(*) FROM centipedia_endorsement_citations e WHERE e.citation_id = c.id) AS endorsements,
+       (SELECT ac.article_rkey FROM centipedia_article_citations ac WHERE ac.citation_id = c.id LIMIT 1) AS article_rkey
      FROM centipedia_citations c
      WHERE c.topic = $1
      ORDER BY (SELECT count(*) FROM centipedia_endorsement_citations e WHERE e.citation_id = c.id) DESC, c.created_at DESC`,
@@ -718,7 +723,9 @@ app.get('/topics/:topic', async (c) => {
 
   // Fetch articles linked to this topic
   const { rows: articleRkeys } = await db.query(
-    `SELECT DISTINCT article_rkey FROM centipedia_citations WHERE topic = $1 AND article_rkey IS NOT NULL`,
+    `SELECT DISTINCT ac.article_rkey FROM centipedia_article_citations ac
+     JOIN centipedia_citations c ON c.id = ac.citation_id
+     WHERE c.topic = $1`,
     [topic]
   );
 
@@ -889,7 +896,8 @@ app.get('/article/:rkey', async (c) => {
       `SELECT c.id, c.url, c.title, c.submitted_by, c.topic, c.excerpt, c.status, c.created_at,
          (SELECT count(*) FROM centipedia_endorsement_citations e WHERE e.citation_id = c.id) AS endorsements
        FROM centipedia_citations c
-       WHERE c.article_rkey = $1 AND c.status = 'accepted'
+       JOIN centipedia_article_citations ac ON ac.citation_id = c.id
+       WHERE ac.article_rkey = $1 AND c.status = 'accepted'
        ORDER BY endorsements DESC, c.created_at ASC`,
       [rkey]
     );
@@ -1229,7 +1237,8 @@ app.get('/api/network-scores', async (c) => {
       `SELECT c.id, c.url, c.submitted_by,
          (SELECT count(*) FROM centipedia_endorsement_citations e WHERE e.citation_id = c.id) AS global_endorsements
        FROM centipedia_citations c
-       WHERE c.article_rkey = $1 AND c.status = 'accepted'`,
+       JOIN centipedia_article_citations ac ON ac.citation_id = c.id
+       WHERE ac.article_rkey = $1 AND c.status = 'accepted'`,
       [rkey]
     );
 
