@@ -566,8 +566,6 @@ export function SearchPage({
                   let readUrl: string;
                   if (r.site && r.path && r.site.startsWith('http')) {
                     readUrl = `${r.site}${r.path}`;
-                  } else if (collection === 'com.whtwnd.blog.entry') {
-                    readUrl = `https://whtwnd.com/${r.authorHandle}/${rkey}`;
                   } else {
                     readUrl = `https://${domain}/post/${r.did}/${rkey}`;
                   }

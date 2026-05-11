@@ -176,10 +176,8 @@ app.get('/', async (c) => {
     let readUrl: string | null = null;
     if (r.site && r.path && r.site.startsWith('http')) {
       readUrl = `${r.site}${r.path}`;
-    } else if (collection === 'com.whtwnd.blog.entry') {
-      readUrl = `https://whtwnd.com/${p.handle}/${rkey}`;
     }
-    // else null — StoryCard will use /post/:did/:rkey (Leaflet reader)
+    // else null — StoryCard will use /post/:did/:rkey (native reader)
 
     return {
       uri: r.uri,
@@ -352,8 +350,6 @@ app.get('/profile/:identifier', async (c) => {
     let readUrl: string | null = null;
     if (r.site && r.path && r.site.startsWith('http')) {
       readUrl = `${r.site}${r.path}`;
-    } else if (collection === 'com.whtwnd.blog.entry') {
-      readUrl = `https://whtwnd.com/${authorData.handle}/${rkey}`;
     }
     return {
       uri: r.uri,
@@ -490,7 +486,7 @@ app.get('/post/:did/:rkey', async (c) => {
     // Cache-first: try Redis, then PDS
     const result = await getCachedRecordMulti(
       did,
-      ['site.standard.document', 'pub.leaflet.document'],
+      ['site.standard.document', 'pub.leaflet.document', 'com.whtwnd.blog.entry'],
       rkey
     );
     if (!result) {
@@ -502,6 +498,7 @@ app.get('/post/:did/:rkey', async (c) => {
     const sessionProfile = sessionDid ? await getCachedProfile(sessionDid) : undefined;
     
     const doc = result.record as any;
+    doc.rkey = rkey;
     
     // Extract description from first text block if no description is provided
     let excerpt = '';

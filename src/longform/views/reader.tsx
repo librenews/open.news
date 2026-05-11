@@ -109,11 +109,25 @@ export function ReaderPage(doc: LeafletDocument, authorDid: string, profile: any
   const avatar = profile?.avatar || '';
 
   let blocks: LeafletBlock[] = [];
+  let isMarkdownString = false;
+  let rawMarkdown = '';
+  
   if ((doc as any).content?.pages && (doc as any).content.pages.length > 0) {
     blocks = ((doc as any).content.pages[0] as any).blocks || [];
   } else if (doc.pages && doc.pages.length > 0) {
     blocks = (doc.pages[0] as any).blocks || [];
+  } else if (typeof (doc as any).content === 'string') {
+    isMarkdownString = true;
+    rawMarkdown = (doc as any).content;
   }
+
+  // Calculate external read URL if available
+  const rkey = (doc as any).rkey || 'self';
+  const originalUrl = (doc as any).site && (doc as any).path 
+      ? `${(doc as any).site}${(doc as any).path}`
+      : isMarkdownString 
+        ? `https://whtwnd.com/${profile?.handle || authorDid}/${rkey}`
+        : null;
 
   return html`
     <article class="prose" style="margin-top: 2rem;">
@@ -145,7 +159,16 @@ export function ReaderPage(doc: LeafletDocument, authorDid: string, profile: any
       </header>
       
       <div class="content">
-        ${renderLeafletBlocks(blocks, authorDid)}
+        {originalUrl ? html`
+          <div style="margin-bottom: 2rem; padding: 1rem; background: var(--bg-secondary); border-radius: 8px; font-size: 14px;">
+            <span style="color: var(--text-muted);">This article was originally published at: </span>
+            <a href="${originalUrl}" target="_blank" rel="noopener noreferrer" style="color: inherit; font-weight: 600;">${originalUrl}</a>
+          </div>
+        ` : ''}
+        
+        ${isMarkdownString 
+          ? rawMarkdown.split('\\n\\n').map(p => html`<p style="margin-top: 1.25rem; margin-bottom: 1.25rem; min-height: 1.5rem; word-break: break-word;">${raw(p.replace(/\\n/g, '<br />'))}</p>`)
+          : renderLeafletBlocks(blocks, authorDid)}
       </div>
     </article>
     
