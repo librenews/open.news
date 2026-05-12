@@ -15,7 +15,7 @@ export async function serializeTiptapToLeaflet(tiptapJson: any, title: string, d
       description: '',
       tags: [],
       site: publicationUri || `https://${config.LONGFORM_DOMAIN || 'longform.social'}`,
-      path: `/post/${did}/${rkey}`,
+      path: publicationUri ? `/${rkey}` : `/post/${did}/${rkey}`,
       author: did,
       publishedAt: new Date().toISOString(),
       content: {
@@ -201,7 +201,7 @@ export async function serializeTiptapToLeaflet(tiptapJson: any, title: string, d
     description: '',
     tags: [],
     site: publicationUri || `https://${config.LONGFORM_DOMAIN || 'longform.social'}`,
-    path: `/post/${did}/${rkey}`,
+    path: publicationUri ? `/${rkey}` : `/post/${did}/${rkey}`,
     author: did,
     publishedAt: new Date().toISOString(),
     content: {
