@@ -84,7 +84,22 @@ export const TopHeaderStyles = `
   .top-header-right {
     display: flex;
     align-items: center;
-    gap: 1rem;
+    gap: 0.75rem;
+  }
+  .top-header-write {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    color: var(--text-secondary);
+    text-decoration: none;
+    transition: background 0.15s, color 0.15s;
+  }
+  .top-header-write:hover {
+    background: var(--bg-secondary);
+    color: var(--text-main);
   }
   .top-header-signin {
     padding: 0.4rem 1rem;
@@ -181,32 +196,35 @@ export function TopHeader({ profile }: { profile: any }) {
         </svg>
         <input type="text" name="q" placeholder="Search articles..." />
       </form>
-      <div class="top-header-links">
-        <a href="/">Home</a>
-        <a href="/posts">Stories</a>
-        {profile && <a href={`/profile/${profile.handle}`}>Profile</a>}
-      </div>
       <div class="top-header-right">
         {profile ? (
-          <div class="top-header-user">
-            {profile.avatar ? (
-              <img src={profile.avatar} alt="" />
-            ) : (
-              <div class="top-header-user-placeholder">
-                {profile.displayName.charAt(0).toUpperCase()}
+          <>
+            <a href="/new" class="top-header-write" title="Write">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+              </svg>
+            </a>
+            <div class="top-header-user">
+              {profile.avatar ? (
+                <img src={profile.avatar} alt="" />
+              ) : (
+                <div class="top-header-user-placeholder">
+                  {profile.displayName.charAt(0).toUpperCase()}
+                </div>
+              )}
+              <div class="top-header-dropdown">
+                <div style="padding: 0.6rem 1rem; border-bottom: 1px solid var(--border);">
+                  <div style="font-weight: 600; font-size: 0.85rem; color: var(--text-main);">{profile.displayName}</div>
+                  <div style="font-size: 0.7rem; color: var(--text-muted);">@{profile.handle}</div>
+                </div>
+                <a href={`/profile/${profile.handle}`}>Profile</a>
+                <a href="/posts">My Stories</a>
+                <a href="/new">New Draft</a>
+                <a href="/logout" class="signout-link">Sign out</a>
               </div>
-            )}
-            <div class="top-header-dropdown">
-              <div style="padding: 0.6rem 1rem; border-bottom: 1px solid var(--border);">
-                <div style="font-weight: 600; font-size: 0.85rem; color: var(--text-main);">{profile.displayName}</div>
-                <div style="font-size: 0.7rem; color: var(--text-muted);">@{profile.handle}</div>
-              </div>
-              <a href={`/profile/${profile.handle}`}>Profile</a>
-              <a href="/posts">My Stories</a>
-              <a href="/new">New Draft</a>
-              <a href="/logout" class="signout-link">Sign out</a>
             </div>
-          </div>
+          </>
         ) : (
           <a href="/login" class="top-header-signin">Sign In</a>
         )}
