@@ -108,7 +108,7 @@ export function SearchPage({
             align-items: center;
             gap: 0.5rem;
           }
-          .top-header-logo img { height: 24px; width: auto; }
+          .top-header-logo img { height: 44px; width: auto; }
           .top-header-search {
             display: flex;
             align-items: center;

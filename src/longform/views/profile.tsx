@@ -103,7 +103,7 @@ export function ProfilePage({
             display: flex;
             align-items: center;
           }
-          .top-header-logo img { height: 24px; width: auto; }
+          .top-header-logo img { height: 44px; width: auto; }
           .top-header-search {
             display: flex;
             align-items: center;

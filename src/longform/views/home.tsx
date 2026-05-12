@@ -596,7 +596,7 @@ export function HomePage({
             gap: 0.5rem;
           }
           .top-header-logo img {
-            height: 24px;
+            height: 44px;
             width: auto;
           }
           .top-header-search {
