@@ -46,7 +46,7 @@ export const TopHeaderStyles = `
   }
   .top-header-search input {
     width: 100%;
-    padding: 0.45rem 0.75rem 0.45rem 2rem;
+    padding: 0.6rem 0.85rem 0.6rem 2.2rem;
     border: 1px solid var(--border);
     border-radius: 20px;
     font-size: 0.8rem;
