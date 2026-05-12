@@ -31,7 +31,7 @@ export const TopHeaderStyles = `
     align-items: center;
     flex: 1;
     max-width: 320px;
-    margin: 0 0 0 1rem;
+    margin: 0 auto 0 calc(220px - 4rem);
     position: relative;
   }
   .top-header-search .search-icon {
