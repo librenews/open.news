@@ -926,13 +926,38 @@ app.post('/api/publish', async (c) => {
         rkey = Math.random().toString(36).substring(2, 15);
       }
      const leafletDoc = await serializeTiptapToLeaflet(documentJson, title, sessionDid, agent, rkey);
-     
-     const res = await agent.com.atproto.repo.createRecord({
-       repo: sessionDid,
-       collection: 'site.standard.document',
-       rkey: rkey,
-       record: leafletDoc
-     });
+
+     // Check if this is a re-publish (update) or first publish (create)
+     let isRepublish = false;
+     if (docId) {
+       const { rows: draftRows } = await db.query(
+         'SELECT published_uri FROM longform_drafts WHERE document_name = $1 AND owner_did = $2',
+         [docId, sessionDid]
+       );
+       if (draftRows.length > 0 && draftRows[0].published_uri) {
+         isRepublish = true;
+       }
+     }
+
+     let res;
+     if (isRepublish) {
+       // Update existing record on PDS
+       res = await agent.com.atproto.repo.putRecord({
+         repo: sessionDid,
+         collection: 'site.standard.document',
+         rkey: rkey,
+         record: leafletDoc
+       });
+       logger.info({ event: 'longform_republish', did: sessionDid, rkey }, 'User re-published a document');
+     } else {
+       // Create new record on PDS
+       res = await agent.com.atproto.repo.createRecord({
+         repo: sessionDid,
+         collection: 'site.standard.document',
+         rkey: rkey,
+         record: leafletDoc
+       });
+     }
      
      // Retrieve user handle for logging and announcement using public AppView
      let authorHandle = sessionDid;
