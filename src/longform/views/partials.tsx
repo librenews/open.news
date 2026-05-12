@@ -184,7 +184,7 @@ export function TopHeader({ profile }: { profile: any }) {
       <div class="top-header-links">
         <a href="/">Home</a>
         <a href="/posts">Stories</a>
-        {profile && <a href={\`/profile/\${profile.handle}\`}>Profile</a>}
+        {profile && <a href={`/profile/${profile.handle}`}>Profile</a>}
       </div>
       <div class="top-header-right">
         {profile ? (
@@ -201,7 +201,7 @@ export function TopHeader({ profile }: { profile: any }) {
                 <div style="font-weight: 600; font-size: 0.85rem; color: var(--text-main);">{profile.displayName}</div>
                 <div style="font-size: 0.7rem; color: var(--text-muted);">@{profile.handle}</div>
               </div>
-              <a href={\`/profile/\${profile.handle}\`}>Profile</a>
+              <a href={`/profile/${profile.handle}`}>Profile</a>
               <a href="/posts">My Stories</a>
               <a href="/new">New Draft</a>
               <a href="/logout" class="signout-link">Sign out</a>
