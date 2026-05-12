@@ -557,8 +557,24 @@ app.get('/post/:did/:rkey', async (c) => {
     const atUri = `at://${did}/site.standard.document/${rkey}`;
     let relatedArticles: any[] = [];
     try {
-      const hits = await getRelatedArticles(atUri, 3);
-      relatedArticles = hits.map((hit: any) => hit._source);
+      const hits = await getRelatedArticles(atUri, 10);
+      const seenUris = new Set<string>();
+      seenUris.add(atUri); // exclude the current article itself
+      
+      for (const hit of hits) {
+        const source = hit._source;
+        if (!source || !source.uri || seenUris.has(source.uri)) continue;
+        seenUris.add(source.uri);
+        
+        try {
+          source.authorProfile = await fetchUserProfile(source.did);
+        } catch (e) {
+          source.authorProfile = null;
+        }
+        
+        relatedArticles.push(source);
+        if (relatedArticles.length >= 3) break;
+      }
     } catch (e) {
       logger.warn({ err: e, uri: atUri }, 'Failed to fetch related articles');
     }

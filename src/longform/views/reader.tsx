@@ -314,9 +314,15 @@ export function ReaderPage(doc: LeafletDocument, authorDid: string, profile: any
           ${relatedArticles.map((article: any) => {
             const url = `/post/${article.did}/${article.uri.split('/').pop()}`;
             return html`
-              <a href="${url}" style="text-decoration: none; color: inherit; display: block;">
-                <h4 style="font-family: var(--font-sans); font-size: 15px; font-weight: 600; line-height: 1.35; margin-bottom: 0.4rem; transition: color 0.15s;" onmouseover="this.style.color='#6b7280'" onmouseout="this.style.color='inherit'">${article.title || 'Untitled'}</h4>
-                ${article.published_at ? html`<div style="font-family: var(--font-sans); font-size: 13px; color: var(--text-muted);">${new Date(article.published_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</div>` : ''}
+              <a href="${url}" style="text-decoration: none; color: inherit; display: flex; gap: 0.75rem; align-items: flex-start; transition: opacity 0.15s;" onmouseover="this.style.opacity='0.7'" onmouseout="this.style.opacity='1'">
+                ${article.authorProfile?.avatar ? html`<img src="${article.authorProfile.avatar}" style="width: 36px; height: 36px; border-radius: 50%; object-fit: cover; flex-shrink: 0;" />` : html`<div style="width: 36px; height: 36px; border-radius: 50%; background: var(--border); display: flex; align-items: center; justify-content: center; color: var(--text-muted); font-size: 12px; font-weight: bold; flex-shrink: 0;">${(article.authorProfile?.displayName || article.did).charAt(0).toUpperCase()}</div>`}
+                <div style="flex: 1; min-width: 0;">
+                  <h4 style="font-family: var(--font-sans); font-size: 15px; font-weight: 600; line-height: 1.35; margin-bottom: 0.25rem;">${article.title || 'Untitled'}</h4>
+                  <div style="font-family: var(--font-sans); font-size: 13px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                    ${article.authorProfile?.displayName || article.authorProfile?.handle || article.did}
+                    ${article.published_at ? html` &middot; ${new Date(article.published_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : ''}
+                  </div>
+                </div>
               </a>
             `;
           })}
