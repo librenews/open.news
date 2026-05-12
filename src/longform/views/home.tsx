@@ -120,6 +120,7 @@ export function HomePage({
   profile,
   domain,
   hasSubscriptions,
+  popularPosts,
 }: {
   stories: LongformStory[];
   topics: TopicGroup[];
