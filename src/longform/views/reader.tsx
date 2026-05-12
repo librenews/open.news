@@ -312,13 +312,13 @@ export function ReaderPage(doc: LeafletDocument, authorDid: string, profile: any
         <h3 style="font-family: var(--font-sans); font-size: 14px; font-weight: 600; margin-bottom: 1.25rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em;">Related Posts</h3>
         <div style="display: flex; flex-direction: column; gap: 1.5rem;">
           ${relatedArticles.map((article: any) => {
-            const url = \`/post/\${article.did}/\${article.uri.split('/').pop()}\`;
-            return html\`
-              <a href="\${url}" style="text-decoration: none; color: inherit; display: block;">
-                <h4 style="font-family: var(--font-sans); font-size: 15px; font-weight: 600; line-height: 1.35; margin-bottom: 0.4rem; transition: color 0.15s;" onmouseover="this.style.color='#6b7280'" onmouseout="this.style.color='inherit'">\${article.title || 'Untitled'}</h4>
-                \${article.published_at ? html\`<div style="font-family: var(--font-sans); font-size: 13px; color: var(--text-muted);">\${new Date(article.published_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</div>\` : ''}
+            const url = `/post/${article.did}/${article.uri.split('/').pop()}`;
+            return html`
+              <a href="${url}" style="text-decoration: none; color: inherit; display: block;">
+                <h4 style="font-family: var(--font-sans); font-size: 15px; font-weight: 600; line-height: 1.35; margin-bottom: 0.4rem; transition: color 0.15s;" onmouseover="this.style.color='#6b7280'" onmouseout="this.style.color='inherit'">${article.title || 'Untitled'}</h4>
+                ${article.published_at ? html`<div style="font-family: var(--font-sans); font-size: 13px; color: var(--text-muted);">${new Date(article.published_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</div>` : ''}
               </a>
-            \`;
+            `;
           })}
         </div>
       ` : ''}
