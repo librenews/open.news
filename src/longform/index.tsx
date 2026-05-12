@@ -554,17 +554,21 @@ app.get('/post/:did/:rkey', async (c) => {
       url: `https://${config.LONGFORM_DOMAIN}/post/${did}/${rkey}`,
     };
     
-    const atUri = `at://${did}/site.standard.document/${rkey}`;
+    const currentActualUri = `at://${did}/${result.collection}/${rkey}`;
+    const currentKey = `${did}/${rkey}`;
     let relatedArticles: any[] = [];
     try {
-      const hits = await getRelatedArticles(atUri, 10);
-      const seenUris = new Set<string>();
-      seenUris.add(atUri); // exclude the current article itself
+      const hits = await getRelatedArticles(currentActualUri, 10);
+      const seenKeys = new Set<string>();
+      seenKeys.add(currentKey); // exclude the current article itself
       
       for (const hit of hits) {
         const source = hit._source;
-        if (!source || !source.uri || seenUris.has(source.uri)) continue;
-        seenUris.add(source.uri);
+        if (!source || !source.uri) continue;
+        
+        const key = `${source.did}/${source.uri.split('/').pop()}`;
+        if (seenKeys.has(key)) continue;
+        seenKeys.add(key);
         
         try {
           source.authorProfile = await fetchUserProfile(source.did);
@@ -576,7 +580,7 @@ app.get('/post/:did/:rkey', async (c) => {
         if (relatedArticles.length >= 3) break;
       }
     } catch (e) {
-      logger.warn({ err: e, uri: atUri }, 'Failed to fetch related articles');
+      logger.warn({ err: e, uri: currentActualUri }, 'Failed to fetch related articles');
     }
 
     return c.html((
