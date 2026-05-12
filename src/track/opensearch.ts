@@ -303,5 +303,5 @@ export async function getRelatedArticles(uri: string, limit: number = 3) {
       _source: ['title', 'did', 'site', 'path', 'language', 'published_at', 'uri', 'word_count']
     }
   });
-  return res.body.hits;
+  return res.body.hits?.hits || [];
 }
