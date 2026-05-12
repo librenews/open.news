@@ -4,7 +4,7 @@ import crypto from 'crypto';
 import { config } from '../../lib/config.js';
 
 // Exported from Tiptap AST format into Leaflet Linear Document structure natively
-export async function serializeTiptapToLeaflet(tiptapJson: any, title: string, did: string, agent: any, rkey: string): Promise<LeafletDocument> {
+export async function serializeTiptapToLeaflet(tiptapJson: any, title: string, did: string, agent: any, rkey: string, publicationUri?: string): Promise<LeafletDocument> {
   const leafletBlocks: LeafletBlock[] = [];
   const encoder = new TextEncoder();
 
@@ -14,7 +14,7 @@ export async function serializeTiptapToLeaflet(tiptapJson: any, title: string, d
       title,
       description: '',
       tags: [],
-      site: `https://${config.LONGFORM_DOMAIN || 'longform.social'}`,
+      site: publicationUri || `https://${config.LONGFORM_DOMAIN || 'longform.social'}`,
       path: `/post/${did}/${rkey}`,
       author: did,
       publishedAt: new Date().toISOString(),
@@ -200,7 +200,7 @@ export async function serializeTiptapToLeaflet(tiptapJson: any, title: string, d
     title,
     description: '',
     tags: [],
-    site: `https://${config.LONGFORM_DOMAIN || 'longform.social'}`,
+    site: publicationUri || `https://${config.LONGFORM_DOMAIN || 'longform.social'}`,
     path: `/post/${did}/${rkey}`,
     author: did,
     publishedAt: new Date().toISOString(),

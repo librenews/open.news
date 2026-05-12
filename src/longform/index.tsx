@@ -925,7 +925,51 @@ app.post('/api/publish', async (c) => {
       } else {
         rkey = Math.random().toString(36).substring(2, 15);
       }
-     const leafletDoc = await serializeTiptapToLeaflet(documentJson, title, sessionDid, agent, rkey);
+
+     // Ensure the user has a default publication record on their PDS
+     let publicationUri: string | undefined;
+     try {
+       // Try to fetch existing default publication
+       const pubRes = await agent.com.atproto.repo.getRecord({
+         repo: sessionDid,
+         collection: 'site.standard.publication',
+         rkey: 'self',
+       }).catch(() => null);
+
+       if (pubRes?.data?.uri) {
+         publicationUri = pubRes.data.uri;
+       } else {
+         // Fetch profile for display name
+         let pubTitle = 'My Blog';
+         try {
+           const publicAgent = new BskyAgent({ service: 'https://public.api.bsky.app' });
+           const profile = await publicAgent.getProfile({ actor: sessionDid });
+           if (profile.data.displayName) {
+             pubTitle = `${profile.data.displayName}'s Blog`;
+           }
+         } catch (e) { /* fallback to generic title */ }
+
+         // Create default publication
+         const createRes = await agent.com.atproto.repo.putRecord({
+           repo: sessionDid,
+           collection: 'site.standard.publication',
+           rkey: 'self',
+           record: {
+             $type: 'site.standard.publication',
+             title: pubTitle,
+             description: '',
+             url: `https://${config.LONGFORM_DOMAIN || 'longform.social'}`,
+             createdAt: new Date().toISOString(),
+           },
+         });
+         publicationUri = createRes.data.uri;
+         logger.info({ did: sessionDid, uri: publicationUri }, 'Auto-created default publication record');
+       }
+     } catch (err: any) {
+       logger.warn({ err, did: sessionDid }, 'Failed to ensure publication record, falling back to HTTPS site');
+     }
+
+     const leafletDoc = await serializeTiptapToLeaflet(documentJson, title, sessionDid, agent, rkey, publicationUri);
 
      // Check if this is a re-publish (update) or first publish (create)
      let isRepublish = false;
