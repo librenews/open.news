@@ -12,6 +12,7 @@ import { HomePage } from './views/home.js';
 import { ProfilePage } from './views/profile.js';
 import { SearchPage } from './views/search.js';
 import { NotFoundPage } from './views/notfound.js';
+import { SubscriptionsPage } from './views/subscriptions.js';
 import type { LongformStory } from './views/home.js';
 import type { ProfileData } from './views/profile.js';
 import type { SearchResult } from './views/search.js';
@@ -322,6 +323,101 @@ app.get('/login', async (c) => {
       </form>
     </div>
   </Layout>) as unknown as string);
+});
+
+app.get('/subscriptions', async (c) => {
+  const sessionDid = await getSession(c);
+  if (!sessionDid) return c.redirect('/login');
+  const profile = sessionDid ? await fetchUserProfile(sessionDid) : null;
+
+  try {
+    const oauthSession = await restoreSession(c, sessionDid);
+    if (!oauthSession) return c.redirect('/login');
+    const agent = new Agent(oauthSession);
+
+    // Fetch all subscription records from user's PDS
+    const res = await agent.com.atproto.repo.listRecords({
+      repo: sessionDid,
+      collection: 'site.standard.graph.subscription',
+      limit: 100,
+    });
+
+    const subscriptions = [];
+    for (const record of (res.data.records || [])) {
+      const pubUri = (record.value as any)?.publication;
+      if (!pubUri || typeof pubUri !== 'string') continue;
+
+      const rkey = record.uri.split('/').pop() || '';
+      const createdAt = (record.value as any)?.createdAt || null;
+
+      // Try to resolve publication details
+      let pubTitle: string | null = null;
+      let pubUrl: string | null = null;
+      let authorDid = '';
+      let authorHandle = '';
+      let authorAvatar = '';
+      let authorName = '';
+
+      // Extract DID from publication URI
+      if (pubUri.startsWith('at://')) {
+        const parts = pubUri.replace('at://', '').split('/');
+        authorDid = parts[0];
+        const collection = parts[1];
+        const pubRkey = parts[2];
+
+        // Try local cache first
+        const { rows } = await db.query('SELECT url, raw_record FROM site_publications WHERE uri = $1', [pubUri]);
+        if (rows.length > 0) {
+          pubUrl = rows[0].url;
+          pubTitle = rows[0].raw_record?.name || rows[0].raw_record?.title || null;
+        } else {
+          // Fetch from PDS
+          try {
+            const pdsEndpoint = await resolvePds(authorDid);
+            if (pdsEndpoint) {
+              const fetchAgent = new BskyAgent({ service: pdsEndpoint });
+              const pdsRes = await fetchAgent.com.atproto.repo.getRecord({
+                repo: authorDid, collection, rkey: pubRkey
+              });
+              pubUrl = (pdsRes.data.value as any).url || null;
+              pubTitle = (pdsRes.data.value as any).name || (pdsRes.data.value as any).title || null;
+            }
+          } catch (e) { /* could not resolve */ }
+        }
+
+        // Resolve author profile
+        const authorProfile = await fetchUserProfile(authorDid);
+        authorHandle = authorProfile.handle;
+        authorAvatar = authorProfile.avatar;
+        authorName = authorProfile.displayName;
+      }
+
+      subscriptions.push({
+        rkey,
+        publicationUri: pubUri,
+        publicationTitle: pubTitle,
+        publicationUrl: pubUrl,
+        authorDid,
+        authorHandle,
+        authorAvatar,
+        authorName,
+        createdAt,
+      });
+    }
+
+    return c.html(
+      <Layout title={`Subscriptions - ${config.LONGFORM_DOMAIN}`} profile={profile}>
+        {SubscriptionsPage({ subscriptions, domain: config.LONGFORM_DOMAIN, profile })}
+      </Layout> as unknown as string
+    );
+  } catch (err: any) {
+    logger.error({ err }, 'Failed to load subscriptions page');
+    return c.html(
+      <Layout title={`Subscriptions - ${config.LONGFORM_DOMAIN}`} profile={profile}>
+        {SubscriptionsPage({ subscriptions: [], domain: config.LONGFORM_DOMAIN, profile })}
+      </Layout> as unknown as string
+    );
+  }
 });
 
 app.get('/profile/:identifier', async (c) => {
