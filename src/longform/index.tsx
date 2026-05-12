@@ -25,7 +25,7 @@ import { Server as HocuspocusServer } from '@hocuspocus/server';
 import { hocuspocusDb } from './lib/hocuspocusDb.js';
 import { WebSocketServer } from 'ws';
 import { db } from '../db/client.js';
-import { searchSiteStandardArticles } from '../track/opensearch.js';
+import { searchSiteStandardArticles, getRelatedArticles } from '../track/opensearch.js';
 
 process.on('unhandledRejection', (err) => {
   logger.warn({ err }, 'Caught unhandled promise rejection in Longform (likely a background OAuth token getter)');
@@ -554,9 +554,18 @@ app.get('/post/:did/:rkey', async (c) => {
       url: `https://${config.LONGFORM_DOMAIN}/post/${did}/${rkey}`,
     };
     
+    const atUri = `at://${did}/site.standard.document/${rkey}`;
+    let relatedArticles: any[] = [];
+    try {
+      const hits = await getRelatedArticles(atUri, 3);
+      relatedArticles = hits.map((hit: any) => hit._source);
+    } catch (e) {
+      logger.warn({ err: e, uri: atUri }, 'Failed to fetch related articles');
+    }
+
     return c.html((
       <Layout title={`${doc.title} - ${config.LONGFORM_DOMAIN}`} profile={sessionProfile} og={og}>
-        {ReaderPage(doc, did, authorProfile)}
+        {ReaderPage(doc, did, authorProfile, relatedArticles)}
       </Layout>
     ) as unknown as string);
   } catch (err: any) {

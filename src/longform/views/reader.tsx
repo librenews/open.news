@@ -139,7 +139,7 @@ function renderLeafletBlocks(blocks: LeafletBlock[], did: string) {
   });
 }
 
-export function ReaderPage(doc: LeafletDocument, authorDid: string, profile: any) {
+export function ReaderPage(doc: LeafletDocument, authorDid: string, profile: any, relatedArticles: any[] = []) {
   const date = new Date(doc.publishedAt || Date.now());
   const formattedDate = date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
   const displayName = profile?.displayName || profile?.handle || authorDid;
@@ -175,6 +175,33 @@ export function ReaderPage(doc: LeafletDocument, authorDid: string, profile: any
 
   return html`
     <style>
+      .reader-grid {
+        display: grid;
+        grid-template-columns: 1fr 300px;
+        gap: 3rem;
+        align-items: start;
+      }
+      .reader-main {
+        min-width: 0;
+        max-width: 680px;
+      }
+      .reader-sidebar {
+        position: sticky;
+        top: 100px;
+      }
+      @media (max-width: 960px) {
+        .reader-grid {
+          grid-template-columns: 1fr;
+          gap: 2rem;
+        }
+        .reader-sidebar {
+          position: static;
+        }
+      }
+      /* Override the default layout container max-width to allow the grid to expand */
+      .container {
+        max-width: 1080px !important;
+      }
       .markdown-body img {
         max-width: 100%;
         height: auto;
@@ -193,6 +220,8 @@ export function ReaderPage(doc: LeafletDocument, authorDid: string, profile: any
         line-height: 1.4;
       }
     </style>
+    <div class="reader-grid">
+      <div class="reader-main">
     <article class="prose" style="margin-top: 2rem;">
       <header style="margin-bottom: 3rem;">
         ${originalUrl ? html`
@@ -270,12 +299,31 @@ export function ReaderPage(doc: LeafletDocument, authorDid: string, profile: any
       </div>
     </article>
     
-    <div id="comments-container" style="margin-top: 4rem; padding-top: 2rem; border-top: 1px solid rgba(0,0,0,0.1); max-width: var(--container-width);">
+    <div id="comments-container" style="margin-top: 4rem; padding-top: 2rem; border-top: 1px solid rgba(0,0,0,0.1);">
       <h3 style="font-family: var(--font-sans); font-size: 20px; font-weight: 600; margin-bottom: 1.5rem; letter-spacing: -0.01em;">Discussion in the ATmosphere</h3>
       <div id="comments-list">
         <div style="color: var(--text-muted); font-size: 14px; font-family: var(--font-sans);">Loading comments...</div>
       </div>
     </div>
+    </div>
+
+    <aside class="reader-sidebar" style="margin-top: 2rem;">
+      ${relatedArticles.length > 0 ? html`
+        <h3 style="font-family: var(--font-sans); font-size: 14px; font-weight: 600; margin-bottom: 1.25rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em;">Related Articles</h3>
+        <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+          ${relatedArticles.map((article: any) => {
+            const url = \`/post/\${article.did}/\${article.uri.split('/').pop()}\`;
+            return html\`
+              <a href="\${url}" style="text-decoration: none; color: inherit; display: block;">
+                <h4 style="font-family: var(--font-sans); font-size: 15px; font-weight: 600; line-height: 1.35; margin-bottom: 0.4rem; transition: color 0.15s;" onmouseover="this.style.color='#6b7280'" onmouseout="this.style.color='inherit'">\${article.title || 'Untitled'}</h4>
+                \${article.published_at ? html\`<div style="font-family: var(--font-sans); font-size: 13px; color: var(--text-muted);">\${new Date(article.published_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</div>\` : ''}
+              </a>
+            \`;
+          })}
+        </div>
+      ` : ''}
+    </aside>
+  </div>
     
     <script>
       (async function() {

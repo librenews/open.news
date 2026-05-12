@@ -276,3 +276,32 @@ export async function searchSiteStandardArticles(query: string, len: 'all' | 'lo
 
   return res.body.hits;
 }
+
+/**
+ * Finds related articles to a given URI using OpenSearch's More Like This query.
+ */
+export async function getRelatedArticles(uri: string, limit: number = 3) {
+  const os = getOsClient();
+  const res = await os.search({
+    index: SITE_STANDARD_INDEX,
+    body: {
+      size: limit,
+      query: {
+        more_like_this: {
+          fields: ['title^2', 'title.*^2', 'text_content', 'text_content.*'],
+          like: [
+            {
+              _index: SITE_STANDARD_INDEX,
+              _id: uri
+            }
+          ],
+          min_term_freq: 1,
+          max_query_terms: 25,
+          min_word_length: 3
+        }
+      },
+      _source: ['title', 'did', 'site', 'path', 'language', 'published_at', 'uri', 'word_count']
+    }
+  });
+  return res.body.hits;
+}
