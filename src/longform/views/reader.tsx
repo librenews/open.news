@@ -228,11 +228,11 @@ export function ReaderPage(doc: LeafletDocument, authorDid: string, profile: any
           </div>
           
           <div style="display: flex; align-items: center; gap: 1rem; color: var(--text-muted);">
-            <button id="btn-like" onclick="handleArticleAction('like', '${authorDid}', '${doc.title}')" style="background: none; border: none; cursor: pointer; color: inherit; display: flex; align-items: center; gap: 0.4rem; font-family: var(--font-sans); font-size: 14px; transition: color 0.2s;" onmouseover="if(!this.dataset.active) this.style.color='#f02050'" onmouseout="if(!this.dataset.active) this.style.color='inherit'">
+            <button id="btn-like" onclick="handleArticleAction('like', '${authorDid}', '${(doc.title || '').replace(/'/g, "\\\\'").replace(/"/g, '&quot;')}')" style="background: none; border: none; cursor: pointer; color: inherit; display: flex; align-items: center; gap: 0.4rem; font-family: var(--font-sans); font-size: 14px; transition: color 0.2s;" onmouseover="if(!this.dataset.active) this.style.color='#f02050'" onmouseout="if(!this.dataset.active) this.style.color='inherit'">
               <svg id="icon-like" viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
               <span id="count-like">Like</span>
             </button>
-            <button id="btn-repost" onclick="handleArticleAction('repost', '${authorDid}', '${doc.title}')" style="background: none; border: none; cursor: pointer; color: inherit; display: flex; align-items: center; gap: 0.4rem; font-family: var(--font-sans); font-size: 14px; transition: color 0.2s;" onmouseover="if(!this.dataset.active) this.style.color='#20d070'" onmouseout="if(!this.dataset.active) this.style.color='inherit'">
+            <button id="btn-repost" onclick="handleArticleAction('repost', '${authorDid}', '${(doc.title || '').replace(/'/g, "\\\\'").replace(/"/g, '&quot;')}')" style="background: none; border: none; cursor: pointer; color: inherit; display: flex; align-items: center; gap: 0.4rem; font-family: var(--font-sans); font-size: 14px; transition: color 0.2s;" onmouseover="if(!this.dataset.active) this.style.color='#20d070'" onmouseout="if(!this.dataset.active) this.style.color='inherit'">
               <svg id="icon-repost" viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none"><path d="M17 1l4 4-4 4"></path><path d="M3 11V9a4 4 0 0 1 4-4h14"></path><path d="M7 23l-4-4 4-4"></path><path d="M21 13v2a4 4 0 0 1-4 4H3"></path></svg>
               <span id="count-repost">Repost</span>
             </button>
