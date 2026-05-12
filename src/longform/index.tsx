@@ -323,20 +323,20 @@ app.get('/profile/:identifier', async (c) => {
 
   // Fetch their articles
   const { rows } = await db.query(
-    `SELECT uri, author_did, title, description, published_at, COALESCE(p.url, s.site) as site, path, word_count,
-       split_part(uri, '/', 4) AS collection,
-       CASE WHEN uri LIKE '%/site.standard.document/%' OR uri LIKE '%/pub.leaflet.document/%'
-         THEN jsonb_path_query_first(raw_record, '$.content.pages[0].blocks[*].block ? (@."$type" == "pub.leaflet.blocks.image").image.ref."$link"') #>> '{}'
+    `SELECT s.uri, s.author_did, s.title, s.description, s.published_at, COALESCE(p.url, s.site) as site, s.path, s.word_count,
+       split_part(s.uri, '/', 4) AS collection,
+       CASE WHEN s.uri LIKE '%/site.standard.document/%' OR s.uri LIKE '%/pub.leaflet.document/%'
+         THEN jsonb_path_query_first(s.raw_record, '$.content.pages[0].blocks[*].block ? (@."$type" == "pub.leaflet.blocks.image").image.ref."$link"') #>> '{}'
          ELSE NULL
        END AS image_cid,
-       CASE WHEN raw_record->>'site' LIKE 'at://%site.standard.publication%'
-         THEN raw_record->>'site'
+       CASE WHEN s.raw_record->>'site' LIKE 'at://%site.standard.publication%'
+         THEN s.raw_record->>'site'
          ELSE NULL
        END AS publication_uri
      FROM site_standard_articles s
      LEFT JOIN site_publications p ON p.uri = s.raw_record->>'site'
-     WHERE author_did = $1
-     ORDER BY published_at DESC`,
+     WHERE s.author_did = $1
+     ORDER BY s.published_at DESC`,
     [did]
   );
 
