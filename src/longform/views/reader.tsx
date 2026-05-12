@@ -202,6 +202,11 @@ export function ReaderPage(doc: LeafletDocument, authorDid: string, profile: any
                 <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
               </div>
               <span style="font-weight: 700; font-size: 21px;">${pubTitle || defaultTitle}</span>
+              ${(doc as any).site && (doc as any).site.startsWith('at://') ? html`
+                <button id="btn-subscribe" onclick="handleSubscribe('${(doc as any).site}')" style="background: var(--bg); border: 1px solid var(--border); border-radius: 99px; padding: 0.2rem 0.6rem; font-family: var(--font-sans); font-size: 12px; font-weight: 600; cursor: pointer; color: var(--text-main); margin-left: 0.5rem; transition: background 0.15s;" onmouseover="this.style.background='var(--bg-secondary)'" onmouseout="this.style.background='var(--bg)'">
+                  Follow
+                </button>
+              ` : ''}
             </div>
             <a href="${originalUrl}" target="_blank" rel="noopener noreferrer" style="color: var(--text-main); font-weight: 600; font-size: 14px; text-decoration: none; display: flex; align-items: center; gap: 0.35rem; padding: 0.4rem 0.8rem; border: 1px solid var(--border); border-radius: 99px; transition: background 0.15s;" onmouseover="this.style.background='var(--bg)'" onmouseout="this.style.background='transparent'">
               Visit Post
@@ -386,6 +391,24 @@ export function ReaderPage(doc: LeafletDocument, authorDid: string, profile: any
         } catch (err) {
           alert('Network error occurred.');
         }
+      }
+
+      async function handleSubscribe(pubUri) {
+        try {
+          const res = await fetch('/api/subscribe', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ publication: pubUri })
+          });
+          const data = await res.json();
+          if (res.status === 401) {
+            alert('Please sign in to subscribe.');
+          } else if (data.ok || res.status === 200) {
+            const btn = document.getElementById('btn-subscribe');
+            btn.style.color = '#118156';
+            btn.innerText = 'Following';
+          }
+        } catch(e) {}
       }
 
       // Fetch stats on load

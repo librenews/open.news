@@ -52,7 +52,7 @@ function StoryCard({ story, domain }: { story: LongformStory; domain: string }) 
           <a href={readUrl} class="story-link">
             <h3 class="story-title">{story.title || 'Untitled'}</h3>
             {story.description && (
-              <p class="story-excerpt">{story.description.length > 140 ? story.description.substring(0, 140) + '…' : story.description}</p>
+              <p class="story-excerpt">{story.description.length > 200 ? story.description.substring(0, 200) + '…' : story.description}</p>
             )}
           </a>
           <div class="story-meta">
@@ -328,19 +328,19 @@ export function HomePage({
           }
           .story-title {
             font-family: var(--font-body);
-            font-size: 1.15rem;
+            font-size: 1.2rem;
             font-weight: 700;
-            line-height: 1.35;
+            line-height: 1.4;
             letter-spacing: -0.01em;
-            margin-bottom: 0.4rem;
+            margin-bottom: 0.5rem;
           }
           .story-excerpt {
             font-family: var(--font-body);
-            font-size: 0.85rem;
+            font-size: 0.875rem;
             font-weight: 300;
-            line-height: 1.5;
+            line-height: 1.65;
             color: var(--text-secondary);
-            margin-bottom: 0.5rem;
+            margin-bottom: 0.75rem;
           }
           .story-meta {
             display: flex;

@@ -627,7 +627,7 @@ export function ProfilePage({
                       <h3 class="story-item-title">{s.title || 'Untitled'}</h3>
                       {s.description && (
                         <p class="story-item-excerpt">
-                          {s.description.length > 140 ? s.description.substring(0, 140) + '…' : s.description}
+                          {s.description.length > 200 ? s.description.substring(0, 200) + '…' : s.description}
                         </p>
                       )}
                       <div class="story-item-meta">
