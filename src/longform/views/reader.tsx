@@ -230,7 +230,10 @@ export function ReaderPage(doc: LeafletDocument, authorDid: string, profile: any
               <div style="display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; background: var(--bg); border-radius: 6px; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
                 <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
               </div>
-              <span style="font-weight: 700; font-size: 21px;">${pubTitle || defaultTitle}</span>
+              ${(doc as any).site && (doc as any).site.startsWith('at://') 
+                ? html`<a href="/publication/${(doc as any).site.replace('at://', '').split('/')[0]}/${(doc as any).site.split('/').pop()}" style="font-weight: 700; font-size: 21px; color: inherit; text-decoration: none;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">${pubTitle || defaultTitle}</a>`
+                : html`<span style="font-weight: 700; font-size: 21px;">${pubTitle || defaultTitle}</span>`
+              }
               ${(doc as any).site && (doc as any).site.startsWith('at://') ? html`
                 <button id="btn-subscribe" onclick="handleSubscribe('${(doc as any).site}')" style="background: var(--bg); border: 1px solid var(--border); border-radius: 99px; padding: 0.2rem 0.6rem; font-family: var(--font-sans); font-size: 12px; font-weight: 600; cursor: pointer; color: var(--text-main); margin-left: 0.5rem; transition: background 0.15s;" onmouseover="this.style.background='var(--bg-secondary)'" onmouseout="this.style.background='var(--bg)'">
                   Follow

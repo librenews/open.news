@@ -13,6 +13,7 @@ import { ProfilePage } from './views/profile.js';
 import { SearchPage } from './views/search.js';
 import { NotFoundPage } from './views/notfound.js';
 import { SubscriptionsPage } from './views/subscriptions.js';
+import { PublicationPage } from './views/publication.js';
 import type { LongformStory } from './views/home.js';
 import type { ProfileData } from './views/profile.js';
 import type { SearchResult } from './views/search.js';
@@ -418,6 +419,145 @@ app.get('/subscriptions', async (c) => {
       </Layout> as unknown as string
     );
   }
+});
+
+// --- Publication detail page ---
+app.get('/publication/:did/:rkey', async (c) => {
+  const did = c.req.param('did');
+  const rkey = c.req.param('rkey');
+  const sessionDid = await getSession(c);
+  const sessionProfile = sessionDid ? await fetchUserProfile(sessionDid) : null;
+
+  // Try to fetch publication record from PDS
+  const collections = ['site.standard.publication', 'pub.leaflet.publication'];
+  let pubRecord: any = null;
+  let pubCollection = '';
+
+  for (const col of collections) {
+    try {
+      const pdsEndpoint = await resolvePds(did);
+      if (!pdsEndpoint) continue;
+      const agent = new BskyAgent({ service: pdsEndpoint });
+      const res = await agent.com.atproto.repo.getRecord({ repo: did, collection: col, rkey });
+      pubRecord = res.data.value;
+      pubCollection = col;
+      break;
+    } catch (e) { continue; }
+  }
+
+  if (!pubRecord) {
+    return c.html((<Layout title={`Publication Not Found - ${config.LONGFORM_DOMAIN}`} profile={sessionProfile}><NotFoundPage /></Layout>) as unknown as string, 404);
+  }
+
+  // Resolve author profile
+  const authorProfile = await fetchUserProfile(did);
+  const pubUri = `at://${did}/${pubCollection}/${rkey}`;
+
+  // Query articles from this publication
+  const { rows } = await db.query(
+    `SELECT s.uri, s.author_did, s.title, s.description, s.published_at, s.word_count
+     FROM site_standard_articles s
+     WHERE s.raw_record->>'site' = $1
+     ORDER BY s.published_at DESC NULLS LAST
+     LIMIT 100`,
+    [pubUri]
+  );
+
+  // Batch resolve author profiles for articles
+  const articleDids = [...new Set(rows.map((r: any) => r.author_did))];
+  const articleProfileMap = new Map<string, { displayName: string; avatar: string; handle: string }>();
+  await Promise.all(articleDids.map(async (d) => {
+    const p = await fetchUserProfile(d as string);
+    articleProfileMap.set(d as string, p);
+  }));
+
+  const articles = rows.map((r: any) => {
+    const p = articleProfileMap.get(r.author_did) || { displayName: r.author_did, avatar: '', handle: r.author_did };
+    return {
+      uri: r.uri,
+      title: r.title || 'Untitled',
+      description: r.description || null,
+      publishedAt: r.published_at?.toISOString() ?? null,
+      authorDid: r.author_did,
+      authorHandle: p.handle,
+      authorAvatar: p.avatar,
+      authorName: p.displayName,
+      wordCount: r.word_count || 0,
+      rkey: r.uri.split('/').pop() || '',
+    };
+  });
+
+  const publication = {
+    uri: pubUri,
+    title: pubRecord.name || pubRecord.title || 'Untitled Publication',
+    description: pubRecord.description || '',
+    url: pubRecord.url || null,
+    authorDid: did,
+    authorHandle: authorProfile.handle,
+    authorAvatar: authorProfile.avatar,
+    authorName: authorProfile.displayName,
+    createdAt: pubRecord.createdAt || null,
+    collection: pubCollection,
+    rkey,
+  };
+
+  return c.html((
+    <Layout title={`${publication.title} - ${config.LONGFORM_DOMAIN}`} profile={sessionProfile}>
+      {PublicationPage({ publication, articles, domain: config.LONGFORM_DOMAIN })}
+    </Layout>
+  ) as unknown as string);
+});
+
+app.get('/publication/:did/:rkey/source', async (c) => {
+  const did = c.req.param('did');
+  const rkey = c.req.param('rkey');
+
+  const collections = ['site.standard.publication', 'pub.leaflet.publication'];
+  for (const col of collections) {
+    try {
+      const pdsEndpoint = await resolvePds(did);
+      if (!pdsEndpoint) continue;
+      const agent = new BskyAgent({ service: pdsEndpoint });
+      const res = await agent.com.atproto.repo.getRecord({ repo: did, collection: col, rkey });
+      if (res.data?.value) {
+        return c.html(`
+          <!DOCTYPE html>
+          <html>
+            <head>
+              <meta charset="utf-8">
+              <title>Publication Source — ${(res.data.value as any).title || rkey}</title>
+              <style>
+                body { background: #1a1a1a; color: #e5e5e5; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; padding: 2rem; line-height: 1.5; margin: 0; }
+                pre { margin: 0; white-space: pre-wrap; word-break: break-word; font-size: 14px; }
+                .key { color: #81a1c1; }
+                .string { color: #a3be8c; }
+                .number { color: #b48ead; }
+                .boolean { color: #d08770; }
+                .null { color: #bf616a; }
+                .back { display: inline-block; margin-bottom: 1.5rem; color: #81a1c1; text-decoration: none; font-size: 14px; }
+                .back:hover { text-decoration: underline; }
+              </style>
+            </head>
+            <body>
+              <a href="/publication/${did}/${rkey}" class="back">← Back to publication</a>
+              <pre>${JSON.stringify(res.data.value, null, 2)
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                .replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, function (match) {
+                  let cls = 'number';
+                  if (/^"/.test(match)) {
+                    if (/:$/.test(match)) cls = 'key';
+                    else cls = 'string';
+                  } else if (/true|false/.test(match)) cls = 'boolean';
+                  else if (/null/.test(match)) cls = 'null';
+                  return '<span class="' + cls + '">' + match + '</span>';
+                })}</pre>
+            </body>
+          </html>
+        `);
+      }
+    } catch (e) { continue; }
+  }
+  return c.json({ error: 'Publication not found' }, 404);
 });
 
 app.get('/profile/:identifier', async (c) => {

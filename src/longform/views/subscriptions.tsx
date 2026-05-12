@@ -157,7 +157,7 @@ export function SubscriptionsPage({ subscriptions, domain, profile }: Subscripti
 
       ${subscriptions.map(sub => html`
         <div class="sub-card" data-rkey="${sub.rkey}">
-          <a href="${sub.authorHandle ? '/profile/' + sub.authorHandle : '#'}" class="sub-left">
+          <a href="${sub.publicationUri.startsWith('at://') ? '/publication/' + sub.publicationUri.replace('at://', '').split('/')[0] + '/' + sub.publicationUri.split('/').pop() : '#'}" class="sub-left">
             <img class="sub-avatar" src="${sub.authorAvatar || '/static/default-avatar.png'}" alt="" loading="lazy" />
             <div class="sub-info">
               <span class="sub-pub-title">${sub.publicationTitle || sub.publicationUri}</span>
