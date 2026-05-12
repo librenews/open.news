@@ -1,4 +1,5 @@
 /** @jsxImportSource hono/jsx */
+import { TopHeader, TopHeaderStyles } from './partials.js';
 
 export function NotFoundPage() {
   return (
@@ -45,37 +46,7 @@ export function NotFoundPage() {
             min-height: 100vh;
           }
 
-          /* Top header */
-          .top-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 0.75rem 2rem;
-            border-bottom: 1px solid var(--border);
-          }
-          .top-header-logo {
-            font-family: var(--font-body);
-            font-weight: 700;
-            font-size: 1.2rem;
-            color: var(--text-main);
-            text-decoration: none;
-            display: flex;
-            align-items: center;
-          }
-          .top-header-logo img { height: 44px; width: auto; }
-          .top-header-links {
-            display: flex;
-            gap: 1.25rem;
-            align-items: center;
-          }
-          .top-header-links a {
-            color: var(--text-secondary);
-            text-decoration: none;
-            font-size: 0.85rem;
-            font-weight: 500;
-            transition: color 0.15s;
-          }
-          .top-header-links a:hover { color: var(--text-main); }
+          ${TopHeaderStyles}
 
           /* 404 content */
           .not-found {
@@ -157,15 +128,7 @@ export function NotFoundPage() {
         `}} />
       </head>
       <body>
-        <header class="top-header">
-          <a href="/" class="top-header-logo">
-            <img src="/logo.png" alt="Longform" onerror="this.outerHTML='<span>Longform</span>'" />
-          </a>
-          <div class="top-header-links">
-            <a href="/">Home</a>
-            <a href="/search">Search</a>
-          </div>
-        </header>
+        <TopHeader profile={null} />
 
         <div class="not-found">
           <div class="not-found-code">404</div>
