@@ -52,7 +52,7 @@ function StoryCard({ story, domain }: { story: LongformStory; domain: string }) 
           <a href={readUrl} class="story-link">
             <h3 class="story-title">{story.title || 'Untitled'}</h3>
             {story.description && (
-              <p class="story-excerpt">{story.description.length > 200 ? story.description.substring(0, 200) + '…' : story.description}</p>
+              <p class="story-excerpt">{story.description.length > 140 ? story.description.substring(0, 140) + '…' : story.description}</p>
             )}
           </a>
           <div class="story-meta">
@@ -68,6 +68,13 @@ function StoryCard({ story, domain }: { story: LongformStory; domain: string }) 
             {ago && <span class="story-time">{ago}</span>}
             <span class="meta-dot">·</span>
             <span class="story-read-time">{minRead} min read</span>
+            <span class="meta-dot" style="margin: 0 0.25rem;">·</span>
+            <button onclick={`handleListAction(this, 'like', '${story.authorDid}', '${rkey}', '${(story.title || '').replace(/'/g, "\\'")}')`} style="background: none; border: none; cursor: pointer; color: inherit; padding: 0; display: flex; align-items: center; transition: color 0.15s;" onmouseover="if(!this.dataset.active) this.style.color='#f02050'" onmouseout="if(!this.dataset.active) this.style.color='inherit'" title="Like">
+              <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2.5" fill="none" class="icon"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
+            </button>
+            <button onclick={`handleListAction(this, 'repost', '${story.authorDid}', '${rkey}', '${(story.title || '').replace(/'/g, "\\'")}')`} style="background: none; border: none; cursor: pointer; color: inherit; padding: 0; display: flex; align-items: center; transition: color 0.15s; margin-left: 0.25rem;" onmouseover="if(!this.dataset.active) this.style.color='#20d070'" onmouseout="if(!this.dataset.active) this.style.color='inherit'" title="Repost">
+              <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2.5" fill="none"><path d="M17 1l4 4-4 4"></path><path d="M3 11V9a4 4 0 0 1 4-4h14"></path><path d="M7 23l-4-4 4-4"></path><path d="M21 13v2a4 4 0 0 1-4 4H3"></path></svg>
+            </button>
           {story.publicationUri && (
             <button
               class="follow-btn"
@@ -304,8 +311,8 @@ export function HomePage({
           }
           .story-thumb {
             flex-shrink: 0;
-            width: 120px;
-            height: 80px;
+            width: 160px;
+            height: 106px;
             border-radius: 6px;
             overflow: hidden;
           }
@@ -321,19 +328,19 @@ export function HomePage({
           }
           .story-title {
             font-family: var(--font-body);
-            font-size: 1.2rem;
+            font-size: 1.15rem;
             font-weight: 700;
-            line-height: 1.4;
+            line-height: 1.35;
             letter-spacing: -0.01em;
-            margin-bottom: 0.5rem;
+            margin-bottom: 0.4rem;
           }
           .story-excerpt {
             font-family: var(--font-body);
-            font-size: 0.875rem;
+            font-size: 0.85rem;
             font-weight: 300;
-            line-height: 1.65;
+            line-height: 1.5;
             color: var(--text-secondary);
-            margin-bottom: 0.75rem;
+            margin-bottom: 0.5rem;
           }
           .story-meta {
             display: flex;
@@ -953,6 +960,25 @@ export function HomePage({
               } catch(e) {}
             }
             btn.disabled = false;
+          };
+
+          window.handleListAction = async function(btn, action, authorDid, rkey, title) {
+            try {
+              const res = await fetch(\`/api/\${action}\`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ rkey, authorDid, title })
+              });
+              const data = await res.json();
+              if (res.status === 401) {
+                alert('Please sign in to interact.');
+              } else if (data.success || res.status === 200) {
+                btn.dataset.active = "true";
+                btn.style.color = action === 'like' ? '#f02050' : '#20d070';
+                const icon = btn.querySelector('.icon');
+                if (icon && action === 'like') icon.setAttribute('fill', 'currentColor');
+              }
+            } catch(e) {}
           };
 
           // Check subscription status on load

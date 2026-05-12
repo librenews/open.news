@@ -416,8 +416,8 @@ export function ProfilePage({
           }
           .story-item-thumb {
             flex-shrink: 0;
-            width: 100px;
-            height: 68px;
+            width: 140px;
+            height: 93px;
             border-radius: 6px;
             overflow: hidden;
           }
@@ -627,7 +627,7 @@ export function ProfilePage({
                       <h3 class="story-item-title">{s.title || 'Untitled'}</h3>
                       {s.description && (
                         <p class="story-item-excerpt">
-                          {s.description.length > 200 ? s.description.substring(0, 200) + '…' : s.description}
+                          {s.description.length > 140 ? s.description.substring(0, 140) + '…' : s.description}
                         </p>
                       )}
                       <div class="story-item-meta">
@@ -638,6 +638,14 @@ export function ProfilePage({
                         <span>{s.wordCount} words</span>
                       </div>
                     </a>
+                    <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem; color: var(--text-muted);">
+                      <button onclick={`handleListAction(this, 'like', '${s.authorDid}', '${rkey}', '${(s.title || '').replace(/'/g, "\\'")}')`} style="background: none; border: none; cursor: pointer; color: inherit; padding: 0; display: flex; align-items: center; transition: color 0.15s;" onmouseover="if(!this.dataset.active) this.style.color='#f02050'" onmouseout="if(!this.dataset.active) this.style.color='inherit'" title="Like">
+                        <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2.5" fill="none" class="icon"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
+                      </button>
+                      <button onclick={`handleListAction(this, 'repost', '${s.authorDid}', '${rkey}', '${(s.title || '').replace(/'/g, "\\'")}')`} style="background: none; border: none; cursor: pointer; color: inherit; padding: 0; display: flex; align-items: center; transition: color 0.15s; margin-left: 0.25rem;" onmouseover="if(!this.dataset.active) this.style.color='#20d070'" onmouseout="if(!this.dataset.active) this.style.color='inherit'" title="Repost">
+                        <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2.5" fill="none"><path d="M17 1l4 4-4 4"></path><path d="M3 11V9a4 4 0 0 1 4-4h14"></path><path d="M7 23l-4-4 4-4"></path><path d="M21 13v2a4 4 0 0 1-4 4H3"></path></svg>
+                      </button>
+                    </div>
                   </div>
                   {s.imageUrl && (
                     <a href={readUrl} class="story-item-thumb">
@@ -652,6 +660,25 @@ export function ProfilePage({
         </div>
         <script dangerouslySetInnerHTML={{__html: `
           (async function() {
+            window.handleListAction = async function(btn, action, authorDid, rkey, title) {
+              try {
+                const res = await fetch(\`/api/\${action}\`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ rkey, authorDid, title })
+                });
+                const data = await res.json();
+                if (res.status === 401) {
+                  alert('Please sign in to interact.');
+                } else if (data.success || res.status === 200) {
+                  btn.dataset.active = "true";
+                  btn.style.color = action === 'like' ? '#f02050' : '#20d070';
+                  const icon = btn.querySelector('.icon');
+                  if (icon && action === 'like') icon.setAttribute('fill', 'currentColor');
+                }
+              } catch(e) {}
+            };
+
             const btn = document.getElementById('profile-follow-btn');
             if (!btn) return;
             const pub = btn.dataset.publication;
