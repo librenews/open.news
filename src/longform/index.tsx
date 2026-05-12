@@ -908,14 +908,32 @@ app.post('/api/publish', async (c) => {
 
 app.get('/api/comments', async (c) => {
   const url = c.req.query('url');
+  const originalUrl = c.req.query('originalUrl');
   if (!url) return c.json({ error: 'Missing url parameter' }, 400);
   
   try {
     const agent = await getLongformBot();
     if (!agent) return c.json({ posts: [] });
     
-    const res = await agent.app.bsky.feed.searchPosts({ q: url, limit: 15 });
-    return c.json(res.data);
+    const promises = [agent.app.bsky.feed.searchPosts({ q: url, limit: 15 })];
+    if (originalUrl) {
+      promises.push(agent.app.bsky.feed.searchPosts({ q: originalUrl, limit: 15 }));
+    }
+    
+    const results = await Promise.all(promises);
+    
+    const postsMap = new Map();
+    for (const res of results) {
+      for (const post of res.data.posts) {
+        postsMap.set(post.uri, post);
+      }
+    }
+    
+    const sortedPosts = Array.from(postsMap.values())
+      .sort((a: any, b: any) => new Date(b.indexedAt).getTime() - new Date(a.indexedAt).getTime())
+      .slice(0, 15);
+      
+    return c.json({ posts: sortedPosts });
   } catch (err: any) {
     logger.error({ err, url }, 'Failed to fetch comments');
     return c.json({ error: 'Search failed' }, 500);

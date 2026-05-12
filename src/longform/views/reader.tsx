@@ -280,8 +280,10 @@ export function ReaderPage(doc: LeafletDocument, authorDid: string, profile: any
     <script>
       (async function() {
         try {
-          const url = encodeURIComponent(window.location.href);
-          const res = await fetch('/api/comments?url=' + url);
+          const currentUrl = encodeURIComponent(window.location.href);
+          const originalUrl = '${originalUrl || ''}';
+          const queryUrl = originalUrl ? \`\${currentUrl}&originalUrl=\${encodeURIComponent(originalUrl)}\` : currentUrl;
+          const res = await fetch('/api/comments?url=' + queryUrl);
           const data = await res.json();
           
           const container = document.getElementById('comments-list');
