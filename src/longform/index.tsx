@@ -1192,10 +1192,17 @@ app.post('/api/publish', async (c) => {
            rkey: 'self',
            record: {
              $type: 'site.standard.publication',
-             title: pubTitle,
+             name: pubTitle,
              description: '',
              url: `https://${config.LONGFORM_DOMAIN || 'longform.social'}`,
              createdAt: new Date().toISOString(),
+             preferences: {
+               showComments: true,
+               showMentions: true,
+               showPrevNext: true,
+               showInDiscover: true,
+               showRecommends: true,
+             },
            },
          });
          publicationUri = createRes.data.uri;

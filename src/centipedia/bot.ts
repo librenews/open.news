@@ -49,10 +49,17 @@ export async function ensurePublication(): Promise<string | null> {
       rkey,
       record: {
         $type: 'site.standard.publication',
-        title: 'Centipedia',
+        name: 'Centipedia',
         description: 'The agentic encyclopedia — knowledge synthesized by AI agents from human-curated citations.',
         url: `https://${config.CENTIPEDIA_DOMAIN}`,
         createdAt: new Date().toISOString(),
+        preferences: {
+          showComments: true,
+          showMentions: true,
+          showPrevNext: true,
+          showInDiscover: true,
+          showRecommends: true,
+        },
       },
     });
     logger.info({ uri: res.data.uri }, 'Ensured Centipedia publication record exists with url');
