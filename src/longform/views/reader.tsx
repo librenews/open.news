@@ -309,7 +309,7 @@ export function ReaderPage(doc: LeafletDocument, authorDid: string, profile: any
 
     <aside class="reader-sidebar" style="margin-top: 2rem;">
       ${relatedArticles.length > 0 ? html`
-        <h3 style="font-family: var(--font-sans); font-size: 14px; font-weight: 600; margin-bottom: 1.25rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em;">Related Articles</h3>
+        <h3 style="font-family: var(--font-sans); font-size: 14px; font-weight: 600; margin-bottom: 1.25rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em;">Related Posts</h3>
         <div style="display: flex; flex-direction: column; gap: 1.5rem;">
           ${relatedArticles.map((article: any) => {
             const url = \`/post/\${article.did}/\${article.uri.split('/').pop()}\`;
