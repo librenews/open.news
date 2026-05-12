@@ -46,7 +46,7 @@ function StoryCard({ story, domain }: { story: LongformStory; domain: string }) 
     || `https://${domain}/post/${story.authorDid}/${rkey}`;
 
   return (
-    <article class="story-card">
+    <article class="story-card" style="display: flex; flex-direction: column;">
       <div class="story-card-inner">
         <div class="story-card-text">
           <a href={readUrl} class="story-link">
@@ -55,26 +55,35 @@ function StoryCard({ story, domain }: { story: LongformStory; domain: string }) 
               <p class="story-excerpt">{story.description.length > 200 ? story.description.substring(0, 200) + '…' : story.description}</p>
             )}
           </a>
-          <div class="story-meta">
-            <a href={`/profile/${story.authorHandle}`} class="author-link">
-              {story.authorAvatar ? (
-                <img src={story.authorAvatar} alt="" class="author-avatar" />
-              ) : (
-                <div class="author-avatar-placeholder">{(story.authorName || story.authorHandle).charAt(0).toUpperCase()}</div>
-              )}
-              <span class="author-name">{story.authorName || story.authorHandle}</span>
-            </a>
-            <span class="meta-dot">·</span>
-            {ago && <span class="story-time">{ago}</span>}
-            <span class="meta-dot">·</span>
-            <span class="story-read-time">{minRead} min read</span>
-            <span class="meta-dot" style="margin: 0 0.25rem;">·</span>
-            <button onclick={`handleListAction(this, 'like', '${story.authorDid}', '${rkey}', '${(story.title || '').replace(/'/g, "\\'")}')`} style="background: none; border: none; cursor: pointer; color: inherit; padding: 0; display: flex; align-items: center; transition: color 0.15s;" onmouseover="if(!this.dataset.active) this.style.color='#f02050'" onmouseout="if(!this.dataset.active) this.style.color='inherit'" title="Like">
-              <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2.5" fill="none" class="icon"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
-            </button>
-            <button onclick={`handleListAction(this, 'repost', '${story.authorDid}', '${rkey}', '${(story.title || '').replace(/'/g, "\\'")}')`} style="background: none; border: none; cursor: pointer; color: inherit; padding: 0; display: flex; align-items: center; transition: color 0.15s; margin-left: 0.25rem;" onmouseover="if(!this.dataset.active) this.style.color='#20d070'" onmouseout="if(!this.dataset.active) this.style.color='inherit'" title="Repost">
-              <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2.5" fill="none"><path d="M17 1l4 4-4 4"></path><path d="M3 11V9a4 4 0 0 1 4-4h14"></path><path d="M7 23l-4-4 4-4"></path><path d="M21 13v2a4 4 0 0 1-4 4H3"></path></svg>
-            </button>
+        </div>
+        {story.imageUrl && (
+          <a href={readUrl} class="story-thumb">
+            <img src={story.imageUrl} alt="" loading="lazy" />
+          </a>
+        )}
+      </div>
+      <div class="story-meta" style="margin-top: 0.85rem; display: flex; align-items: center; justify-content: space-between; width: 100%;">
+        <div style="display: flex; align-items: center; gap: 0.5rem;">
+          <a href={`/profile/${story.authorHandle}`} class="author-link">
+            {story.authorAvatar ? (
+              <img src={story.authorAvatar} alt="" class="author-avatar" />
+            ) : (
+              <div class="author-avatar-placeholder">{(story.authorName || story.authorHandle).charAt(0).toUpperCase()}</div>
+            )}
+            <span class="author-name">{story.authorName || story.authorHandle}</span>
+          </a>
+          <span class="meta-dot">·</span>
+          {ago && <span class="story-time">{ago}</span>}
+          <span class="meta-dot">·</span>
+          <span class="story-read-time">{minRead} min read</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 0.75rem;">
+          <button onclick={`handleListAction(this, 'like', '${story.authorDid}', '${rkey}', '${(story.title || '').replace(/'/g, "\\'")}')`} style="background: none; border: none; cursor: pointer; color: inherit; padding: 0; display: flex; align-items: center; transition: color 0.15s;" onmouseover="if(!this.dataset.active) this.style.color='#f02050'" onmouseout="if(!this.dataset.active) this.style.color='inherit'" title="Like">
+            <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2.5" fill="none" class="icon"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
+          </button>
+          <button onclick={`handleListAction(this, 'repost', '${story.authorDid}', '${rkey}', '${(story.title || '').replace(/'/g, "\\'")}')`} style="background: none; border: none; cursor: pointer; color: inherit; padding: 0; display: flex; align-items: center; transition: color 0.15s;" onmouseover="if(!this.dataset.active) this.style.color='#20d070'" onmouseout="if(!this.dataset.active) this.style.color='inherit'" title="Repost">
+            <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2.5" fill="none"><path d="M17 1l4 4-4 4"></path><path d="M3 11V9a4 4 0 0 1 4-4h14"></path><path d="M7 23l-4-4 4-4"></path><path d="M21 13v2a4 4 0 0 1-4 4H3"></path></svg>
+          </button>
           {story.publicationUri && (
             <button
               class="follow-btn"
@@ -85,12 +94,6 @@ function StoryCard({ story, domain }: { story: LongformStory; domain: string }) 
             </button>
           )}
         </div>
-        </div>
-        {story.imageUrl && (
-          <a href={readUrl} class="story-thumb">
-            <img src={story.imageUrl} alt="" loading="lazy" />
-          </a>
-        )}
       </div>
     </article>
   );

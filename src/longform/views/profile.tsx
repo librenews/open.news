@@ -621,24 +621,33 @@ export function ProfilePage({
               const ago = timeAgo(s.publishedAt);
 
               return (
-                <div class="story-item">
-                  <div class="story-item-content">
-                    <a href={readUrl}>
-                      <h3 class="story-item-title">{s.title || 'Untitled'}</h3>
-                      {s.description && (
-                        <p class="story-item-excerpt">
-                          {s.description.length > 200 ? s.description.substring(0, 200) + '…' : s.description}
-                        </p>
-                      )}
-                      <div class="story-item-meta">
-                        {ago && <span>{ago}</span>}
-                        {ago && <span>·</span>}
-                        <span>{minRead} min read</span>
-                        <span>·</span>
-                        <span>{s.wordCount} words</span>
-                      </div>
-                    </a>
-                    <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem; color: var(--text-muted);">
+                <div class="story-item" style="flex-direction: column;">
+                  <div style="display: flex; gap: 1.25rem; width: 100%;">
+                    <div class="story-item-content">
+                      <a href={readUrl}>
+                        <h3 class="story-item-title">{s.title || 'Untitled'}</h3>
+                        {s.description && (
+                          <p class="story-item-excerpt">
+                            {s.description.length > 200 ? s.description.substring(0, 200) + '…' : s.description}
+                          </p>
+                        )}
+                      </a>
+                    </div>
+                    {s.imageUrl && (
+                      <a href={readUrl} class="story-item-thumb">
+                        <img src={s.imageUrl} alt="" loading="lazy" />
+                      </a>
+                    )}
+                  </div>
+                  <div style="display: flex; align-items: center; justify-content: space-between; width: 100%; margin-top: 0.5rem;">
+                    <div class="story-item-meta" style="margin: 0;">
+                      {ago && <span>{ago}</span>}
+                      {ago && <span>·</span>}
+                      <span>{minRead} min read</span>
+                      <span>·</span>
+                      <span>{s.wordCount} words</span>
+                    </div>
+                    <div style="display: flex; gap: 0.5rem; color: var(--text-muted);">
                       <button onclick={`handleListAction(this, 'like', '${s.authorDid}', '${rkey}', '${(s.title || '').replace(/'/g, "\\'")}')`} style="background: none; border: none; cursor: pointer; color: inherit; padding: 0; display: flex; align-items: center; transition: color 0.15s;" onmouseover="if(!this.dataset.active) this.style.color='#f02050'" onmouseout="if(!this.dataset.active) this.style.color='inherit'" title="Like">
                         <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2.5" fill="none" class="icon"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
                       </button>
@@ -647,11 +656,6 @@ export function ProfilePage({
                       </button>
                     </div>
                   </div>
-                  {s.imageUrl && (
-                    <a href={readUrl} class="story-item-thumb">
-                      <img src={s.imageUrl} alt="" loading="lazy" />
-                    </a>
-                  )}
                 </div>
               );
             })
