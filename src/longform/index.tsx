@@ -1019,8 +1019,8 @@ app.get('/api/stats', async (c) => {
     const cid = record.data.cid;
     
     const [likesRes, repostsRes] = await Promise.all([
-      botAgent.app.bsky.feed.getLikes({ uri, cid }).catch(() => null),
-      botAgent.app.bsky.feed.getRepostedBy({ uri, cid }).catch(() => null)
+      botAgent.app.bsky.feed.getLikes({ uri, cid, limit: 100 }).catch(() => null),
+      botAgent.app.bsky.feed.getRepostedBy({ uri, cid, limit: 100 }).catch(() => null)
     ]);
     
     let liked = false;
@@ -1035,9 +1035,17 @@ app.get('/api/stats', async (c) => {
       }
     }
     
+    const likesCount = likesRes?.data?.likes?.length || 0;
+    const likesDisplay = likesRes?.data?.cursor ? `> ${likesCount}` : likesCount.toString();
+    
+    const repostsCount = repostsRes?.data?.repostedBy?.length || 0;
+    const repostsDisplay = repostsRes?.data?.cursor ? `> ${repostsCount}` : repostsCount.toString();
+
     return c.json({
-      likes: likesRes?.data?.likes?.length || 0,
-      reposts: repostsRes?.data?.repostedBy?.length || 0,
+      likes: likesCount,
+      likesDisplay,
+      reposts: repostsCount,
+      repostsDisplay,
       liked,
       reposted
     });

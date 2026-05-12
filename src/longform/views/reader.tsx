@@ -422,7 +422,7 @@ export function ReaderPage(doc: LeafletDocument, authorDid: string, profile: any
           const data = await res.json();
           
           if (data.likes > 0 || data.liked) {
-            document.getElementById('count-like').innerText = data.likes.toString();
+            document.getElementById('count-like').innerText = data.likesDisplay || data.likes.toString();
           }
           if (data.liked) {
             const btn = document.getElementById('btn-like');
@@ -432,7 +432,7 @@ export function ReaderPage(doc: LeafletDocument, authorDid: string, profile: any
           }
           
           if (data.reposts > 0 || data.reposted) {
-            document.getElementById('count-repost').innerText = data.reposts.toString();
+            document.getElementById('count-repost').innerText = data.repostsDisplay || data.reposts.toString();
           }
           if (data.reposted) {
             const btn = document.getElementById('btn-repost');
