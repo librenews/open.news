@@ -161,8 +161,10 @@ export function ReaderPage(doc: LeafletDocument, authorDid: string, profile: any
   // Calculate external read URL if available
   const rkey = (doc as any).rkey || 'self';
   
-  const originalUrl = (doc as any).publicationUrl 
-      ? (doc as any).publicationUrl + ((doc as any).path || '')
+  const pubUrl = (doc as any).publicationUrl || null;
+  const isOwnSite = pubUrl && pubUrl.includes('longform.social');
+  const originalUrl = !isOwnSite && pubUrl
+      ? pubUrl + ((doc as any).path || '')
       : (doc as any).site && !(doc as any).site.startsWith('at://') && (doc as any).path 
         ? `${(doc as any).site}${(doc as any).path}`
         : isMarkdownString 

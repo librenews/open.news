@@ -562,7 +562,7 @@ app.get('/post/:did/:rkey', async (c) => {
               doc.publicationUrl = pubUrl;
               doc.publicationTitle = (pdsRes.data.value as any).name || (pdsRes.data.value as any).title || null;
               await db.query(
-                'INSERT INTO site_publications (uri, url, raw_record) VALUES ($1, $2, $3) ON CONFLICT (uri) DO NOTHING',
+                'INSERT INTO site_publications (uri, url, raw_record) VALUES ($1, $2, $3) ON CONFLICT (uri) DO UPDATE SET url = $2, raw_record = $3',
                 [doc.site, pubUrl, pdsRes.data.value]
               );
             }
