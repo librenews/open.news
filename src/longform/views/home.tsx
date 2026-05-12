@@ -634,7 +634,6 @@ export function HomePage({
               <div class="center-tabs">
                 <a href="/?view=latest" class={`center-tab ${view === 'latest' ? 'active' : ''}`}>Latest</a>
                 {profile && <a href="/?view=following" class={`center-tab ${view === 'following' ? 'active' : ''}`}>Following</a>}
-                <a href="/?view=foryou" class={`center-tab ${view === 'foryou' ? 'active' : ''}`}>For You</a>
               </div>
             </div>
 
