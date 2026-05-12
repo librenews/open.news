@@ -423,9 +423,7 @@ export function ReaderPage(doc: LeafletDocument, authorDid: string, profile: any
           const res = await fetch(\`/api/stats?authorDid=\${authorDid}&rkey=\${rkey}\`);
           const data = await res.json();
           
-          if (data.likes > 0 || data.liked) {
-            document.getElementById('count-like').innerText = data.likesDisplay || data.likes.toString();
-          }
+          document.getElementById('count-like').innerText = data.likesDisplay || data.likes.toString();
           if (data.liked) {
             const btn = document.getElementById('btn-like');
             btn.dataset.active = "true";
@@ -433,9 +431,7 @@ export function ReaderPage(doc: LeafletDocument, authorDid: string, profile: any
             document.getElementById('icon-like').setAttribute('fill', 'currentColor');
           }
           
-          if (data.reposts > 0 || data.reposted) {
-            document.getElementById('count-repost').innerText = data.repostsDisplay || data.reposts.toString();
-          }
+          document.getElementById('count-repost').innerText = data.repostsDisplay || data.reposts.toString();
           if (data.reposted) {
             const btn = document.getElementById('btn-repost');
             btn.dataset.active = "true";

@@ -962,7 +962,7 @@ app.post('/api/like', async (c) => {
       cid = record.data.cid;
     }
     
-    await agent.com.atproto.repo.createRecord({
+    const res = await agent.com.atproto.repo.createRecord({
       repo: sessionDid,
       collection: 'app.bsky.feed.like',
       record: {
@@ -970,6 +970,14 @@ app.post('/api/like', async (c) => {
         createdAt: new Date().toISOString()
       }
     });
+    
+    // Track locally (source of truth for stats)
+    await db.query(
+      `INSERT INTO article_interactions (article_uri, actor_did, interaction_type, record_uri)
+       VALUES ($1, $2, 'like', $3) ON CONFLICT (article_uri, actor_did, interaction_type) DO NOTHING`,
+      [uri, sessionDid, res.data.uri]
+    );
+    
     return c.json({ success: true });
   } catch (err: any) {
     logger.error({ err }, 'Failed to like article');
@@ -999,7 +1007,7 @@ app.post('/api/repost', async (c) => {
       cid = record.data.cid;
     }
     
-    await agent.com.atproto.repo.createRecord({
+    const res = await agent.com.atproto.repo.createRecord({
       repo: sessionDid,
       collection: 'app.bsky.feed.repost',
       record: {
@@ -1007,6 +1015,14 @@ app.post('/api/repost', async (c) => {
         createdAt: new Date().toISOString()
       }
     });
+    
+    // Track locally
+    await db.query(
+      `INSERT INTO article_interactions (article_uri, actor_did, interaction_type, record_uri)
+       VALUES ($1, $2, 'repost', $3) ON CONFLICT (article_uri, actor_did, interaction_type) DO NOTHING`,
+      [uri, sessionDid, res.data.uri]
+    );
+    
     return c.json({ success: true });
   } catch (err: any) {
     logger.error({ err }, 'Failed to repost article');
@@ -1019,51 +1035,32 @@ app.get('/api/stats', async (c) => {
   if (!authorDid || !rkey) return c.json({ error: 'Missing parameters' }, 400);
   
   const sessionDid = await getSession(c);
+  // Default to standard site document, but since WhiteWind uses a different collection,
+  // we may need to support it if it arises. For now, rely on standard format or allow
+  // the client to pass the full URI in the future.
+  const articleUri = `at://${authorDid}/site.standard.document/${rkey}`;
   
   try {
-    const botAgent = await getLongformBot();
-    if (!botAgent) return c.json({ likes: 0, reposts: 0, liked: false, reposted: false });
+    const { rows } = await db.query(
+      `SELECT interaction_type, count(*)::int AS count,
+              bool_or(actor_did = $2) AS by_session
+       FROM article_interactions
+       WHERE article_uri = $1
+       GROUP BY interaction_type`,
+      [articleUri, sessionDid || '']
+    );
     
-    // Resolve PDS to get CID
-    const pdsUrl = await resolvePds(authorDid);
-    const fetchAgent = new BskyAgent({ service: pdsUrl });
-    const record = await fetchAgent.com.atproto.repo.getRecord({
-      repo: authorDid,
-      collection: 'site.standard.document',
-      rkey
-    });
-    
-    const uri = `at://${authorDid}/site.standard.document/${rkey}`;
-    const cid = record.data.cid;
-    
-    const [likesRes, repostsRes] = await Promise.all([
-      botAgent.app.bsky.feed.getLikes({ uri, cid, limit: 100 }).catch(() => null),
-      botAgent.app.bsky.feed.getRepostedBy({ uri, cid, limit: 100 }).catch(() => null)
-    ]);
-    
-    let liked = false;
-    let reposted = false;
-    
-    if (sessionDid) {
-      if (likesRes?.data?.likes) {
-        liked = likesRes.data.likes.some((l: any) => l.actor.did === sessionDid);
-      }
-      if (repostsRes?.data?.repostedBy) {
-        reposted = repostsRes.data.repostedBy.some((r: any) => r.did === sessionDid);
-      }
+    let likes = 0, reposts = 0, liked = false, reposted = false;
+    for (const row of rows) {
+      if (row.interaction_type === 'like') { likes = row.count; liked = row.by_session; }
+      if (row.interaction_type === 'repost') { reposts = row.count; reposted = row.by_session; }
     }
     
-    const likesCount = likesRes?.data?.likes?.length || 0;
-    const likesDisplay = likesRes?.data?.cursor ? `> ${likesCount}` : likesCount.toString();
-    
-    const repostsCount = repostsRes?.data?.repostedBy?.length || 0;
-    const repostsDisplay = repostsRes?.data?.cursor ? `> ${repostsCount}` : repostsCount.toString();
-
     return c.json({
-      likes: likesCount,
-      likesDisplay,
-      reposts: repostsCount,
-      repostsDisplay,
+      likes,
+      likesDisplay: likes.toString(),
+      reposts,
+      repostsDisplay: reposts.toString(),
       liked,
       reposted
     });
