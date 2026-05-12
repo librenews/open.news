@@ -25,6 +25,18 @@ export interface TopicGroup {
   slug: string;
 }
 
+export interface PopularPost {
+  uri: string;
+  authorDid: string;
+  authorName: string;
+  authorHandle: string;
+  authorAvatar: string;
+  title: string;
+  publishedAt: string | null;
+  likeCount: number;
+  repostCount: number;
+}
+
 function timeAgo(dateStr: string | null): string {
   if (!dateStr) return '';
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -115,6 +127,7 @@ export function HomePage({
   profile?: { displayName: string; avatar: string; handle: string } | null;
   domain: string;
   hasSubscriptions?: boolean;
+  popularPosts?: PopularPost[];
 }) {
   return (
     <html lang="en">
@@ -552,6 +565,76 @@ export function HomePage({
             }
           }
 
+          /* Popular posts sidebar */
+          .popular-post-item {
+            display: flex;
+            gap: 0.65rem;
+            align-items: flex-start;
+            padding: 0.6rem 0.5rem;
+            border-radius: 8px;
+            text-decoration: none;
+            color: inherit;
+            transition: background 0.15s;
+          }
+          .popular-post-item:hover {
+            background: var(--bg-secondary);
+          }
+          .popular-post-rank {
+            font-size: 0.8rem;
+            font-weight: 700;
+            color: var(--text-muted);
+            min-width: 1.25rem;
+            text-align: right;
+            padding-top: 0.1rem;
+          }
+          .popular-post-avatar {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            object-fit: cover;
+            flex-shrink: 0;
+          }
+          .popular-post-avatar-placeholder {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background: var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-muted);
+            font-size: 0.6rem;
+            font-weight: 700;
+            flex-shrink: 0;
+          }
+          .popular-post-text {
+            flex: 1;
+            min-width: 0;
+          }
+          .popular-post-title {
+            font-size: 0.82rem;
+            font-weight: 600;
+            color: var(--text-main);
+            line-height: 1.3;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+          }
+          .popular-post-meta {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            margin-top: 0.2rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+          }
+          .popular-post-stat {
+            display: flex;
+            align-items: center;
+            gap: 0.2rem;
+          }
+
           /* Empty state */
           .empty-state {
             text-align: center;
@@ -663,33 +746,43 @@ export function HomePage({
 
           {/* Right Sidebar */}
           <aside class="right-sidebar">
-            {profile ? (
-              <div class="user-card">
-                {profile.avatar ? (
-                  <img src={profile.avatar} alt="" class="user-card-avatar" />
-                ) : (
-                  <div class="author-avatar-placeholder" style="width: 36px; height: 36px; font-size: 0.85rem;">
-                    {profile.displayName.charAt(0).toUpperCase()}
-                  </div>
-                )}
-                <div class="user-card-info">
-                  <div class="user-card-name">{profile.displayName}</div>
-                  <div class="user-card-handle">@{profile.handle}</div>
-                </div>
-                <div class="user-card-dropdown">
-                  <a href={`/profile/${profile.handle}`}>Profile</a>
-                  <a href="/posts">My Stories</a>
-                  <a href="/logout" class="signout-link">Sign out</a>
-                </div>
-              </div>
-            ) : (
+            {(popularPosts && popularPosts.length > 0) && (
               <div class="sidebar-section">
-                <a href="/login" class="nav-write-btn" style="margin-bottom: 0.75rem;">
-                  Sign in to write
-                </a>
-                <p style="font-size: 0.75rem; color: var(--text-muted); line-height: 1.5; text-align: center;">
-                  Use your Bluesky or AT Protocol identity
-                </p>
+                <h2 class="sidebar-title">Popular</h2>
+                <div style="display: flex; flex-direction: column;">
+                  {popularPosts.map((post, i) => {
+                    const rkey = post.uri.split('/').pop();
+                    const url = `/post/${post.authorDid}/${rkey}`;
+                    return (
+                      <a href={url} class="popular-post-item">
+                        <span class="popular-post-rank">{i + 1}</span>
+                        {post.authorAvatar ? (
+                          <img src={post.authorAvatar} alt="" class="popular-post-avatar" />
+                        ) : (
+                          <div class="popular-post-avatar-placeholder">{(post.authorName || post.authorHandle).charAt(0).toUpperCase()}</div>
+                        )}
+                        <div class="popular-post-text">
+                          <div class="popular-post-title">{post.title || 'Untitled'}</div>
+                          <div class="popular-post-meta">
+                            <span>{post.authorName || post.authorHandle}</span>
+                            {post.likeCount > 0 && (
+                              <span class="popular-post-stat">
+                                <svg viewBox="0 0 24 24" width="10" height="10" stroke="currentColor" stroke-width="2.5" fill="none"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
+                                {post.likeCount}
+                              </span>
+                            )}
+                            {post.repostCount > 0 && (
+                              <span class="popular-post-stat">
+                                <svg viewBox="0 0 24 24" width="10" height="10" stroke="currentColor" stroke-width="2.5" fill="none"><path d="M17 1l4 4-4 4"></path><path d="M3 11V9a4 4 0 0 1 4-4h14"></path><path d="M7 23l-4-4 4-4"></path><path d="M21 13v2a4 4 0 0 1-4 4H3"></path></svg>
+                                {post.repostCount}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </a>
+                    );
+                  })}
+                </div>
               </div>
             )}
 
@@ -706,13 +799,6 @@ export function HomePage({
                 </div>
               </div>
             )}
-
-            <div class="sidebar-section" style="margin-top: 2rem;">
-              <p style="font-size: 0.75rem; color: var(--text-muted); line-height: 1.6;">
-                Longform indexes long-form writing published on the AT Protocol.{' '}
-                <a href="/new" style="color: var(--text-secondary);">Start writing →</a>
-              </p>
-            </div>
           </aside>
         </div>
         <script dangerouslySetInnerHTML={{__html: `

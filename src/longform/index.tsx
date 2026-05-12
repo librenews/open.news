@@ -199,7 +199,54 @@ app.get('/', async (c) => {
   // Track whether the user has any subscriptions (for empty state on Following tab)
   const hasSubscriptions = followedPubUris.length > 0;
 
-  return c.html((<HomePage stories={stories} topics={topics} view={view} profile={profile} domain={config.LONGFORM_DOMAIN} hasSubscriptions={hasSubscriptions} />) as unknown as string);
+  // Fetch popular posts using engagement counts with time decay
+  let popularPosts: any[] = [];
+  try {
+    const { rows: popRows } = await db.query(`
+      SELECT
+        s.uri, s.author_did, s.title, s.published_at,
+        COUNT(CASE WHEN ai.interaction_type = 'like' THEN 1 END) AS like_count,
+        COUNT(CASE WHEN ai.interaction_type = 'repost' THEN 1 END) AS repost_count,
+        COUNT(*) AS total_interactions,
+        -- Time decay: score = interactions * exp(-age_in_days / 7)
+        COUNT(*) * EXP(-EXTRACT(EPOCH FROM (NOW() - s.published_at)) / (7 * 86400)) AS decay_score
+      FROM article_interactions ai
+      JOIN site_standard_articles s ON s.uri = ai.article_uri
+      WHERE s.published_at > NOW() - INTERVAL '30 days'
+        AND s.word_count > 100
+        AND s.language = 'eng'
+      GROUP BY s.uri, s.author_did, s.title, s.published_at
+      HAVING COUNT(*) >= 1
+      ORDER BY decay_score DESC
+      LIMIT 5
+    `);
+
+    const popDids = [...new Set(popRows.map((r: any) => r.author_did))];
+    const popProfileMap = new Map<string, any>();
+    await Promise.all(popDids.map(async (did) => {
+      const p = await fetchUserProfile(did as string);
+      popProfileMap.set(did as string, p);
+    }));
+
+    popularPosts = popRows.map((r: any) => {
+      const p = popProfileMap.get(r.author_did) || { displayName: r.author_did, avatar: '', handle: r.author_did };
+      return {
+        uri: r.uri,
+        authorDid: r.author_did,
+        authorName: p.displayName,
+        authorHandle: p.handle,
+        authorAvatar: p.avatar,
+        title: r.title,
+        publishedAt: r.published_at?.toISOString() ?? null,
+        likeCount: parseInt(r.like_count) || 0,
+        repostCount: parseInt(r.repost_count) || 0,
+      };
+    });
+  } catch (err) {
+    logger.warn({ err }, 'Failed to fetch popular posts');
+  }
+
+  return c.html((<HomePage stories={stories} topics={topics} view={view} profile={profile} domain={config.LONGFORM_DOMAIN} hasSubscriptions={hasSubscriptions} popularPosts={popularPosts} />) as unknown as string);
 });
 
 app.get('/search', async (c) => {
