@@ -1547,6 +1547,30 @@ const collabServer = HocuspocusServer.configure({
 
 const wss = new WebSocketServer({ noServer: true });
 
+// Bare rkey redirect — handles old URLs like /j6o5y1yxcm
+app.get('/:rkey', async (c) => {
+  const rkey = c.req.param('rkey');
+  // Only handle strings that look like rkeys (alphanumeric, no dots/slashes)
+  if (!/^[a-zA-Z0-9_~:-]{3,50}$/.test(rkey)) {
+    return c.html((<NotFoundPage />) as unknown as string, 404);
+  }
+
+  try {
+    // Look up article by rkey suffix in the URI
+    const { rows } = await db.query(
+      `SELECT uri, author_did FROM site_standard_articles WHERE uri LIKE $1 LIMIT 1`,
+      [`%/${rkey}`]
+    );
+    if (rows.length > 0) {
+      return c.redirect(`/post/${rows[0].author_did}/${rkey}`, 301);
+    }
+  } catch (err) {
+    logger.warn({ err, rkey }, 'Failed to look up bare rkey redirect');
+  }
+
+  return c.html((<NotFoundPage />) as unknown as string, 404);
+});
+
 // Custom 404 page
 app.notFound((c) => {
   return c.html((<NotFoundPage />) as unknown as string, 404);
