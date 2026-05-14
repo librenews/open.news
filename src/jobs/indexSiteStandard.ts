@@ -66,6 +66,11 @@ export function extractTextFromSiteStandard(record: any): string {
       }
     }
   }
+
+  // WordPress / third-party plain text content
+  if (record.textContent && typeof record.textContent === 'string') {
+    text += record.textContent + '\n\n';
+  }
   
   return text.trim();
 }
