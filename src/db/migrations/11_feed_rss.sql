@@ -1,2 +1,9 @@
-ALTER TABLE feed_users ADD COLUMN app_password TEXT DEFAULT NULL;
-ALTER TABLE feed_users ADD COLUMN rss_token TEXT UNIQUE DEFAULT NULL;
+-- RSS feed tokens for authenticated feeds (following)
+CREATE TABLE IF NOT EXISTS rss_feed_tokens (
+  token TEXT PRIMARY KEY,
+  did TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  last_used_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_rss_feed_tokens_did ON rss_feed_tokens(did);

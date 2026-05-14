@@ -308,16 +308,43 @@ app.get('/feed/latest.xml', async (c) => {
 });
 
 app.get('/feed/following.xml', async (c) => {
-  const sessionDid = await getSession(c);
-  if (!sessionDid) return c.text('Sign in required for following feed', 401);
+  const token = c.req.query('token');
+  let userDid: string | null = null;
 
+  if (token) {
+    // Token-based access (RSS readers)
+    const { rows } = await db.query('SELECT did FROM rss_feed_tokens WHERE token = $1', [token]);
+    if (rows.length === 0) return c.text('Invalid or expired feed token', 403);
+    userDid = rows[0].did;
+    // Update last_used_at
+    db.query('UPDATE rss_feed_tokens SET last_used_at = now() WHERE token = $1', [token]).catch(() => {});
+  } else {
+    // Session-based access (browser) — generate token if needed and redirect
+    const sessionDid = await getSession(c);
+    if (!sessionDid) return c.text('Sign in required. Visit longform.social to get your personal feed URL.', 401);
+    userDid = sessionDid;
+
+    // Ensure user has a token, create if not
+    const { rows: existing } = await db.query('SELECT token FROM rss_feed_tokens WHERE did = $1', [sessionDid]);
+    let feedToken: string;
+    if (existing.length > 0) {
+      feedToken = existing[0].token;
+    } else {
+      const { randomBytes } = await import('crypto');
+      feedToken = randomBytes(24).toString('base64url');
+      await db.query('INSERT INTO rss_feed_tokens (token, did) VALUES ($1, $2) ON CONFLICT (did) DO NOTHING', [feedToken, sessionDid]);
+    }
+    // Redirect to token URL so the user sees the correct URL to copy
+    return c.redirect(`/feed/following.xml?token=${feedToken}`);
+  }
+
+  // Fetch subscriptions from user's PDS (public, no auth needed)
   let followedPubUris: string[] = [];
   try {
-    const oauthSession = await restoreSession(c, sessionDid);
-    if (!oauthSession) return c.text('Session expired', 401);
-    const agent = new Agent(oauthSession);
-    const res = await agent.com.atproto.repo.listRecords({
-      repo: sessionDid,
+    const pdsEndpoint = await resolvePds(userDid);
+    const publicAgent = new BskyAgent({ service: pdsEndpoint });
+    const res = await publicAgent.com.atproto.repo.listRecords({
+      repo: userDid,
       collection: 'site.standard.graph.subscription',
       limit: 100,
     });
@@ -325,7 +352,7 @@ app.get('/feed/following.xml', async (c) => {
       .map((r: any) => r.value?.publication)
       .filter((u: any): u is string => typeof u === 'string');
   } catch (err) {
-    logger.warn({ err }, 'Failed to fetch subscriptions for RSS feed');
+    logger.warn({ err, did: userDid }, 'Failed to fetch subscriptions for RSS feed');
   }
 
   let items: RssFeedItem[] = [];
@@ -378,7 +405,7 @@ app.get('/feed/following.xml', async (c) => {
     title: 'Longform — Following',
     description: 'Articles from publications you follow',
     link: `${baseUrl}/?view=following`,
-    feedUrl: `${baseUrl}/feed/following.xml`,
+    feedUrl: `${baseUrl}/feed/following.xml?token=${token}`,
     imageUrl: `${baseUrl}/logo.png`,
     items,
   });
