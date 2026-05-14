@@ -77,23 +77,45 @@ export function extractTextFromSiteStandard(record: any): string {
 
 // --- Content moderation ---
 const BLOCKED_DOMAINS = new Set([
+  // Adult / NSFW
   'e-hentai.org', 'exhentai.org', 'nhentai.net', 'hanime.tv',
   'hentaihaven.xxx', 'fakku.net', 'hitomi.la', 'tsumino.com',
   'pururin.to', 'pornhub.com', 'xvideos.com', 'xhamster.com',
   'redtube.com', 'youporn.com', 'tube8.com', 'spankbang.com',
   'xnxx.com', 'chaturbate.com', 'stripchat.com', 'onlyfans.com',
   'fansly.com', 'manyvids.com', 'clips4sale.com',
+  // Spam / job aggregators / SEO farms
+  'jobs.now', 'www.jobs.now',
 ]);
 
-const NSFW_PATTERNS = /\b(hentai|doujinshi|nsfw|xxx|porn|erotic[a]?|blowjob|milf|dilf|bbm|sex.?scene|nude|naked|genitalia|explicit.?content|r-?18|adult.?content)\b/i;
+const BLOCKED_CONTENT_PATTERNS = /\b(hentai|doujinshi|nsfw|xxx|porn|erotic[a]?|blowjob|milf|dilf|bbm|sex.?scene|nude|naked|genitalia|explicit.?content|r-?18|adult.?content)\b/i;
 
-function isNsfwContent(record: any): boolean {
-  // Check domain
+// Load additional blocked domains from DB (cached, refreshes every 5 min)
+let dbBlockedDomains: Set<string> = new Set();
+let dbBlocklistLastFetch = 0;
+async function getBlockedDomains(): Promise<Set<string>> {
+  const now = Date.now();
+  if (now - dbBlocklistLastFetch > 5 * 60 * 1000) {
+    try {
+      const { rows } = await db.query('SELECT domain FROM moderation_blocklist WHERE active = true');
+      dbBlockedDomains = new Set(rows.map((r: any) => r.domain));
+      dbBlocklistLastFetch = now;
+    } catch {
+      // Table may not exist yet — that's fine
+    }
+  }
+  return dbBlockedDomains;
+}
+
+async function isBlockedContent(record: any): Promise<boolean> {
+  // Check domain against hardcoded + DB blocklist
   const site = record.site || '';
   if (typeof site === 'string' && site.startsWith('http')) {
     try {
       const hostname = new URL(site).hostname.replace(/^www\./, '');
       if (BLOCKED_DOMAINS.has(hostname)) return true;
+      const dynamicList = await getBlockedDomains();
+      if (dynamicList.has(hostname)) return true;
     } catch {}
   }
 
@@ -105,7 +127,7 @@ function isNsfwContent(record: any): boolean {
     ...(record.tags || []),
   ].join(' ');
 
-  return NSFW_PATTERNS.test(textToCheck);
+  return BLOCKED_CONTENT_PATTERNS.test(textToCheck);
 }
 
 export async function indexSiteStandardJob(job: Job<IndexSiteStandardData>) {
@@ -113,7 +135,7 @@ export async function indexSiteStandardJob(job: Job<IndexSiteStandardData>) {
   
   try {
     // Content moderation check
-    if (isNsfwContent(record)) {
+    if (await isBlockedContent(record)) {
       logger.info({ uri: postUri, site: record.site, title: record.title?.substring(0, 60) }, 'Skipped NSFW content');
       return;
     }
