@@ -3,7 +3,7 @@ export const TopHeaderStyles = `
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 0.75rem 2rem;
+    padding: 0.5rem 2rem;
     border-bottom: 1px solid var(--border);
     font-family: var(--font-sans);
     position: sticky;
@@ -23,7 +23,7 @@ export const TopHeaderStyles = `
     gap: 0.5rem;
   }
   .top-header-logo img {
-    height: 44px;
+    height: 32px;
     width: auto;
   }
   .top-header-search {

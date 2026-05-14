@@ -66,7 +66,7 @@ export function Layout({ title, children, profile, headerAction, og }: { title: 
             font-family: var(--font-sans);
             font-size: 14px;
             font-weight: 500;
-            padding: 1rem 2rem;
+            padding: 0.5rem 2rem;
             border-bottom: 1px solid rgba(0,0,0,0.06);
           }
           
@@ -164,7 +164,7 @@ export function Layout({ title, children, profile, headerAction, og }: { title: 
           ${title.includes('Login') ? '' : html`
             <nav class="nav-header">
               <a href="/" style="display: flex; align-items: center; text-decoration: none;">
-                <img src="/logo.png" alt="Longform" style="height: 44px; width: auto;" onerror="this.outerHTML='<span style=\\'font-family: var(--font-body); font-weight: 700; font-size: 26px; color: var(--text-main); letter-spacing: -0.03em;\\'>Longform</span>'" />
+                <img src="/logo.png" alt="Longform" style="height: 32px; width: auto;" onerror="this.outerHTML='<span style=\\'font-family: var(--font-body); font-weight: 700; font-size: 22px; color: var(--text-main); letter-spacing: -0.03em;\\'>Longform</span>'" />
               </a>
               
               ${profile ? html`
