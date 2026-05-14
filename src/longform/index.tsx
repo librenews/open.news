@@ -143,7 +143,8 @@ app.get('/', async (c) => {
        CASE WHEN s.raw_record->>'site' LIKE 'at://%site.standard.publication%'
          THEN s.raw_record->>'site'
          ELSE NULL
-       END AS publication_uri
+       END AS publication_uri,
+       s.raw_record->>'tags' AS tags_json
      FROM site_standard_articles s
      LEFT JOIN site_publications p ON p.uri = s.raw_record->>'site'
      WHERE s.word_count > 100
@@ -162,7 +163,8 @@ app.get('/', async (c) => {
        CASE WHEN s.raw_record->>'site' LIKE 'at://%site.standard.publication%'
          THEN s.raw_record->>'site'
          ELSE NULL
-       END AS publication_uri
+       END AS publication_uri,
+       s.raw_record->>'tags' AS tags_json
      FROM site_standard_articles s
      LEFT JOIN site_publications p ON p.uri = s.raw_record->>'site'
      WHERE s.word_count > 100
@@ -204,6 +206,7 @@ app.get('/', async (c) => {
       imageUrl: r.image_cid ? `/blob/${r.author_did}/${r.image_cid}` : null,
       externalUrl: readUrl,
       publicationUri: r.publication_uri || null,
+      tags: (() => { try { return r.tags_json ? JSON.parse(r.tags_json) : []; } catch { return []; } })(),
     };
   });
 
@@ -260,8 +263,141 @@ app.get('/', async (c) => {
     logger.warn({ err }, 'Failed to fetch popular posts');
   }
 
+  // Fetch trending tags (last 7 days)
+  let trendingTags: { tag: string; count: number }[] = [];
+  try {
+    const { rows: tagRows } = await db.query(`
+      SELECT tag, COUNT(*) AS cnt
+      FROM site_standard_articles s,
+           jsonb_array_elements_text(s.raw_record->'tags') AS tag
+      WHERE s.word_count > 100 AND s.language = 'eng'
+        AND s.published_at > NOW() - INTERVAL '7 days'
+      GROUP BY tag
+      ORDER BY cnt DESC
+      LIMIT 20
+    `);
+    trendingTags = tagRows.map((r: any) => ({ tag: r.tag, count: parseInt(r.cnt) }));
+  } catch (err) {
+    logger.warn({ err }, 'Failed to fetch trending tags');
+  }
+
   const feedToken = sessionDid ? await getOrCreateFeedToken(sessionDid) : null;
-  return c.html((<HomePage stories={stories} topics={topics} view={view} profile={profile} domain={config.LONGFORM_DOMAIN} hasSubscriptions={hasSubscriptions} popularPosts={popularPosts} feedToken={feedToken} />) as unknown as string);
+  return c.html((<HomePage stories={stories} topics={topics} view={view} profile={profile} domain={config.LONGFORM_DOMAIN} hasSubscriptions={hasSubscriptions} popularPosts={popularPosts} feedToken={feedToken} trendingTags={trendingTags} />) as unknown as string);
+});
+
+// --- Tag page ---
+
+app.get('/tag/:tag', async (c) => {
+  const tag = decodeURIComponent(c.req.param('tag'));
+  const sessionDid = await getSession(c);
+  const profile = sessionDid ? await fetchUserProfile(sessionDid) : null;
+
+  const { rows } = await db.query(
+    `SELECT s.uri, s.author_did, s.title, s.description, s.published_at, COALESCE(p.url, s.site) as site, s.path, s.word_count,
+       split_part(s.uri, '/', 4) AS collection,
+       CASE WHEN s.uri LIKE '%/site.standard.document/%' OR s.uri LIKE '%/pub.leaflet.document/%'
+         THEN jsonb_path_query_first(s.raw_record, '$.content.pages[0].blocks[*].block ? (@."$type" == "pub.leaflet.blocks.image").image.ref."$link"') #>> '{}'
+         ELSE NULL
+       END AS image_cid,
+       CASE WHEN s.raw_record->>'site' LIKE 'at://%site.standard.publication%'
+         THEN s.raw_record->>'site'
+         ELSE NULL
+       END AS publication_uri,
+       s.raw_record->>'tags' AS tags_json
+     FROM site_standard_articles s
+     LEFT JOIN site_publications p ON p.uri = s.raw_record->>'site'
+     WHERE s.word_count > 100
+       AND s.language = 'eng'
+       AND s.raw_record->'tags' ? $1
+     ORDER BY s.published_at DESC NULLS LAST
+     LIMIT 40`,
+    [tag]
+  );
+
+  const uniqueDids = [...new Set(rows.map((r: any) => r.author_did))];
+  const profileMap = new Map<string, { displayName: string; avatar: string; handle: string }>();
+  await Promise.all(uniqueDids.map(async (did) => {
+    const p = await fetchUserProfile(did as string);
+    profileMap.set(did as string, p);
+  }));
+
+  const stories: LongformStory[] = rows.map((r: any) => {
+    const p = profileMap.get(r.author_did) || { displayName: r.author_did, avatar: '', handle: r.author_did };
+    return {
+      uri: r.uri,
+      authorDid: r.author_did,
+      authorHandle: p.handle,
+      authorAvatar: p.avatar,
+      authorName: p.displayName,
+      title: r.title,
+      description: r.description,
+      publishedAt: r.published_at?.toISOString() ?? null,
+      site: r.site,
+      path: r.path,
+      wordCount: r.word_count || 0,
+      imageUrl: r.image_cid ? `/blob/${r.author_did}/${r.image_cid}` : null,
+      externalUrl: null,
+      publicationUri: r.publication_uri || null,
+      tags: (() => { try { return r.tags_json ? JSON.parse(r.tags_json) : []; } catch { return []; } })(),
+    };
+  });
+
+  const feedToken = sessionDid ? await getOrCreateFeedToken(sessionDid) : null;
+  return c.html((<HomePage stories={stories} topics={[]} view={'latest'} profile={profile} domain={config.LONGFORM_DOMAIN} hasSubscriptions={false} feedToken={feedToken} trendingTags={[]} pageTitle={`#${tag}`} pageRssUrl={`/feed/tag/${encodeURIComponent(tag)}.xml`} />) as unknown as string);
+});
+
+// --- Tag RSS feed ---
+
+app.get('/feed/tag/:tag.xml', async (c) => {
+  const tag = decodeURIComponent(c.req.param('tag'));
+
+  const { rows } = await db.query(
+    `SELECT s.uri, s.author_did, s.title, s.description, s.published_at, s.word_count,
+       s.raw_record->>'tags' as all_tags_json
+     FROM site_standard_articles s
+     WHERE s.word_count > 100 AND s.language = 'eng'
+       AND s.raw_record->'tags' ? $1
+     ORDER BY s.published_at DESC NULLS LAST
+     LIMIT 30`,
+    [tag]
+  );
+
+  const uniqueDids = [...new Set(rows.map((r: any) => r.author_did))];
+  const profileMap = new Map<string, { displayName: string; avatar: string; handle: string }>();
+  await Promise.all(uniqueDids.map(async (did) => {
+    const p = await fetchUserProfile(did as string);
+    profileMap.set(did as string, p);
+  }));
+
+  const baseUrl = `https://${config.LONGFORM_DOMAIN}`;
+  const items: RssFeedItem[] = rows.map((r: any) => {
+    const p = profileMap.get(r.author_did) || { displayName: r.author_did, avatar: '', handle: r.author_did };
+    const rkey = r.uri.split('/').pop();
+    let tags: string[] = [];
+    try { if (r.all_tags_json) tags = JSON.parse(r.all_tags_json); } catch {}
+    return {
+      title: r.title || 'Untitled',
+      link: `${baseUrl}/post/${r.author_did}/${rkey}`,
+      description: r.description || '',
+      authorName: p.displayName,
+      authorUri: `${baseUrl}/profile/${p.handle}`,
+      pubDate: r.published_at?.toISOString() ?? null,
+      guid: r.uri,
+      wordCount: r.word_count || 0,
+      categories: tags,
+    };
+  });
+
+  const xml = generateRssFeed({
+    title: `Longform — #${tag}`,
+    description: `Latest longform articles tagged "${tag}"`,
+    link: `${baseUrl}/tag/${encodeURIComponent(tag)}`,
+    feedUrl: `${baseUrl}/feed/tag/${encodeURIComponent(tag)}.xml`,
+    imageUrl: `${baseUrl}/logo.png`,
+    items,
+  });
+
+  return c.body(xml, 200, { 'Content-Type': 'application/rss+xml; charset=utf-8', 'Cache-Control': 'public, max-age=300' });
 });
 
 // --- RSS Feeds ---

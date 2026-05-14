@@ -17,6 +17,7 @@ export interface LongformStory {
   imageUrl: string | null;
   externalUrl: string | null;
   publicationUri: string | null;
+  tags: string[];
 }
 
 export interface TopicGroup {
@@ -109,6 +110,13 @@ function StoryCard({ story, domain }: { story: LongformStory; domain: string }) 
           )}
         </div>
       </div>
+      {story.tags.length > 0 && (
+        <div class="story-tags">
+          {story.tags.slice(0, 4).map((tag) => (
+            <a href={`/tag/${encodeURIComponent(tag)}`} class="story-tag">{tag}</a>
+          ))}
+        </div>
+      )}
     </article>
   );
 }
@@ -122,6 +130,9 @@ export function HomePage({
   hasSubscriptions,
   popularPosts,
   feedToken,
+  trendingTags,
+  pageTitle,
+  pageRssUrl,
 }: {
   stories: LongformStory[];
   topics: TopicGroup[];
@@ -131,6 +142,9 @@ export function HomePage({
   hasSubscriptions?: boolean;
   popularPosts?: PopularPost[];
   feedToken?: string | null;
+  trendingTags?: { tag: string; count: number }[];
+  pageTitle?: string | null;
+  pageRssUrl?: string | null;
 }) {
   return (
     <html lang="en">
@@ -438,6 +452,69 @@ export function HomePage({
             border-color: #d32f2f;
           }
 
+          /* Tag pills */
+          .story-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.35rem;
+            margin-top: 0.5rem;
+          }
+          .story-tag {
+            display: inline-block;
+            padding: 0.15rem 0.55rem;
+            background: var(--bg-secondary, rgba(0,0,0,0.04));
+            border-radius: 99px;
+            font-size: 0.7rem;
+            font-family: var(--font-sans);
+            font-weight: 500;
+            color: var(--text-muted);
+            text-decoration: none;
+            transition: background 0.15s, color 0.15s;
+          }
+          .story-tag:hover {
+            background: var(--accent);
+            color: var(--bg);
+          }
+          @media (prefers-color-scheme: dark) {
+            .story-tag {
+              background: rgba(255,255,255,0.08);
+            }
+          }
+
+          /* Trending tags in sidebar */
+          .trending-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.4rem;
+          }
+          .trending-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.3rem;
+            padding: 0.25rem 0.65rem;
+            background: var(--bg-secondary, rgba(0,0,0,0.04));
+            border-radius: 99px;
+            font-size: 0.75rem;
+            font-family: var(--font-sans);
+            font-weight: 500;
+            color: var(--text-secondary, var(--text-muted));
+            text-decoration: none;
+            transition: background 0.15s, color 0.15s;
+          }
+          .trending-tag:hover {
+            background: var(--accent);
+            color: var(--bg);
+          }
+          .trending-tag-count {
+            font-size: 0.65rem;
+            opacity: 0.6;
+          }
+          @media (prefers-color-scheme: dark) {
+            .trending-tag {
+              background: rgba(255,255,255,0.08);
+            }
+          }
+
           /* Right column */
           .right-sidebar {
             width: 280px;
@@ -731,11 +808,15 @@ export function HomePage({
           {/* Center Column */}
           <main class="center-content">
             <div class="center-header">
-              <div class="center-tabs">
-                <a href="/?view=latest" class={`center-tab ${view === 'latest' ? 'active' : ''}`}>Latest</a>
-                {profile && <a href="/?view=following" class={`center-tab ${view === 'following' ? 'active' : ''}`}>Following</a>}
-              </div>
-              <a href={view === 'following' && feedToken ? `/feed/following.xml?token=${feedToken}` : '/feed/latest.xml'} title={`RSS feed — ${view === 'following' ? 'Following' : 'Latest'}`} style="display: flex; align-items: center; color: var(--text-muted); transition: color 0.15s; padding: 0.25rem;" onmouseover="this.style.color='#f26522'" onmouseout="this.style.color='var(--text-muted)'">
+              {pageTitle ? (
+                <h1 style="font-size: 1.1rem; font-weight: 700; padding: 0.75rem 1rem; margin: 0; font-family: var(--font-sans);">{pageTitle}</h1>
+              ) : (
+                <div class="center-tabs">
+                  <a href="/?view=latest" class={`center-tab ${view === 'latest' ? 'active' : ''}`}>Latest</a>
+                  {profile && <a href="/?view=following" class={`center-tab ${view === 'following' ? 'active' : ''}`}>Following</a>}
+                </div>
+              )}
+              <a href={pageRssUrl || (view === 'following' && feedToken ? `/feed/following.xml?token=${feedToken}` : '/feed/latest.xml')} title="RSS feed" style="display: flex; align-items: center; color: var(--text-muted); transition: color 0.15s; padding: 0.25rem;" onmouseover="this.style.color='#f26522'" onmouseout="this.style.color='var(--text-muted)'">
                 <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M6.18 15.64a2.18 2.18 0 0 1 2.18 2.18C8.36 19 7.38 20 6.18 20C5 20 4 19 4 17.82a2.18 2.18 0 0 1 2.18-2.18M4 4.44A15.56 15.56 0 0 1 19.56 20h-2.83A12.73 12.73 0 0 0 4 7.27V4.44m0 5.66a9.9 9.9 0 0 1 9.9 9.9h-2.83A7.07 7.07 0 0 0 4 12.93V10.1z"/></svg>
               </a>
             </div>
@@ -802,6 +883,20 @@ export function HomePage({
                       </a>
                     );
                   })}
+                </div>
+              </div>
+            )}
+
+            {(trendingTags && trendingTags.length > 0) && (
+              <div class="sidebar-section">
+                <h2 class="sidebar-title">Trending Tags</h2>
+                <div class="trending-tags">
+                  {trendingTags.map((t) => (
+                    <a href={`/tag/${encodeURIComponent(t.tag)}`} class="trending-tag">
+                      {t.tag}
+                      <span class="trending-tag-count">{t.count}</span>
+                    </a>
+                  ))}
                 </div>
               </div>
             )}
