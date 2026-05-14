@@ -17,6 +17,7 @@ export function Layout({ title, children, profile, headerAction, og }: { title: 
           <meta name="twitter:card" content="summary_large_image" />
         ` : ''}
         <link rel="icon" type="image/png" href="/favicon.png" />
+        <link rel="alternate" type="application/rss+xml" title="Longform — Latest" href="/feed/latest.xml" />
         <link rel="preconnect" href="https://fonts.googleapis.com">
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
         <link href="https://fonts.googleapis.com/css2?family=Merriweather:ital,wght@0,300;0,400;0,700;1,300;1,400&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">

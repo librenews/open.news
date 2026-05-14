@@ -14,6 +14,7 @@ import { SearchPage } from './views/search.js';
 import { NotFoundPage } from './views/notfound.js';
 import { SubscriptionsPage } from './views/subscriptions.js';
 import { PublicationPage } from './views/publication.js';
+import { generateRssFeed, type RssFeedItem } from './lib/rss.js';
 import type { LongformStory } from './views/home.js';
 import type { ProfileData } from './views/profile.js';
 import type { SearchResult } from './views/search.js';
@@ -249,6 +250,161 @@ app.get('/', async (c) => {
   }
 
   return c.html((<HomePage stories={stories} topics={topics} view={view} profile={profile} domain={config.LONGFORM_DOMAIN} hasSubscriptions={hasSubscriptions} popularPosts={popularPosts} />) as unknown as string);
+});
+
+// --- RSS Feeds ---
+
+app.get('/feed/latest.xml', async (c) => {
+  const { rows } = await db.query(
+    `SELECT s.uri, s.author_did, s.title, s.description, s.published_at
+     FROM site_standard_articles s
+     WHERE s.word_count > 100 AND s.language = 'eng'
+     ORDER BY s.published_at DESC NULLS LAST
+     LIMIT 30`
+  );
+
+  const uniqueDids = [...new Set(rows.map((r: any) => r.author_did))];
+  const profileMap = new Map<string, { displayName: string; avatar: string; handle: string }>();
+  await Promise.all(uniqueDids.map(async (did) => {
+    const p = await fetchUserProfile(did as string);
+    profileMap.set(did as string, p);
+  }));
+
+  const baseUrl = `https://${config.LONGFORM_DOMAIN}`;
+  const items: RssFeedItem[] = rows.map((r: any) => {
+    const p = profileMap.get(r.author_did) || { displayName: r.author_did, avatar: '', handle: r.author_did };
+    const rkey = r.uri.split('/').pop();
+    return {
+      title: r.title || 'Untitled',
+      link: `${baseUrl}/post/${r.author_did}/${rkey}`,
+      description: r.description || '',
+      authorName: p.displayName,
+      pubDate: r.published_at?.toISOString() ?? null,
+      guid: r.uri,
+    };
+  });
+
+  const xml = generateRssFeed({
+    title: 'Longform — Latest',
+    description: 'The latest longform articles from across the AT Protocol',
+    link: baseUrl,
+    feedUrl: `${baseUrl}/feed/latest.xml`,
+    items,
+  });
+
+  return c.body(xml, 200, { 'Content-Type': 'application/rss+xml; charset=utf-8', 'Cache-Control': 'public, max-age=300' });
+});
+
+app.get('/feed/following.xml', async (c) => {
+  const sessionDid = await getSession(c);
+  if (!sessionDid) return c.text('Sign in required for following feed', 401);
+
+  let followedPubUris: string[] = [];
+  try {
+    const oauthSession = await restoreSession(c, sessionDid);
+    if (!oauthSession) return c.text('Session expired', 401);
+    const agent = new Agent(oauthSession);
+    const res = await agent.com.atproto.repo.listRecords({
+      repo: sessionDid,
+      collection: 'site.standard.graph.subscription',
+      limit: 100,
+    });
+    followedPubUris = (res.data.records || [])
+      .map((r: any) => r.value?.publication)
+      .filter((u: any): u is string => typeof u === 'string');
+  } catch (err) {
+    logger.warn({ err }, 'Failed to fetch subscriptions for RSS feed');
+  }
+
+  let items: RssFeedItem[] = [];
+  if (followedPubUris.length > 0) {
+    const { rows } = await db.query(
+      `SELECT s.uri, s.author_did, s.title, s.description, s.published_at
+       FROM site_standard_articles s
+       WHERE s.word_count > 100 AND s.language = 'eng'
+         AND s.raw_record->>'site' = ANY($1)
+       ORDER BY s.published_at DESC NULLS LAST
+       LIMIT 30`,
+      [followedPubUris]
+    );
+
+    const uniqueDids = [...new Set(rows.map((r: any) => r.author_did))];
+    const profileMap = new Map<string, { displayName: string; avatar: string; handle: string }>();
+    await Promise.all(uniqueDids.map(async (did) => {
+      const p = await fetchUserProfile(did as string);
+      profileMap.set(did as string, p);
+    }));
+
+    const baseUrl = `https://${config.LONGFORM_DOMAIN}`;
+    items = rows.map((r: any) => {
+      const p = profileMap.get(r.author_did) || { displayName: r.author_did, avatar: '', handle: r.author_did };
+      const rkey = r.uri.split('/').pop();
+      return {
+        title: r.title || 'Untitled',
+        link: `${baseUrl}/post/${r.author_did}/${rkey}`,
+        description: r.description || '',
+        authorName: p.displayName,
+        pubDate: r.published_at?.toISOString() ?? null,
+        guid: r.uri,
+      };
+    });
+  }
+
+  const baseUrl = `https://${config.LONGFORM_DOMAIN}`;
+  const xml = generateRssFeed({
+    title: 'Longform — Following',
+    description: 'Articles from publications you follow',
+    link: `${baseUrl}/?view=following`,
+    feedUrl: `${baseUrl}/feed/following.xml`,
+    items,
+  });
+
+  return c.body(xml, 200, { 'Content-Type': 'application/rss+xml; charset=utf-8' });
+});
+
+app.get('/feed/search.xml', async (c) => {
+  const q = (c.req.query('q') || '').trim();
+  if (!q) return c.text('Query required: /feed/search.xml?q=...', 400);
+
+  let items: RssFeedItem[] = [];
+  try {
+    const hits = await searchSiteStandardArticles(q, 'long', 'recent', 30);
+
+    const uniqueDids = [...new Set((hits.hits || []).map((h: any) => h._source.did))];
+    const profileMap = new Map<string, { displayName: string; avatar: string; handle: string }>();
+    await Promise.all(uniqueDids.map(async (did) => {
+      const p = await fetchUserProfile(did as string);
+      profileMap.set(did as string, p);
+    }));
+
+    const baseUrl = `https://${config.LONGFORM_DOMAIN}`;
+    items = (hits.hits || []).map((hit: any) => {
+      const s = hit._source;
+      const p = profileMap.get(s.did) || { displayName: s.did, avatar: '', handle: s.did };
+      const rkey = s.uri.split('/').pop();
+      return {
+        title: s.title || 'Untitled',
+        link: `${baseUrl}/post/${s.did}/${rkey}`,
+        description: s.description || '',
+        authorName: p.displayName,
+        pubDate: s.published_at || null,
+        guid: s.uri,
+      };
+    });
+  } catch (err: any) {
+    logger.error({ err, q }, 'Search RSS feed failed');
+  }
+
+  const baseUrl = `https://${config.LONGFORM_DOMAIN}`;
+  const xml = generateRssFeed({
+    title: `Longform — "${q}"`,
+    description: `Latest articles matching "${q}"`,
+    link: `${baseUrl}/search?q=${encodeURIComponent(q)}&sort=latest`,
+    feedUrl: `${baseUrl}/feed/search.xml?q=${encodeURIComponent(q)}`,
+    items,
+  });
+
+  return c.body(xml, 200, { 'Content-Type': 'application/rss+xml; charset=utf-8', 'Cache-Control': 'public, max-age=300' });
 });
 
 app.get('/search', async (c) => {
