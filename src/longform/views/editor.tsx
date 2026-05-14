@@ -3,6 +3,12 @@ import { html } from 'hono/html';
 export function EditorPage() {
   return html`
     <div id="editor-container"></div>
+    <div id="preview-overlay" style="display: none; position: fixed; inset: 0; z-index: 100; background: var(--bg, #fff); overflow-y: auto;">
+      <div style="max-width: 720px; margin: 0 auto; padding: 4rem 1.5rem 6rem;">
+        <div id="preview-content" style="font-family: var(--font-body, Georgia, serif); line-height: 1.8; color: var(--text-main, #1a1a1a);"></div>
+      </div>
+      <button onclick="window.togglePreview()" style="position: fixed; top: 1rem; right: 1.5rem; background: #242424; color: white; border: none; padding: 0.5rem 1.2rem; border-radius: 99px; cursor: pointer; font-family: var(--font-sans); font-weight: 500; font-size: 14px; z-index: 101;">← Back to Editor</button>
+    </div>
     <div id="draft-status" style="position: fixed; bottom: 20px; right: 20px; background: rgba(0,0,0,0.8); color: white; padding: 6px 12px; border-radius: 6px; font-size: 13px; font-family: var(--font-sans); opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 50;">Synced to network</div>
     
     <!-- Share Modal -->
@@ -473,6 +479,95 @@ export function EditorPage() {
           document.getElementById('editor-container').innerHTML = '<p style="color:red">Failed to load editor: ' + e.message + '</p>';
         }
       });
+
+      window.togglePreview = function() {
+        const overlay = document.getElementById('preview-overlay');
+        const previewBtn = document.getElementById('preview-btn');
+        if (overlay.style.display === 'none') {
+          // Build preview
+          const json = window.editor.getJSON();
+          const html = renderTiptapPreview(json);
+          document.getElementById('preview-content').innerHTML = html;
+          overlay.style.display = 'block';
+          previewBtn.textContent = 'Edit';
+          previewBtn.style.background = '#242424';
+          previewBtn.style.color = 'white';
+          previewBtn.style.borderColor = '#242424';
+        } else {
+          overlay.style.display = 'none';
+          previewBtn.textContent = 'Preview';
+          previewBtn.style.background = 'transparent';
+          previewBtn.style.color = 'var(--text-main, #242424)';
+          previewBtn.style.borderColor = 'var(--border, rgba(0,0,0,0.15))';
+        }
+      };
+
+      function renderInline(content) {
+        if (!content) return '';
+        return content.map(function(span) {
+          if (span.type === 'hardBreak') return '<br>';
+          if (span.type !== 'text') return '';
+          var text = span.text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+          if (span.marks) {
+            span.marks.forEach(function(m) {
+              if (m.type === 'bold') text = '<strong>' + text + '</strong>';
+              else if (m.type === 'italic') text = '<em>' + text + '</em>';
+              else if (m.type === 'strike') text = '<del>' + text + '</del>';
+              else if (m.type === 'code') text = '<code style="background:rgba(0,0,0,0.06);padding:0.15em 0.35em;border-radius:3px;font-size:0.9em;">' + text + '</code>';
+              else if (m.type === 'link') text = '<a href="' + (m.attrs?.href||'#') + '" style="color:var(--accent,#118156);text-decoration:underline;">' + text + '</a>';
+            });
+          }
+          return text;
+        }).join('');
+      }
+
+      function renderListItems(node) {
+        var tag = node.type === 'orderedList' ? 'ol' : 'ul';
+        var items = (node.content || []).map(function(li) {
+          if (li.type !== 'listItem' || !li.content) return '';
+          var inner = li.content.map(function(child) {
+            if (child.type === 'paragraph') return '<p style="margin:0.25em 0;">' + renderInline(child.content) + '</p>';
+            if (child.type === 'bulletList' || child.type === 'orderedList') return renderListItems(child);
+            return '';
+          }).join('');
+          return '<li>' + inner + '</li>';
+        }).join('');
+        return '<' + tag + ' style="margin:0.75rem 0;padding-left:1.5rem;line-height:1.8;">' + items + '</' + tag + '>';
+      }
+
+      function renderTiptapPreview(json) {
+        if (!json || !json.content) return '<p style="color:var(--text-muted);">Nothing to preview.</p>';
+        var parts = [];
+        json.content.forEach(function(node) {
+          if (node.type === 'heading') {
+            var level = node.attrs?.level || 2;
+            var sizes = {1:'2.2rem',2:'1.6rem',3:'1.25rem',4:'1.1rem'};
+            var s = sizes[level] || '1rem';
+            parts.push('<h' + level + ' style="font-size:' + s + ';font-weight:700;margin:1.5rem 0 0.75rem;line-height:1.3;font-family:var(--font-body,Georgia,serif);">' + renderInline(node.content) + '</h' + level + '>');
+          } else if (node.type === 'paragraph') {
+            var text = renderInline(node.content);
+            parts.push('<p style="margin:0.75rem 0;font-size:1.1rem;">' + (text || '&nbsp;') + '</p>');
+          } else if (node.type === 'blockquote') {
+            var inner = (node.content || []).map(function(c) {
+              return '<p style="margin:0.35em 0;">' + renderInline(c.content) + '</p>';
+            }).join('');
+            parts.push('<blockquote style="border-left:3px solid var(--accent,#118156);padding:0.5rem 1rem;margin:1rem 0;color:var(--text-secondary,#555);font-style:italic;">' + inner + '</blockquote>');
+          } else if (node.type === 'codeBlock') {
+            var code = (node.content || []).map(function(s) { return s.text || ''; }).join('');
+            code = code.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+            parts.push('<pre style="background:rgba(0,0,0,0.05);padding:1rem;border-radius:8px;overflow-x:auto;margin:1rem 0;font-size:0.9rem;line-height:1.5;"><code>' + code + '</code></pre>');
+          } else if (node.type === 'bulletList' || node.type === 'orderedList') {
+            parts.push(renderListItems(node));
+          } else if (node.type === 'horizontalRule') {
+            parts.push('<hr style="border:none;border-top:1px solid var(--border,rgba(0,0,0,0.1));margin:2rem 0;">');
+          } else if (node.type === 'image') {
+            var src = node.attrs?.src || '';
+            var alt = node.attrs?.alt || '';
+            parts.push('<figure style="margin:1.5rem 0;text-align:center;"><img src="' + src + '" alt="' + alt + '" style="max-width:100%;border-radius:8px;">' + (alt ? '<figcaption style="font-size:0.85rem;color:var(--text-muted);margin-top:0.5rem;">' + alt + '</figcaption>' : '') + '</figure>');
+          }
+        });
+        return parts.join('');
+      }
 
       window.publishDraft = async function() {
          const btn = document.getElementById('publish-btn');

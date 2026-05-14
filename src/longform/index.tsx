@@ -87,6 +87,7 @@ app.get('/', async (c) => {
     const headerAction = html`
       <div style="display: flex; gap: 0.5rem; align-items: center;">
         <button onclick="window.openShareModal()" id="share-btn" style="display: none; background: #242424; color: white; border: none; padding: 0.4rem 1.2rem; border-radius: 99px; cursor: pointer; font-family: var(--font-sans); font-weight: 500; font-size: 14px;">Share</button>
+        <button onclick="window.togglePreview()" id="preview-btn" style="background: transparent; color: var(--text-main, #242424); border: 1px solid var(--border, rgba(0,0,0,0.15)); padding: 0.4rem 1.2rem; border-radius: 99px; cursor: pointer; font-family: var(--font-sans); font-weight: 500; font-size: 14px; transition: all 0.15s;">Preview</button>
         <button onclick="publishDraft()" id="publish-btn" style="background: #118156; color: white; border: none; padding: 0.4rem 1.2rem; border-radius: 99px; cursor: pointer; font-family: var(--font-sans); font-weight: 500; font-size: 14px;">Publish</button>
       </div>
     `;
