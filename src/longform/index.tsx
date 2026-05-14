@@ -256,7 +256,12 @@ app.get('/', async (c) => {
 
 app.get('/feed/latest.xml', async (c) => {
   const { rows } = await db.query(
-    `SELECT s.uri, s.author_did, s.title, s.description, s.published_at
+    `SELECT s.uri, s.author_did, s.title, s.description, s.published_at, s.word_count,
+       s.raw_record->>'tags' as tags_json,
+       CASE WHEN s.uri LIKE '%/site.standard.document/%' OR s.uri LIKE '%/pub.leaflet.document/%'
+         THEN jsonb_path_query_first(s.raw_record, '$.content.pages[0].blocks[*].block ? (@."$type" == "pub.leaflet.blocks.image").image.ref."$link"') #>> '{}'
+         ELSE NULL
+       END AS image_cid
      FROM site_standard_articles s
      WHERE s.word_count > 100 AND s.language = 'eng'
      ORDER BY s.published_at DESC NULLS LAST
@@ -274,13 +279,19 @@ app.get('/feed/latest.xml', async (c) => {
   const items: RssFeedItem[] = rows.map((r: any) => {
     const p = profileMap.get(r.author_did) || { displayName: r.author_did, avatar: '', handle: r.author_did };
     const rkey = r.uri.split('/').pop();
+    let tags: string[] = [];
+    try { if (r.tags_json) tags = JSON.parse(r.tags_json); } catch {}
     return {
       title: r.title || 'Untitled',
       link: `${baseUrl}/post/${r.author_did}/${rkey}`,
       description: r.description || '',
       authorName: p.displayName,
+      authorUri: `${baseUrl}/profile/${p.handle}`,
       pubDate: r.published_at?.toISOString() ?? null,
       guid: r.uri,
+      imageUrl: r.image_cid ? `${baseUrl}/blob/${r.author_did}/${r.image_cid}` : null,
+      wordCount: r.word_count || 0,
+      categories: tags,
     };
   });
 
@@ -289,6 +300,7 @@ app.get('/feed/latest.xml', async (c) => {
     description: 'The latest longform articles from across the AT Protocol',
     link: baseUrl,
     feedUrl: `${baseUrl}/feed/latest.xml`,
+    imageUrl: `${baseUrl}/logo.png`,
     items,
   });
 
@@ -319,7 +331,12 @@ app.get('/feed/following.xml', async (c) => {
   let items: RssFeedItem[] = [];
   if (followedPubUris.length > 0) {
     const { rows } = await db.query(
-      `SELECT s.uri, s.author_did, s.title, s.description, s.published_at
+      `SELECT s.uri, s.author_did, s.title, s.description, s.published_at, s.word_count,
+         s.raw_record->>'tags' as tags_json,
+         CASE WHEN s.uri LIKE '%/site.standard.document/%' OR s.uri LIKE '%/pub.leaflet.document/%'
+           THEN jsonb_path_query_first(s.raw_record, '$.content.pages[0].blocks[*].block ? (@."$type" == "pub.leaflet.blocks.image").image.ref."$link"') #>> '{}'
+           ELSE NULL
+         END AS image_cid
        FROM site_standard_articles s
        WHERE s.word_count > 100 AND s.language = 'eng'
          AND s.raw_record->>'site' = ANY($1)
@@ -339,13 +356,19 @@ app.get('/feed/following.xml', async (c) => {
     items = rows.map((r: any) => {
       const p = profileMap.get(r.author_did) || { displayName: r.author_did, avatar: '', handle: r.author_did };
       const rkey = r.uri.split('/').pop();
+      let tags: string[] = [];
+      try { if (r.tags_json) tags = JSON.parse(r.tags_json); } catch {}
       return {
         title: r.title || 'Untitled',
         link: `${baseUrl}/post/${r.author_did}/${rkey}`,
         description: r.description || '',
         authorName: p.displayName,
+        authorUri: `${baseUrl}/profile/${p.handle}`,
         pubDate: r.published_at?.toISOString() ?? null,
         guid: r.uri,
+        imageUrl: r.image_cid ? `${baseUrl}/blob/${r.author_did}/${r.image_cid}` : null,
+        wordCount: r.word_count || 0,
+        categories: tags,
       };
     });
   }
@@ -356,6 +379,7 @@ app.get('/feed/following.xml', async (c) => {
     description: 'Articles from publications you follow',
     link: `${baseUrl}/?view=following`,
     feedUrl: `${baseUrl}/feed/following.xml`,
+    imageUrl: `${baseUrl}/logo.png`,
     items,
   });
 
@@ -387,8 +411,10 @@ app.get('/feed/search.xml', async (c) => {
         link: `${baseUrl}/post/${s.did}/${rkey}`,
         description: s.description || '',
         authorName: p.displayName,
+        authorUri: `${baseUrl}/profile/${p.handle}`,
         pubDate: s.published_at || null,
         guid: s.uri,
+        wordCount: s.word_count || 0,
       };
     });
   } catch (err: any) {
@@ -401,6 +427,7 @@ app.get('/feed/search.xml', async (c) => {
     description: `Latest articles matching "${q}"`,
     link: `${baseUrl}/search?q=${encodeURIComponent(q)}&sort=latest`,
     feedUrl: `${baseUrl}/feed/search.xml?q=${encodeURIComponent(q)}`,
+    imageUrl: `${baseUrl}/logo.png`,
     items,
   });
 
