@@ -8,6 +8,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const MIGRATIONS_DIR = join(__dirname, 'migrations');
 
 export async function runMigrations() {
+  logger.info({ migrationsDir: MIGRATIONS_DIR }, 'Starting migrations');
   const client = await pool.connect();
   try {
     // Ensure the tracking table exists
@@ -23,21 +24,24 @@ export async function runMigrations() {
       'SELECT version FROM schema_migrations ORDER BY version'
     );
     const applied = new Set(rows.map((r) => r.version));
+    logger.info({ applied: [...applied] }, 'Already applied migrations');
 
     // Read migration files, sorted
     const files = readdirSync(MIGRATIONS_DIR)
       .filter((f) => f.endsWith('.sql'))
       .sort();
+    logger.info({ files }, 'Discovered migration files');
 
+    let pendingCount = 0;
     for (const file of files) {
       const version = file.replace('.sql', '');
       if (applied.has(version)) {
-        logger.debug({ version }, 'Migration already applied, skipping');
         continue;
       }
 
+      pendingCount++;
       const sql = readFileSync(join(MIGRATIONS_DIR, file), 'utf8');
-      logger.info({ version }, 'Applying migration');
+      logger.info({ version, file }, 'Applying migration');
 
       await client.query('BEGIN');
       try {
@@ -47,14 +51,15 @@ export async function runMigrations() {
           [version]
         );
         await client.query('COMMIT');
-        logger.info({ version }, 'Migration applied');
+        logger.info({ version }, 'Migration applied successfully');
       } catch (err) {
         await client.query('ROLLBACK');
+        logger.error({ version, err }, 'Migration FAILED — rolled back');
         throw err;
       }
     }
 
-    logger.info('All migrations up to date');
+    logger.info({ pendingCount }, 'All migrations up to date');
   } finally {
     client.release();
   }
