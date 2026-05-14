@@ -15,6 +15,7 @@ import { NotFoundPage } from './views/notfound.js';
 import { SubscriptionsPage } from './views/subscriptions.js';
 import { PublicationPage } from './views/publication.js';
 import { generateRssFeed, type RssFeedItem } from './lib/rss.js';
+import { runMigrations } from '../db/migrate.js';
 import type { LongformStory } from './views/home.js';
 import type { ProfileData } from './views/profile.js';
 import type { SearchResult } from './views/search.js';
@@ -1788,6 +1789,7 @@ app.notFound((c) => {
 
 // Startup hook
 async function start() {
+  await runMigrations();
   const server = serve({ fetch: app.fetch, port: config.LONGFORM_PORT }, (info) => {
     logger.info({ port: info.port, domain: config.LONGFORM_DOMAIN }, 'Longform service started');
   });
