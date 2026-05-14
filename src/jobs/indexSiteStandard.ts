@@ -75,10 +75,49 @@ export function extractTextFromSiteStandard(record: any): string {
   return text.trim();
 }
 
+// --- Content moderation ---
+const BLOCKED_DOMAINS = new Set([
+  'e-hentai.org', 'exhentai.org', 'nhentai.net', 'hanime.tv',
+  'hentaihaven.xxx', 'fakku.net', 'hitomi.la', 'tsumino.com',
+  'pururin.to', 'pornhub.com', 'xvideos.com', 'xhamster.com',
+  'redtube.com', 'youporn.com', 'tube8.com', 'spankbang.com',
+  'xnxx.com', 'chaturbate.com', 'stripchat.com', 'onlyfans.com',
+  'fansly.com', 'manyvids.com', 'clips4sale.com',
+]);
+
+const NSFW_PATTERNS = /\b(hentai|doujinshi|nsfw|xxx|porn|erotic[a]?|blowjob|milf|dilf|bbm|sex.?scene|nude|naked|genitalia|explicit.?content|r-?18|adult.?content)\b/i;
+
+function isNsfwContent(record: any): boolean {
+  // Check domain
+  const site = record.site || '';
+  if (typeof site === 'string' && site.startsWith('http')) {
+    try {
+      const hostname = new URL(site).hostname.replace(/^www\./, '');
+      if (BLOCKED_DOMAINS.has(hostname)) return true;
+    } catch {}
+  }
+
+  // Check text content for NSFW patterns
+  const textToCheck = [
+    record.title || '',
+    record.description || '',
+    record.textContent || '',
+    ...(record.tags || []),
+  ].join(' ');
+
+  return NSFW_PATTERNS.test(textToCheck);
+}
+
 export async function indexSiteStandardJob(job: Job<IndexSiteStandardData>) {
   const { postUri, did, record } = job.data;
   
   try {
+    // Content moderation check
+    if (isNsfwContent(record)) {
+      logger.info({ uri: postUri, site: record.site, title: record.title?.substring(0, 60) }, 'Skipped NSFW content');
+      return;
+    }
+
     const title = record.title || null;
     const description = record.description || null;
     const publishedAt = record.publishedAt ? new Date(record.publishedAt) : (record.createdAt ? new Date(record.createdAt) : new Date());
