@@ -66,6 +66,15 @@ async function restoreSession(c: any, sessionDid: string): Promise<import('@atpr
   }
 }
 
+async function getOrCreateFeedToken(did: string): Promise<string> {
+  const { rows } = await db.query('SELECT token FROM rss_feed_tokens WHERE did = $1', [did]);
+  if (rows.length > 0) return rows[0].token;
+  const { randomBytes } = await import('crypto');
+  const token = randomBytes(24).toString('base64url');
+  await db.query('INSERT INTO rss_feed_tokens (token, did) VALUES ($1, $2) ON CONFLICT (did) DO NOTHING', [token, did]);
+  return token;
+}
+
 app.get('/', async (c) => {
   const sessionDid = await getSession(c);
   const docId = c.req.query('doc');
@@ -115,7 +124,8 @@ app.get('/', async (c) => {
   if (view === 'following' && followedPubUris.length === 0) {
     // No subscriptions — skip query, show empty state
     const topics: { label: string; count: number; slug: string }[] = [];
-    return c.html((<HomePage stories={[]} topics={topics} view={view} profile={profile} domain={config.LONGFORM_DOMAIN} hasSubscriptions={false} />) as unknown as string);
+    const feedToken = sessionDid ? await getOrCreateFeedToken(sessionDid) : null;
+    return c.html((<HomePage stories={[]} topics={topics} view={view} profile={profile} domain={config.LONGFORM_DOMAIN} hasSubscriptions={false} feedToken={feedToken} />) as unknown as string);
   }
 
   // Build the query — add publication filter for "following" view
@@ -249,7 +259,8 @@ app.get('/', async (c) => {
     logger.warn({ err }, 'Failed to fetch popular posts');
   }
 
-  return c.html((<HomePage stories={stories} topics={topics} view={view} profile={profile} domain={config.LONGFORM_DOMAIN} hasSubscriptions={hasSubscriptions} popularPosts={popularPosts} />) as unknown as string);
+  const feedToken = sessionDid ? await getOrCreateFeedToken(sessionDid) : null;
+  return c.html((<HomePage stories={stories} topics={topics} view={view} profile={profile} domain={config.LONGFORM_DOMAIN} hasSubscriptions={hasSubscriptions} popularPosts={popularPosts} feedToken={feedToken} />) as unknown as string);
 });
 
 // --- RSS Feeds ---
@@ -323,18 +334,7 @@ app.get('/feed/following.xml', async (c) => {
     const sessionDid = await getSession(c);
     if (!sessionDid) return c.text('Sign in required. Visit longform.social to get your personal feed URL.', 401);
     userDid = sessionDid;
-
-    // Ensure user has a token, create if not
-    const { rows: existing } = await db.query('SELECT token FROM rss_feed_tokens WHERE did = $1', [sessionDid]);
-    let feedToken: string;
-    if (existing.length > 0) {
-      feedToken = existing[0].token;
-    } else {
-      const { randomBytes } = await import('crypto');
-      feedToken = randomBytes(24).toString('base64url');
-      await db.query('INSERT INTO rss_feed_tokens (token, did) VALUES ($1, $2) ON CONFLICT (did) DO NOTHING', [feedToken, sessionDid]);
-    }
-    // Redirect to token URL so the user sees the correct URL to copy
+    const feedToken = await getOrCreateFeedToken(sessionDid);
     return c.redirect(`/feed/following.xml?token=${feedToken}`);
   }
 
@@ -618,14 +618,14 @@ app.get('/subscriptions', async (c) => {
 
     return c.html(
       <Layout title={`Subscriptions - ${config.LONGFORM_DOMAIN}`} profile={profile}>
-        {SubscriptionsPage({ subscriptions, domain: config.LONGFORM_DOMAIN, profile })}
+        {SubscriptionsPage({ subscriptions, domain: config.LONGFORM_DOMAIN, profile, feedToken: await getOrCreateFeedToken(sessionDid) })}
       </Layout> as unknown as string
     );
   } catch (err: any) {
     logger.error({ err }, 'Failed to load subscriptions page');
     return c.html(
       <Layout title={`Subscriptions - ${config.LONGFORM_DOMAIN}`} profile={profile}>
-        {SubscriptionsPage({ subscriptions: [], domain: config.LONGFORM_DOMAIN, profile })}
+        {SubscriptionsPage({ subscriptions: [], domain: config.LONGFORM_DOMAIN, profile, feedToken: await getOrCreateFeedToken(sessionDid) })}
       </Layout> as unknown as string
     );
   }
