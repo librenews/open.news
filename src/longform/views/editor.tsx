@@ -141,11 +141,12 @@ export function EditorPage() {
           };
 
           const urlParams = new URLSearchParams(window.location.search);
-          var docId = urlParams.get('doc');
+          var docId = urlParams.get('doc') || window.EDIT_URI || null;
           if (!docId) {
             window.location.href = '/posts';
             return;
           }
+          var isEditMode = !!window.EDIT_URI;
           
           const isOwner = window.SESSION_DID && docId.includes(window.SESSION_DID);
           if (isOwner) {
@@ -287,95 +288,106 @@ export function EditorPage() {
              }
           };
 
-          const ydoc = new Y.Doc();
+          var ydoc, provider;
 
-          const provider = new HocuspocusProvider({
-            url: 'wss://' + window.location.host + '/collab/',
-            name: docId,
-            document: ydoc,
-            token: 'cookie',
-            onSynced() {
-              const statusEl = document.getElementById('draft-status');
-              if (statusEl) {
-                statusEl.style.opacity = '1';
-                clearTimeout(window._draftTimeout);
-                window._draftTimeout = setTimeout(() => { statusEl.style.opacity = '0'; }, 2000);
-              }
-              // If document is empty after sync, insert an H1 for the title
-              if (window.editor && window.editor.isEmpty) {
-                window.editor.commands.setContent({ type: 'doc', content: [{ type: 'heading', attrs: { level: 1 } }, { type: 'paragraph' }] });
-              }
-              // Check permission and lock editor for read-only users
-              if (!isOwner && window.editor) {
-                fetch('/api/my-permission?docId=' + encodeURIComponent(docId))
-                  .then(function(r) { return r.json(); })
-                  .then(function(data) {
-                    if (data.permission === 'read') {
-                      window.editor.setEditable(false);
-                      var bar = document.createElement('div');
-                      bar.style.cssText = 'background: rgba(0,0,0,0.04); border-radius: 6px; padding: 0.5rem 1rem; margin-bottom: 1rem; font-family: var(--font-sans); font-size: 13px; color: var(--text-muted); display: flex; align-items: center; gap: 0.5rem;';
-                      bar.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg> View only';
-                      var editorEl = document.getElementById('editor-container');
-                      if (editorEl) editorEl.parentNode.insertBefore(bar, editorEl);
-                    }
-                  });
-              }
-            },
-            onAuthenticationFailed(data) {
-              var container = document.getElementById('editor-container');
-              container.innerHTML = '<div style="text-align: center; padding: 4rem 2rem;">' +
-                '<div style="font-size: 48px; margin-bottom: 1rem;">\uD83D\uDD12</div>' +
-                '<h2 style="font-family: var(--font-sans); font-weight: 700; margin-bottom: 0.5rem;">Access Denied</h2>' +
-                '<p style="color: var(--text-muted); font-family: var(--font-sans); font-size: 16px; max-width: 400px; margin: 0 auto;">You do not have permission to view this document. Ask the owner to share it with you.</p>' +
-                '</div>';
-              var publishBtn = document.getElementById('publish-btn');
-              if (publishBtn) publishBtn.style.display = 'none';
-            }
-          });
+          if (!isEditMode) {
+            ydoc = new Y.Doc();
 
-          try {
-            window.editor = new Editor({
-            element: document.querySelector('#editor-container'),
-            extensions: [
-              StarterKit.configure({ heading: { levels: [1, 2, 3] }, history: false }),
-              Image,
-              EmbedNode,
-              Placeholder.configure({
-                showOnlyCurrent: false,
-                includeChildren: true,
-                placeholder: function(opts) {
-                  if (opts.node.type.name === 'heading' && opts.node.attrs.level === 1) {
-                    return 'Title';
+            provider = new HocuspocusProvider({
+              url: 'wss://' + window.location.host + '/collab/',
+              name: docId,
+              document: ydoc,
+              token: 'cookie',
+              onSynced() {
+                const statusEl = document.getElementById('draft-status');
+                if (statusEl) {
+                  statusEl.style.opacity = '1';
+                  clearTimeout(window._draftTimeout);
+                  window._draftTimeout = setTimeout(() => { statusEl.style.opacity = '0'; }, 2000);
+                }
+                // If document is empty after sync, insert an H1 for the title
+                if (window.editor && window.editor.isEmpty) {
+                  window.editor.commands.setContent({ type: 'doc', content: [{ type: 'heading', attrs: { level: 1 } }, { type: 'paragraph' }] });
+                }
+                // Check permission and lock editor for read-only users
+                if (!isOwner && window.editor) {
+                  fetch('/api/my-permission?docId=' + encodeURIComponent(docId))
+                    .then(function(r) { return r.json(); })
+                    .then(function(data) {
+                      if (data.permission === 'read') {
+                        window.editor.setEditable(false);
+                        var bar = document.createElement('div');
+                        bar.style.cssText = 'background: rgba(0,0,0,0.04); border-radius: 6px; padding: 0.5rem 1rem; margin-bottom: 1rem; font-family: var(--font-sans); font-size: 13px; color: var(--text-muted); display: flex; align-items: center; gap: 0.5rem;';
+                        bar.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg> View only';
+                        var editorEl = document.getElementById('editor-container');
+                        if (editorEl) editorEl.parentNode.insertBefore(bar, editorEl);
+                      }
+                    });
+                }
+              },
+              onAuthenticationFailed(data) {
+                var container = document.getElementById('editor-container');
+                container.innerHTML = '<div style="text-align: center; padding: 4rem 2rem;">' +
+                  '<div style="font-size: 48px; margin-bottom: 1rem;">\uD83D\uDD12</div>' +
+                  '<h2 style="font-family: var(--font-sans); font-weight: 700; margin-bottom: 0.5rem;">Access Denied</h2>' +
+                  '<p style="color: var(--text-muted); font-family: var(--font-sans); font-size: 16px; max-width: 400px; margin: 0 auto;">You do not have permission to view this document. Ask the owner to share it with you.</p>' +
+                  '</div>';
+                var publishBtn = document.getElementById('publish-btn');
+                if (publishBtn) publishBtn.style.display = 'none';
+              }
+            });
+          }
+
+          // Build extensions list — with or without collaboration
+          var editorExtensions = [
+            StarterKit.configure({ heading: { levels: [1, 2, 3] }, history: isEditMode }),
+            Image,
+            EmbedNode,
+            Placeholder.configure({
+              showOnlyCurrent: false,
+              includeChildren: true,
+              placeholder: function(opts) {
+                if (opts.node.type.name === 'heading' && opts.node.attrs.level === 1) {
+                  return 'Title';
+                }
+                if (opts.node.type.name === 'paragraph') {
+                  var docFirstChild = opts.editor.state.doc.firstChild;
+                  var isSecondNode = docFirstChild && docFirstChild.type.name === 'heading';
+                  if (isSecondNode && opts.editor.state.doc.childCount <= 2 && opts.node.content.size === 0) {
+                    return 'Tell your story...';
                   }
-                  if (opts.node.type.name === 'paragraph') {
-                    var docFirstChild = opts.editor.state.doc.firstChild;
-                    var isSecondNode = docFirstChild && docFirstChild.type.name === 'heading';
-                    if (isSecondNode && opts.editor.state.doc.childCount <= 2 && opts.node.content.size === 0) {
-                      return 'Tell your story...';
-                    }
-                  }
-                  return '';
-                },
-              }),
-              Collaboration.configure({
-                document: ydoc,
-              }),
+                }
+                return '';
+              },
+            }),
+            BubbleMenu.configure({
+              element: bubbleMenuEl,
+              tippyOptions: { duration: 150, animation: 'shift-away' },
+            }),
+            FloatingMenu.configure({
+              element: floatingMenuEl,
+              tippyOptions: { duration: 150, placement: 'left-start' },
+            }),
+          ];
+
+          if (!isEditMode) {
+            editorExtensions.push(
+              Collaboration.configure({ document: ydoc }),
               CollaborationCursor.configure({
                 provider: provider,
                 user: {
                   name: window.SESSION_HANDLE || window.SESSION_DID || 'Anonymous',
                   color: '#118156',
                 },
-              }),
-              BubbleMenu.configure({
-                element: bubbleMenuEl,
-                tippyOptions: { duration: 150, animation: 'shift-away' },
-              }),
-              FloatingMenu.configure({
-                element: floatingMenuEl,
-                tippyOptions: { duration: 150, placement: 'left-start' },
-              }),
-            ],
+              })
+            );
+          }
+
+          try {
+            window.editor = new Editor({
+            element: document.querySelector('#editor-container'),
+            extensions: editorExtensions,
+            content: isEditMode ? window.EDIT_TIPTAP_JSON : undefined,
 
             editorProps: {
               attributes: {
@@ -477,18 +489,6 @@ export function EditorPage() {
         } catch (e) {
           console.error("Tiptap Initialization Error:", e);
           document.getElementById('editor-container').innerHTML = '<p style="color:red">Failed to load editor: ' + e.message + '</p>';
-        }
-
-        // If editing a published post, load the content after a short delay
-        // to let the Yjs provider connect
-        if (window.EDIT_TIPTAP_JSON) {
-          setTimeout(function() {
-            try {
-              window.editor.commands.setContent(window.EDIT_TIPTAP_JSON);
-            } catch(e) {
-              console.error('Failed to load edit content:', e);
-            }
-          }, 500);
         }
       });
 
