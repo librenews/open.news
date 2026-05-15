@@ -9,6 +9,7 @@ import { deliverWebhookJob } from '../jobs/deliverWebhook.js';
 import { ensureArticleIndex, ensureSiteStandardIndex } from '../track/opensearch.js';
 import { indexSiteStandardJob } from '../jobs/indexSiteStandard.js';
 import { backfillSiteStandardJob } from '../jobs/backfillSiteStandard.js';
+import { backfillInteractionsJob } from '../jobs/backfillInteractions.js';
 import { refreshTopicClusters } from '../jobs/refreshTopicClusters.js';
 
 async function start() {
@@ -30,7 +31,7 @@ async function start() {
 
   // pg-boss v10 requires explicit queue creation before send/work.
   // Must be sequential — parallel ALTER TABLE calls deadlock on the FK constraint.
-  const queues = ['fetchArticle', 'syncFollows', 'botReply', 'botPost', 'followSignup', 'deliverWebhook', 'indexSiteStandard', 'backfillSiteStandard', 'refreshTopicClusters'];
+  const queues = ['fetchArticle', 'syncFollows', 'botReply', 'botPost', 'followSignup', 'deliverWebhook', 'indexSiteStandard', 'backfillSiteStandard', 'backfillInteractions', 'refreshTopicClusters'];
   for (const q of queues) await boss.createQueue(q);
   logger.info({ queues }, 'Queues created');
 
@@ -76,6 +77,12 @@ async function start() {
     }
   });
 
+  await boss.work('backfillInteractions', { batchSize: 1 }, async (jobs) => {
+    for (const job of jobs) {
+      await backfillInteractionsJob(job as Parameters<typeof backfillInteractionsJob>[0]);
+    }
+  });
+
   // Follow-as-signup: partial user creation
   const { getUserByDid } = await import('../db/queries/users.js');
   const { upsertUser } = await import('../db/queries/users.js');
@@ -98,6 +105,10 @@ async function start() {
     await refreshTopicClusters();
   });
   logger.info('Topic cluster refresh scheduled (hourly)');
+
+  // Schedule daily interactions sync (3 AM UTC)
+  await boss.schedule('backfillInteractions', '0 3 * * *', { offset: 0 }, { tz: 'UTC' });
+  logger.info('Interactions backfill scheduled (daily at 3 AM UTC)');
 
   // Graceful shutdown
   process.on('SIGTERM', async () => {
