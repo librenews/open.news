@@ -303,6 +303,67 @@ function handleEvent(event: JetstreamEvent): void {
     return;
   }
 
+  // ── Longform share detection — track posts that link to longform articles ──
+  {
+    const shareUrls: string[] = [];
+
+    // Check facet links for longform URLs
+    if (Array.isArray(post.facets)) {
+      for (const facet of post.facets as any[]) {
+        for (const feature of facet.features || []) {
+          if (feature.$type === 'app.bsky.richtext.facet#link' && feature.uri) {
+            shareUrls.push(feature.uri);
+          }
+        }
+      }
+    }
+
+    // Check embed for longform URIs/URLs
+    const embed = post.embed as any;
+    if (embed) {
+      if (embed.uri) shareUrls.push(embed.uri);
+      if (embed.external?.uri) shareUrls.push(embed.external.uri);
+    }
+
+    for (const url of shareUrls) {
+      // Match longform.social URLs → extract AT URI
+      const longformMatch = url.match(/longform\.social\/post\/([^/]+)\/([^/?#]+)/);
+      if (longformMatch) {
+        const articleUri = `at://${longformMatch[1]}/site.standard.document/${longformMatch[2]}`;
+        db.query(
+          `INSERT INTO article_interactions (article_uri, actor_did, interaction_type, record_uri)
+           VALUES ($1, $2, 'share', $3) ON CONFLICT (article_uri, actor_did, interaction_type) DO NOTHING`,
+          [articleUri, did, postUri]
+        ).catch(err => logger.debug({ err }, 'Failed to track longform share'));
+        continue;
+      }
+
+      // Match leaflet.pub URLs → look up by rkey
+      const leafletMatch = url.match(/([^.]+)\.leaflet\.pub\/([^/?#]+)/);
+      if (leafletMatch) {
+        // We don't know the DID from the subdomain, but we can match by rkey
+        const rkey = leafletMatch[2];
+        db.query(
+          `INSERT INTO article_interactions (article_uri, actor_did, interaction_type, record_uri)
+           SELECT uri, $1, 'share', $2 FROM site_standard_articles
+           WHERE uri LIKE $3
+           ON CONFLICT (article_uri, actor_did, interaction_type) DO NOTHING`,
+          [did, postUri, `%/site.standard.document/${rkey}`]
+        ).catch(err => logger.debug({ err }, 'Failed to track leaflet share'));
+        continue;
+      }
+
+      // Match direct AT URIs pointing to longform docs
+      if (url.startsWith('at://') && (/\/site\.standard\.document\//.test(url) || /\/pub\.leaflet\.document\//.test(url))) {
+        db.query(
+          `INSERT INTO article_interactions (article_uri, actor_did, interaction_type, record_uri)
+           VALUES ($1, $2, 'share', $3) ON CONFLICT (article_uri, actor_did, interaction_type) DO NOTHING`,
+          [url, did, postUri]
+        ).catch(err => logger.debug({ err }, 'Failed to track AT URI share'));
+      }
+    }
+  }
+
   // URL extraction — only for watched DIDs
   if (!watchedDids.has(did)) return;
 

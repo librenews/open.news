@@ -372,7 +372,7 @@ app.get('/', async (c) => {
       SELECT
         s.uri, s.author_did, s.title, s.published_at,
         COUNT(CASE WHEN ai.interaction_type = 'like' THEN 1 END) AS like_count,
-        COUNT(CASE WHEN ai.interaction_type = 'repost' THEN 1 END) AS repost_count,
+        COUNT(CASE WHEN ai.interaction_type IN ('repost', 'share') THEN 1 END) AS repost_count,
         COUNT(*) AS total_interactions,
         -- Time decay: score = interactions * exp(-age_in_days / 7)
         COUNT(*) * EXP(-EXTRACT(EPOCH FROM (NOW() - s.published_at)) / (7 * 86400)) AS decay_score
@@ -1872,42 +1872,64 @@ app.post('/api/repost', async (c) => {
   if (!sessionDid) return c.json({ error: 'Unauthorized' }, 401);
   
   try {
-    let { rkey, authorDid, uri, cid } = await c.req.json();
+    let { rkey, authorDid, uri } = await c.req.json();
     const oauthSession = await restoreSession(c, sessionDid);
     if (!oauthSession) return c.json({ error: 'Session expired' }, 401);
     const agent = new Agent(oauthSession);
     
-    if (!uri || !cid) {
+    if (!uri) {
       uri = `at://${authorDid}/site.standard.document/${rkey}`;
-      const pdsUrl = await resolvePds(authorDid);
-      const fetchAgent = new BskyAgent({ service: pdsUrl });
-      const record = await fetchAgent.com.atproto.repo.getRecord({
-        repo: authorDid,
-        collection: 'site.standard.document',
-        rkey
-      });
-      cid = record.data.cid;
     }
+    
+    // Build the longform.social URL for the article
+    const articleUrl = `https://longform.social/post/${authorDid}/${rkey}`;
+    
+    // Fetch article title for the post text
+    let title = 'Check out this article';
+    try {
+      const { rows } = await db.query(
+        'SELECT title FROM site_standard_articles WHERE uri = $1 LIMIT 1',
+        [uri]
+      );
+      if (rows[0]?.title) title = rows[0].title;
+    } catch {}
+    
+    const postText = `${title}\n\n${articleUrl}`;
+    
+    // Build facets for the link
+    const encoder = new TextEncoder();
+    const textBytes = encoder.encode(postText);
+    const urlBytes = encoder.encode(articleUrl);
+    const byteStart = textBytes.length - urlBytes.length;
+    const byteEnd = textBytes.length;
     
     const res = await agent.com.atproto.repo.createRecord({
       repo: sessionDid,
-      collection: 'app.bsky.feed.repost',
+      collection: 'app.bsky.feed.post',
       record: {
-        subject: { uri, cid },
+        $type: 'app.bsky.feed.post',
+        text: postText,
+        facets: [{
+          index: { byteStart, byteEnd },
+          features: [{
+            $type: 'app.bsky.richtext.facet#link',
+            uri: articleUrl
+          }]
+        }],
         createdAt: new Date().toISOString()
       }
     });
     
-    // Track locally
+    // Track locally as a share
     await db.query(
       `INSERT INTO article_interactions (article_uri, actor_did, interaction_type, record_uri)
-       VALUES ($1, $2, 'repost', $3) ON CONFLICT (article_uri, actor_did, interaction_type) DO NOTHING`,
+       VALUES ($1, $2, 'share', $3) ON CONFLICT (article_uri, actor_did, interaction_type) DO NOTHING`,
       [uri, sessionDid, res.data.uri]
     );
     
     return c.json({ success: true });
   } catch (err: any) {
-    logger.error({ err }, 'Failed to repost article');
+    logger.error({ err }, 'Failed to share article');
     return c.json({ error: err.message }, 500);
   }
 });
@@ -1935,7 +1957,7 @@ app.get('/api/stats', async (c) => {
     let likes = 0, reposts = 0, liked = false, reposted = false;
     for (const row of rows) {
       if (row.interaction_type === 'like') { likes = row.count; liked = row.by_session; }
-      if (row.interaction_type === 'repost') { reposts = row.count; reposted = row.by_session; }
+      if (row.interaction_type === 'share' || row.interaction_type === 'repost') { reposts += row.count; reposted = reposted || row.by_session; }
     }
     
     return c.json({
