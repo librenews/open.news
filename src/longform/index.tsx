@@ -131,7 +131,7 @@ app.get('/edit/:rkey', async (c) => {
 
   const profile = await fetchUserProfile(sessionDid);
 
-  // Fetch the existing record (public API, same as reader)
+  // Fetch the existing record — try PDS cache first, fall back to local DB
   let doc: any = null;
   try {
     const result = await getCachedRecordMulti(
@@ -139,13 +139,32 @@ app.get('/edit/:rkey', async (c) => {
       ['site.standard.document', 'pub.leaflet.document'],
       rkey
     );
-    if (!result) {
-      logger.warn({ rkey }, 'Post not found for editing');
-      return c.redirect('/posts');
+    if (result) {
+      doc = result.record as any;
+      logger.info({ rkey, source: 'pds' }, 'Loaded post for editing from PDS cache');
     }
-    doc = result.record as any;
   } catch (err) {
-    logger.error({ err, rkey }, 'Failed to fetch post for editing');
+    logger.warn({ err, rkey }, 'PDS fetch failed for edit, trying DB fallback');
+  }
+
+  // Fallback: load from local indexed DB
+  if (!doc) {
+    try {
+      const { rows } = await db.query(
+        `SELECT raw_record FROM site_standard_articles WHERE uri LIKE $1`,
+        [`%/${rkey}`]
+      );
+      if (rows.length > 0 && rows[0].raw_record) {
+        doc = rows[0].raw_record;
+        logger.info({ rkey, source: 'db' }, 'Loaded post for editing from DB fallback');
+      }
+    } catch (err) {
+      logger.warn({ err, rkey }, 'DB fallback also failed for edit');
+    }
+  }
+
+  if (!doc) {
+    logger.warn({ rkey, did: sessionDid }, 'Post not found for editing in PDS or DB');
     return c.redirect('/posts');
   }
 
