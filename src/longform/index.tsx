@@ -133,6 +133,10 @@ app.get('/edit/:rkey', async (c) => {
 
   // Fetch the existing record — try PDS cache first, fall back to local DB
   let doc: any = null;
+  let debugInfo: string[] = [];
+  debugInfo.push(`rkey: ${rkey}`);
+  debugInfo.push(`sessionDid: ${sessionDid}`);
+
   try {
     const result = await getCachedRecordMulti(
       sessionDid,
@@ -141,31 +145,39 @@ app.get('/edit/:rkey', async (c) => {
     );
     if (result) {
       doc = result.record as any;
-      logger.info({ rkey, source: 'pds' }, 'Loaded post for editing from PDS cache');
+      debugInfo.push(`PDS cache: HIT (collection: ${result.collection})`);
+    } else {
+      debugInfo.push(`PDS cache: MISS (returned null)`);
     }
-  } catch (err) {
-    logger.warn({ err, rkey }, 'PDS fetch failed for edit, trying DB fallback');
+  } catch (err: any) {
+    debugInfo.push(`PDS cache: ERROR - ${err.message}`);
   }
 
   // Fallback: load from local indexed DB
   if (!doc) {
     try {
+      const likePattern = `%/${rkey}`;
+      debugInfo.push(`DB query: uri LIKE '${likePattern}'`);
       const { rows } = await db.query(
-        `SELECT raw_record FROM site_standard_articles WHERE uri LIKE $1`,
-        [`%/${rkey}`]
+        `SELECT uri, raw_record FROM site_standard_articles WHERE uri LIKE $1`,
+        [likePattern]
       );
-      if (rows.length > 0 && rows[0].raw_record) {
-        doc = rows[0].raw_record;
-        logger.info({ rkey, source: 'db' }, 'Loaded post for editing from DB fallback');
+      debugInfo.push(`DB rows returned: ${rows.length}`);
+      if (rows.length > 0) {
+        debugInfo.push(`DB match URI: ${rows[0].uri}`);
+        debugInfo.push(`DB raw_record is null: ${rows[0].raw_record === null}`);
+        if (rows[0].raw_record) {
+          doc = rows[0].raw_record;
+          debugInfo.push(`DB fallback: LOADED`);
+        }
       }
-    } catch (err) {
-      logger.warn({ err, rkey }, 'DB fallback also failed for edit');
+    } catch (err: any) {
+      debugInfo.push(`DB fallback: ERROR - ${err.message}`);
     }
   }
 
   if (!doc) {
-    logger.warn({ rkey, did: sessionDid }, 'Post not found for editing in PDS or DB');
-    return c.redirect('/posts');
+    return c.html(`<pre style="font-family:monospace;padding:2rem;">Edit Debug - Post Not Found\n\n${debugInfo.join('\n')}</pre>`, 404);
   }
 
   // Convert Leaflet blocks to Tiptap JSON
