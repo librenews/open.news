@@ -19,12 +19,12 @@ interface BackfillInteractionsData {
 export async function backfillInteractionsJob(job: Job<BackfillInteractionsData>) {
   const offset = job.data.offset || 0;
 
-  // Fetch a batch of article URIs — only native longform/leaflet docs
-  // (skip RSS-ingested news articles which won't have AT Protocol likes)
+  // Fetch a batch of article URIs — only substantive longform/leaflet docs
   const { rows: articles } = await db.query(
     `SELECT uri FROM site_standard_articles
-     WHERE uri LIKE '%/site.standard.document/%'
-        OR uri LIKE '%/pub.leaflet.document/%'
+     WHERE word_count > 100
+       AND (uri LIKE '%/site.standard.document/%'
+            OR uri LIKE '%/pub.leaflet.document/%')
      ORDER BY published_at DESC NULLS LAST
      LIMIT $1 OFFSET $2`,
     [BATCH_SIZE, offset]
