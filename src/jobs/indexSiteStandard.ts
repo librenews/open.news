@@ -90,33 +90,48 @@ const BLOCKED_DOMAINS = new Set([
 
 const BLOCKED_CONTENT_PATTERNS = /\b(hentai|doujinshi|nsfw|xxx|porn|erotic[a]?|blowjob|milf|dilf|bbm|sex.?scene|nude|naked|genitalia|explicit.?content|r-?18|adult.?content)\b/i;
 
-// Load additional blocked domains from DB (cached, refreshes every 5 min)
+// Load additional blocked/suppressed domains from DB (cached, refreshes every 5 min)
 let dbBlockedDomains: Set<string> = new Set();
+let dbSuppressedDomains: Set<string> = new Set();
 let dbBlocklistLastFetch = 0;
-async function getBlockedDomains(): Promise<Set<string>> {
+async function refreshModerationList(): Promise<void> {
   const now = Date.now();
   if (now - dbBlocklistLastFetch > 5 * 60 * 1000) {
     try {
-      const { rows } = await db.query('SELECT domain FROM moderation_blocklist WHERE active = true');
-      dbBlockedDomains = new Set(rows.map((r: any) => r.domain));
+      const { rows } = await db.query('SELECT domain, action FROM moderation_blocklist WHERE active = true');
+      const blocked = new Set<string>();
+      const suppressed = new Set<string>();
+      for (const r of rows) {
+        if (r.action === 'suppress') {
+          suppressed.add(r.domain);
+        } else {
+          blocked.add(r.domain);
+        }
+      }
+      dbBlockedDomains = blocked;
+      dbSuppressedDomains = suppressed;
       dbBlocklistLastFetch = now;
     } catch {
       // Table may not exist yet — that's fine
     }
   }
-  return dbBlockedDomains;
+}
+
+function extractHostname(record: any): string | null {
+  const site = record.site || '';
+  if (typeof site === 'string' && site.startsWith('http')) {
+    try { return new URL(site).hostname.replace(/^www\./, ''); } catch {}
+  }
+  return null;
 }
 
 async function isBlockedContent(record: any): Promise<boolean> {
   // Check domain against hardcoded + DB blocklist
-  const site = record.site || '';
-  if (typeof site === 'string' && site.startsWith('http')) {
-    try {
-      const hostname = new URL(site).hostname.replace(/^www\./, '');
-      if (BLOCKED_DOMAINS.has(hostname)) return true;
-      const dynamicList = await getBlockedDomains();
-      if (dynamicList.has(hostname)) return true;
-    } catch {}
+  const hostname = extractHostname(record);
+  if (hostname) {
+    if (BLOCKED_DOMAINS.has(hostname)) return true;
+    await refreshModerationList();
+    if (dbBlockedDomains.has(hostname)) return true;
   }
 
   // Check text content for NSFW patterns
@@ -128,6 +143,13 @@ async function isBlockedContent(record: any): Promise<boolean> {
   ].join(' ');
 
   return BLOCKED_CONTENT_PATTERNS.test(textToCheck);
+}
+
+async function isSuppressedContent(record: any): Promise<boolean> {
+  const hostname = extractHostname(record);
+  if (!hostname) return false;
+  await refreshModerationList();
+  return dbSuppressedDomains.has(hostname);
 }
 
 export async function indexSiteStandardJob(job: Job<IndexSiteStandardData>) {
@@ -187,9 +209,15 @@ export async function indexSiteStandardJob(job: Job<IndexSiteStandardData>) {
     } else if (textContent) {
       language = franc(textContent, { minLength: 5 });
     }
+
+    // 4. Check if this content should be suppressed from feeds (but still indexed)
+    const suppressed = await isSuppressedContent(record);
+    if (suppressed) {
+      logger.info({ uri: postUri, site: record.site, title: title?.substring(0, 60) }, 'Indexed as suppressed (hidden from Latest)');
+    }
     
-    // 4. Save core metadata to Postgres
-    await upsertSiteStandardArticle(postUri, did, title, description, publishedAt, site, path, record, language, wordCount);
+    // 5. Save core metadata to Postgres
+    await upsertSiteStandardArticle(postUri, did, title, description, publishedAt, site, path, record, language, wordCount, suppressed);
     
     // 3. Index to OpenSearch
     const os = getOsClient();

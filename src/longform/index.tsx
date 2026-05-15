@@ -317,6 +317,7 @@ app.get('/', async (c) => {
      LEFT JOIN site_publications p ON p.uri = s.raw_record->>'site'
      WHERE s.word_count > 100
        AND s.language = 'eng'
+       AND s.suppressed = false
      ORDER BY s.published_at DESC NULLS LAST
      LIMIT 40`;
   }
@@ -419,6 +420,7 @@ app.get('/', async (c) => {
       FROM site_standard_articles s,
            jsonb_array_elements_text(s.raw_record->'tags') AS tag
       WHERE s.word_count > 100 AND s.language = 'eng'
+        AND s.suppressed = false
         AND s.published_at > NOW() - INTERVAL '7 days'
       GROUP BY tag
       ORDER BY cnt DESC
@@ -456,6 +458,7 @@ app.get('/tag/:tag', async (c) => {
      LEFT JOIN site_publications p ON p.uri = s.raw_record->>'site'
      WHERE s.word_count > 100
        AND s.language = 'eng'
+       AND s.suppressed = false
        AND s.raw_record->'tags' ? $1
      ORDER BY s.published_at DESC NULLS LAST
      LIMIT 40`,
@@ -559,7 +562,7 @@ app.get('/feed/latest.xml', async (c) => {
          ELSE NULL
        END AS image_cid
      FROM site_standard_articles s
-     WHERE s.word_count > 100 AND s.language = 'eng'
+     WHERE s.word_count > 100 AND s.language = 'eng' AND s.suppressed = false
      ORDER BY s.published_at DESC NULLS LAST
      LIMIT 30`
   );
