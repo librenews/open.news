@@ -478,6 +478,18 @@ export function EditorPage() {
           console.error("Tiptap Initialization Error:", e);
           document.getElementById('editor-container').innerHTML = '<p style="color:red">Failed to load editor: ' + e.message + '</p>';
         }
+
+        // If editing a published post, load the content after a short delay
+        // to let the Yjs provider connect
+        if (window.EDIT_TIPTAP_JSON) {
+          setTimeout(function() {
+            try {
+              window.editor.commands.setContent(window.EDIT_TIPTAP_JSON);
+            } catch(e) {
+              console.error('Failed to load edit content:', e);
+            }
+          }, 500);
+        }
       });
 
       window.togglePreview = function() {
@@ -597,8 +609,8 @@ export function EditorPage() {
            }
          }
 
-         // Get the docId from the URL
-         var publishDocId = new URLSearchParams(window.location.search).get('doc');
+         // Get the docId from the URL or use EDIT_URI for editing published posts
+         var publishDocId = window.EDIT_URI || new URLSearchParams(window.location.search).get('doc');
 
          try {
            const res = await fetch('/api/publish', {

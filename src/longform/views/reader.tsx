@@ -139,7 +139,7 @@ function renderLeafletBlocks(blocks: LeafletBlock[], did: string) {
   });
 }
 
-export function ReaderPage(doc: LeafletDocument, authorDid: string, profile: any, relatedArticles: any[] = []) {
+export function ReaderPage(doc: LeafletDocument, authorDid: string, profile: any, relatedArticles: any[] = [], sessionDid?: string | null) {
   const date = new Date(doc.publishedAt || Date.now());
   const formattedDate = date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
   const displayName = profile?.displayName || profile?.handle || authorDid;
@@ -272,6 +272,15 @@ export function ReaderPage(doc: LeafletDocument, authorDid: string, profile: any
               <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
               <span>Source</span>
             </a>
+            ${sessionDid && sessionDid === authorDid ? html`
+              <a href="/edit/${rkey}" style="background: none; border: none; cursor: pointer; color: inherit; text-decoration: none; display: flex; align-items: center; gap: 0.4rem; font-family: var(--font-sans); font-size: 14px; transition: color 0.2s;" onmouseover="this.style.color='var(--accent, #118156)'" onmouseout="this.style.color='inherit'" title="Edit this post">
+                <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                </svg>
+                <span>Edit</span>
+              </a>
+            ` : ''}
           </div>
         </div>
       </header>

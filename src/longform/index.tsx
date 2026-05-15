@@ -76,6 +76,138 @@ async function getOrCreateFeedToken(did: string): Promise<string> {
   return token;
 }
 
+// Helper: Convert Leaflet plaintext + facets back to Tiptap inline content
+function leafletTextToTiptap(plaintext: string, facets?: any[]): any[] {
+  if (!plaintext) return [];
+  if (!facets || facets.length === 0) return [{ type: 'text', text: plaintext }];
+
+  const encoder = new TextEncoder();
+  const bytes = encoder.encode(plaintext);
+  
+  // Build sorted facet ranges
+  const sortedFacets = [...facets].sort((a, b) => a.index.byteStart - b.index.byteStart);
+  const result: any[] = [];
+  let bytePos = 0;
+
+  for (const facet of sortedFacets) {
+    const start = facet.index.byteStart;
+    const end = facet.index.byteEnd;
+    
+    // Text before this facet
+    if (start > bytePos) {
+      const textBefore = new TextDecoder().decode(bytes.slice(bytePos, start));
+      if (textBefore) result.push({ type: 'text', text: textBefore });
+    }
+    
+    const facetText = new TextDecoder().decode(bytes.slice(start, end));
+    if (facetText) {
+      const marks: any[] = [];
+      for (const feature of (facet.features || [])) {
+        const ft = feature.$type || '';
+        if (ft.includes('#bold')) marks.push({ type: 'bold' });
+        else if (ft.includes('#italic')) marks.push({ type: 'italic' });
+        else if (ft.includes('#strikethrough')) marks.push({ type: 'strike' });
+        else if (ft.includes('#link')) marks.push({ type: 'link', attrs: { href: feature.uri || '' } });
+      }
+      result.push({ type: 'text', text: facetText, ...(marks.length > 0 ? { marks } : {}) });
+    }
+    bytePos = end;
+  }
+
+  // Remaining text after last facet
+  if (bytePos < bytes.length) {
+    const remaining = new TextDecoder().decode(bytes.slice(bytePos));
+    if (remaining) result.push({ type: 'text', text: remaining });
+  }
+
+  return result;
+}
+
+// --- Edit published post ---
+app.get('/edit/:rkey', async (c) => {
+  const rkey = c.req.param('rkey');
+  const sessionDid = await getSession(c);
+  if (!sessionDid) return c.redirect('/login');
+
+  const profile = await fetchUserProfile(sessionDid);
+
+  // Fetch the existing record from PDS
+  let doc: any = null;
+  try {
+    const oauthSession = await restoreSession(c, sessionDid);
+    if (!oauthSession) return c.redirect('/login');
+    const agent = new Agent(oauthSession);
+    const res = await agent.com.atproto.repo.getRecord({
+      repo: sessionDid,
+      collection: 'site.standard.document',
+      rkey,
+    });
+    doc = res.data.value;
+  } catch (err) {
+    logger.error({ err, rkey }, 'Failed to fetch post for editing');
+    return c.redirect('/');
+  }
+
+  // Convert Leaflet blocks to Tiptap JSON
+  const tiptapContent: any[] = [];
+  // Add title as H1
+  tiptapContent.push({ type: 'heading', attrs: { level: 1 }, content: [{ type: 'text', text: doc.title || 'Untitled' }] });
+
+  const pages = doc.content?.pages || doc.pages || [];
+  if (pages.length > 0) {
+    const blocks = pages[0].blocks || [];
+    for (const block of blocks) {
+      const b = block.block || block;
+      const btype = b.$type || '';
+
+      if (btype === 'pub.leaflet.blocks.text') {
+        tiptapContent.push({ type: 'paragraph', content: leafletTextToTiptap(b.plaintext, b.facets) });
+      } else if (btype === 'pub.leaflet.blocks.header') {
+        tiptapContent.push({ type: 'heading', attrs: { level: b.level || 2 }, content: leafletTextToTiptap(b.plaintext, b.facets) });
+      } else if (btype === 'pub.leaflet.blocks.blockquote') {
+        tiptapContent.push({ type: 'blockquote', content: [{ type: 'paragraph', content: leafletTextToTiptap(b.plaintext, b.facets) }] });
+      } else if (btype === 'pub.leaflet.blocks.code') {
+        tiptapContent.push({ type: 'codeBlock', attrs: { language: b.language || null }, content: b.plaintext ? [{ type: 'text', text: b.plaintext }] : [] });
+      } else if (btype === 'pub.leaflet.blocks.image') {
+        const cid = b.image?.ref?.$link || b.image?.ref?.['$link'] || '';
+        if (cid) tiptapContent.push({ type: 'image', attrs: { src: `/blob/${sessionDid}/${cid}`, alt: b.alt || '' } });
+      } else if (btype === 'pub.leaflet.blocks.separator') {
+        tiptapContent.push({ type: 'horizontalRule' });
+      } else if (btype === 'pub.leaflet.blocks.iframe') {
+        tiptapContent.push({ type: 'paragraph', content: [{ type: 'text', text: b.url || '' }] });
+      } else if (b.plaintext) {
+        tiptapContent.push({ type: 'paragraph', content: [{ type: 'text', text: b.plaintext }] });
+      }
+    }
+  } else if (typeof doc.content === 'string') {
+    for (const line of doc.content.split('\n')) {
+      tiptapContent.push({ type: 'paragraph', content: line ? [{ type: 'text', text: line }] : [] });
+    }
+  }
+
+  const tiptapJson = { type: 'doc', content: tiptapContent };
+  const editUri = `at://${sessionDid}/site.standard.document/${rkey}`;
+
+  const headerAction = html`
+    <div style="display: flex; gap: 0.5rem; align-items: center;">
+      <button onclick="window.togglePreview()" id="preview-btn" style="background: transparent; color: var(--text-main, #242424); border: 1px solid var(--border, rgba(0,0,0,0.15)); padding: 0.4rem 1.2rem; border-radius: 99px; cursor: pointer; font-family: var(--font-sans); font-weight: 500; font-size: 14px; transition: all 0.15s;">Preview</button>
+      <button onclick="publishDraft()" id="publish-btn" style="background: #118156; color: white; border: none; padding: 0.4rem 1.2rem; border-radius: 99px; cursor: pointer; font-family: var(--font-sans); font-weight: 500; font-size: 14px;">Update</button>
+    </div>
+  `;
+
+  return c.html((
+    <Layout title={`Edit - ${doc.title} - ${config.LONGFORM_DOMAIN}`} profile={profile} headerAction={headerAction}>
+      <script dangerouslySetInnerHTML={{ __html: `
+        window.SESSION_DID = ${JSON.stringify(sessionDid)};
+        window.SESSION_HANDLE = ${JSON.stringify(profile?.handle || sessionDid)};
+        window.EDIT_URI = ${JSON.stringify(editUri)};
+        window.EDIT_TIPTAP_JSON = ${JSON.stringify(tiptapJson)};
+      ` }} />
+      <EditorPage />
+    </Layout>
+  ) as unknown as string);
+});
+
 app.get('/', async (c) => {
   const sessionDid = await getSession(c);
   const docId = c.req.query('doc');
@@ -1216,7 +1348,7 @@ app.get('/post/:did/:rkey', async (c) => {
 
     return c.html((
       <Layout title={`${doc.title} - ${config.LONGFORM_DOMAIN}`} profile={sessionProfile} og={og}>
-        {ReaderPage(doc, did, authorProfile, relatedArticles)}
+        {ReaderPage(doc, did, authorProfile, relatedArticles, sessionDid)}
       </Layout>
     ) as unknown as string);
   } catch (err: any) {
@@ -1564,7 +1696,10 @@ app.post('/api/publish', async (c) => {
 
      // Check if this is a re-publish (update) or first publish (create)
      let isRepublish = false;
-     if (docId) {
+     if (docId && docId.startsWith('at://')) {
+       // Direct edit from published post — always an update
+       isRepublish = true;
+     } else if (docId) {
        const { rows: draftRows } = await db.query(
          'SELECT published_uri FROM longform_drafts WHERE document_name = $1 AND owner_did = $2',
          [docId, sessionDid]
