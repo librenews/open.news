@@ -1834,28 +1834,21 @@ app.post('/api/like', async (c) => {
   if (!sessionDid) return c.json({ error: 'Unauthorized' }, 401);
   
   try {
-    let { rkey, authorDid, uri, cid } = await c.req.json();
+    let { rkey, authorDid, uri } = await c.req.json();
     const oauthSession = await restoreSession(c, sessionDid);
     if (!oauthSession) return c.json({ error: 'Session expired' }, 401);
     const agent = new Agent(oauthSession);
     
-    if (!uri || !cid) {
+    if (!uri) {
       uri = `at://${authorDid}/site.standard.document/${rkey}`;
-      const pdsUrl = await resolvePds(authorDid);
-      const fetchAgent = new BskyAgent({ service: pdsUrl });
-      const record = await fetchAgent.com.atproto.repo.getRecord({
-        repo: authorDid,
-        collection: 'site.standard.document',
-        rkey
-      });
-      cid = record.data.cid;
     }
     
     const res = await agent.com.atproto.repo.createRecord({
       repo: sessionDid,
-      collection: 'app.bsky.feed.like',
+      collection: 'site.standard.graph.recommend',
       record: {
-        subject: { uri, cid },
+        $type: 'site.standard.graph.recommend',
+        document: uri,
         createdAt: new Date().toISOString()
       }
     });
@@ -1869,7 +1862,7 @@ app.post('/api/like', async (c) => {
     
     return c.json({ success: true });
   } catch (err: any) {
-    logger.error({ err }, 'Failed to like article');
+    logger.error({ err }, 'Failed to recommend article');
     return c.json({ error: err.message }, 500);
   }
 });

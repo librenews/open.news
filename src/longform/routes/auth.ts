@@ -34,7 +34,7 @@ export async function getLongformAuthClient(): Promise<NodeOAuthClient> {
       grant_types: ['authorization_code', 'refresh_token'],
       response_types: ['code'],
       token_endpoint_auth_method: 'none',
-      scope: 'atproto transition:email repo:site.standard.document repo:site.standard.graph.subscription blob:image/jpeg repo:app.bsky.feed.like repo:app.bsky.feed.repost',
+      scope: 'atproto transition:email repo:site.standard.document repo:site.standard.graph.subscription repo:site.standard.graph.recommend blob:image/jpeg repo:app.bsky.feed.like repo:app.bsky.feed.repost',
       dpop_bound_access_tokens: true,
     },
     requestLock,
@@ -91,7 +91,7 @@ authRouter.get('/client-metadata.json', async (c) => {
     grant_types: ['authorization_code', 'refresh_token'],
     response_types: ['code'],
     token_endpoint_auth_method: 'none',
-    scope: 'atproto transition:email repo:site.standard.document repo:site.standard.graph.subscription blob:image/jpeg repo:app.bsky.feed.like repo:app.bsky.feed.repost',
+    scope: 'atproto transition:email repo:site.standard.document repo:site.standard.graph.subscription repo:site.standard.graph.recommend blob:image/jpeg repo:app.bsky.feed.like repo:app.bsky.feed.repost',
     dpop_bound_access_tokens: true,
   });
 });
@@ -104,7 +104,7 @@ authRouter.get('/oauth/login', async (c) => {
 
   try {
     const client = await getLongformAuthClient();
-    const url = await client.authorize(handle, { scope: 'atproto transition:email repo:site.standard.document repo:site.standard.graph.subscription blob:image/jpeg repo:app.bsky.feed.like repo:app.bsky.feed.repost' });
+    const url = await client.authorize(handle, { scope: 'atproto transition:email repo:site.standard.document repo:site.standard.graph.subscription repo:site.standard.graph.recommend blob:image/jpeg repo:app.bsky.feed.like repo:app.bsky.feed.repost' });
     return c.redirect(url.toString());
   } catch (err) {
     logger.error({ err, handle }, 'Longform OAuth initiation failed');

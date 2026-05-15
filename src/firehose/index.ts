@@ -176,8 +176,8 @@ function handleEvent(event: JetstreamEvent): void {
         logger.error({ err, postUri }, 'Failed to delete moderated post from DB');
       });
     }
-    // Clean up deleted likes/reposts from our interaction tracking
-    if ((commit.collection === 'app.bsky.feed.like' || commit.collection === 'app.bsky.feed.repost') && postUri) {
+    // Clean up deleted likes/reposts/recommends from our interaction tracking
+    if ((commit.collection === 'app.bsky.feed.like' || commit.collection === 'app.bsky.feed.repost' || commit.collection === 'site.standard.graph.recommend') && postUri) {
       db.query('DELETE FROM article_interactions WHERE record_uri = $1', [postUri])
         .catch(err => logger.debug({ err, postUri }, 'Failed to delete interaction record'));
     }
@@ -205,6 +205,21 @@ function handleEvent(event: JetstreamEvent): void {
            VALUES ($1, $2, $3, $4) ON CONFLICT (article_uri, actor_did, interaction_type) DO NOTHING`,
           [subject.uri, did, interactionType, postUri]
         ).catch(err => logger.debug({ err }, 'Failed to track article interaction'));
+      }
+    }
+  }
+
+  // ── Recommend tracking (Leaflet / standard.site "likes") ───────────────────
+  if (commit.collection === 'site.standard.graph.recommend' && commit.record) {
+    const articleUri = (commit.record.document || commit.record.subject) as string | undefined;
+    if (articleUri && typeof articleUri === 'string') {
+      const longformPatterns = ['/site.standard.document/', '/pub.leaflet.document/'];
+      if (longformPatterns.some(p => articleUri.includes(p))) {
+        db.query(
+          `INSERT INTO article_interactions (article_uri, actor_did, interaction_type, record_uri)
+           VALUES ($1, $2, 'like', $3) ON CONFLICT (article_uri, actor_did, interaction_type) DO NOTHING`,
+          [articleUri, did, postUri]
+        ).catch(err => logger.debug({ err }, 'Failed to track recommend interaction'));
       }
     }
   }
