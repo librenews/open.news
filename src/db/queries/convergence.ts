@@ -11,6 +11,8 @@ export interface ConvergenceArticle {
   convergence_score: number;
   share_count: number;
   track_names: string[];
+  like_count: number;
+  liked: boolean;
 }
 
 /**
@@ -20,7 +22,8 @@ export interface ConvergenceArticle {
  */
 export async function getConvergenceArticles(
   hours: number = 48,
-  limit: number = 30
+  limit: number = 30,
+  userId?: bigint
 ): Promise<ConvergenceArticle[]> {
   const { rows } = await db.query(
     `SELECT 
@@ -28,23 +31,28 @@ export async function getConvergenceArticles(
        a.published_at,
        COUNT(DISTINCT tm.track_id) AS convergence_score,
        COUNT(DISTINCT asrc.source_id) AS share_count,
-       ARRAY_AGG(DISTINCT t.name) FILTER (WHERE t.name IS NOT NULL) AS track_names
+       ARRAY_AGG(DISTINCT t.name) FILTER (WHERE t.name IS NOT NULL) AS track_names,
+       COALESCE(nl.like_count, 0) AS like_count,
+       ${userId ? 'EXISTS(SELECT 1 FROM news_likes ul WHERE ul.article_id = a.id AND ul.user_id = $3)' : 'false'} AS liked
      FROM articles a
      JOIN article_sources asrc ON a.id = asrc.article_id
      LEFT JOIN track_matches tm ON asrc.post_uri = tm.post_uri
      LEFT JOIN tracks t ON tm.track_id = t.id
+     LEFT JOIN LATERAL (
+       SELECT COUNT(*) AS like_count FROM news_likes WHERE article_id = a.id
+     ) nl ON true
      WHERE a.is_news = true
        AND a.word_count > 50
        AND a.published_at > NOW() - INTERVAL '1 hour' * $1
        AND a.url NOT LIKE '%bsky.app%'
        AND a.url NOT LIKE '%ranked.news%'
-     GROUP BY a.id
+     GROUP BY a.id, nl.like_count
      ORDER BY
        (COUNT(DISTINCT tm.track_id) + COUNT(DISTINCT asrc.source_id) * 0.5)
        / POWER(GREATEST(EXTRACT(EPOCH FROM (NOW() - CASE WHEN a.published_at > NOW() THEN a.created_at ELSE COALESCE(a.published_at, a.created_at) END)) / 3600, 0) + 2, 1.5) DESC,
        CASE WHEN a.published_at > NOW() THEN a.created_at ELSE a.published_at END DESC NULLS LAST
      LIMIT $2`,
-    [hours, limit]
+    userId ? [hours, limit, userId] : [hours, limit]
   );
 
   return rows.map((r: any) => ({
@@ -58,6 +66,8 @@ export async function getConvergenceArticles(
     convergence_score: Number(r.convergence_score),
     share_count: Number(r.share_count),
     track_names: r.track_names || [],
+    like_count: Number(r.like_count),
+    liked: Boolean(r.liked),
   }));
 }
 
@@ -66,7 +76,8 @@ export async function getConvergenceArticles(
  */
 export async function getRecentArticles(
   hours: number = 24,
-  limit: number = 30
+  limit: number = 30,
+  userId?: bigint
 ): Promise<ConvergenceArticle[]> {
   const { rows } = await db.query(
     `SELECT 
@@ -74,18 +85,23 @@ export async function getRecentArticles(
        a.published_at,
        0 AS convergence_score,
        COUNT(DISTINCT asrc.source_id) AS share_count,
-       ARRAY[]::text[] AS track_names
+       ARRAY[]::text[] AS track_names,
+       COALESCE(nl.like_count, 0) AS like_count,
+       ${userId ? 'EXISTS(SELECT 1 FROM news_likes ul WHERE ul.article_id = a.id AND ul.user_id = $3)' : 'false'} AS liked
      FROM articles a
      LEFT JOIN article_sources asrc ON a.id = asrc.article_id
+     LEFT JOIN LATERAL (
+       SELECT COUNT(*) AS like_count FROM news_likes WHERE article_id = a.id
+     ) nl ON true
      WHERE a.is_news = true
        AND a.word_count > 50
        AND a.published_at > NOW() - INTERVAL '1 hour' * $1
        AND a.url NOT LIKE '%bsky.app%'
        AND a.url NOT LIKE '%ranked.news%'
-     GROUP BY a.id
+     GROUP BY a.id, nl.like_count
      ORDER BY CASE WHEN a.published_at > NOW() THEN a.created_at ELSE a.published_at END DESC NULLS LAST
      LIMIT $2`,
-    [hours, limit]
+    userId ? [hours, limit, userId] : [hours, limit]
   );
 
   return rows.map((r: any) => ({
@@ -99,6 +115,8 @@ export async function getRecentArticles(
     convergence_score: Number(r.convergence_score),
     share_count: Number(r.share_count),
     track_names: r.track_names || [],
+    like_count: Number(r.like_count),
+    liked: Boolean(r.liked),
   }));
 }
 
@@ -154,7 +172,8 @@ export async function getTopicClusters(): Promise<TopicCluster[]> {
  */
 export async function getArticlesByTopic(
   topicId: number,
-  limit: number = 30
+  limit: number = 30,
+  userId?: bigint
 ): Promise<ConvergenceArticle[]> {
   const { rows } = await db.query(
     `SELECT 
@@ -162,20 +181,25 @@ export async function getArticlesByTopic(
        a.published_at,
        COUNT(DISTINCT tm.track_id) AS convergence_score,
        COUNT(DISTINCT asrc.source_id) AS share_count,
-       ARRAY[]::text[] AS track_names
+       ARRAY[]::text[] AS track_names,
+       COALESCE(nl.like_count, 0) AS like_count,
+       ${userId ? 'EXISTS(SELECT 1 FROM news_likes ul WHERE ul.article_id = a.id AND ul.user_id = $3)' : 'false'} AS liked
      FROM articles a
      JOIN article_sources asrc ON a.id = asrc.article_id
      JOIN track_matches tm ON asrc.post_uri = tm.post_uri
      JOIN topic_clusters tc ON tm.track_id = ANY(tc.track_ids)
+     LEFT JOIN LATERAL (
+       SELECT COUNT(*) AS like_count FROM news_likes WHERE article_id = a.id
+     ) nl ON true
      WHERE tc.id = $1
        AND a.is_news = true
        AND a.word_count > 50
        AND a.url NOT LIKE '%bsky.app%'
        AND a.url NOT LIKE '%ranked.news%'
-     GROUP BY a.id
+     GROUP BY a.id, nl.like_count
      ORDER BY CASE WHEN a.published_at > NOW() THEN a.created_at ELSE a.published_at END DESC NULLS LAST
      LIMIT $2`,
-    [topicId, limit]
+    userId ? [topicId, limit, userId] : [topicId, limit]
   );
 
   return rows.map((r: any) => ({
@@ -189,6 +213,8 @@ export async function getArticlesByTopic(
     convergence_score: Number(r.convergence_score),
     share_count: Number(r.share_count),
     track_names: r.track_names || [],
+    like_count: Number(r.like_count),
+    liked: Boolean(r.liked),
   }));
 }
 

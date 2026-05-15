@@ -99,6 +99,7 @@ authRouter.get('/oauth/client-metadata.json', (c) => {
 // GET /oauth/login?handle=alice.bsky.social
 authRouter.get('/oauth/login', async (c) => {
   const handle = c.req.query('handle')?.trim();
+  const returnTo = c.req.query('returnTo') || '';
   if (!handle) {
     return c.html('<p>Handle required. <a href="/login">Back</a></p>', 400);
   }
@@ -106,6 +107,18 @@ authRouter.get('/oauth/login', async (c) => {
   try {
     const client = await getOAuthClient();
     const url = await client.authorize(handle, { scope: 'atproto' });
+
+    // Persist returnTo in a short-lived cookie so callback can redirect back
+    if (returnTo) {
+      const { setCookie } = await import('hono/cookie');
+      setCookie(c, 'oauth_return_to', returnTo, {
+        path: '/',
+        maxAge: 600,
+        httpOnly: true,
+        secure: process.env.NODE_ENV !== 'development',
+      });
+    }
+
     return c.redirect(url.toString());
   } catch (err) {
     logger.error({ err, handle }, 'OAuth initiation failed');
@@ -147,7 +160,13 @@ authRouter.get('/oauth/callback', async (c) => {
 
     await enqueueJob('syncFollows', { userId: user.id.toString(), userDid: did });
 
-    return c.redirect('/chat?briefing=1');
+    // Redirect to returnTo if set, otherwise default to /chat
+    const { getCookie, setCookie: setC } = await import('hono/cookie');
+    const returnTo = getCookie(c, 'oauth_return_to');
+    // Clear the cookie
+    setC(c, 'oauth_return_to', '', { path: '/', maxAge: 0 });
+
+    return c.redirect(returnTo || '/chat?briefing=1');
   } catch (err) {
     logger.error({ err }, 'OAuth callback failed');
     return c.html('<p>Login failed. <a href="/login">Try again</a></p>', 500);

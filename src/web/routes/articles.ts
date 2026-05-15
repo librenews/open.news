@@ -41,3 +41,33 @@ articlesRouter.post('/api/articles/:id/save', sessionRequired, async (c) => {
   await toggleArticleSaved(userId, articleId);
   return c.json({ ok: true });
 });
+
+// POST /api/articles/:id/like — toggle like
+articlesRouter.post('/api/articles/:id/like', async (c) => {
+  const userId = c.get('userId' as never) as bigint | undefined;
+  if (!userId) return c.json({ error: 'Unauthorized' }, 401);
+
+  const articleId = Number(c.req.param('id'));
+  const { db } = await import('../../db/client.js');
+  
+  // Check if already liked
+  const { rows } = await db.query(
+    'SELECT id FROM news_likes WHERE article_id = $1 AND user_id = $2',
+    [articleId, userId]
+  );
+  
+  if (rows.length > 0) {
+    // Unlike
+    await db.query('DELETE FROM news_likes WHERE article_id = $1 AND user_id = $2', [articleId, userId]);
+    const { rows: countRows } = await db.query('SELECT COUNT(*) AS cnt FROM news_likes WHERE article_id = $1', [articleId]);
+    return c.json({ liked: false, count: Number(countRows[0].cnt) });
+  } else {
+    // Like
+    await db.query(
+      'INSERT INTO news_likes (article_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+      [articleId, userId]
+    );
+    const { rows: countRows } = await db.query('SELECT COUNT(*) AS cnt FROM news_likes WHERE article_id = $1', [articleId]);
+    return c.json({ liked: true, count: Number(countRows[0].cnt) });
+  }
+});

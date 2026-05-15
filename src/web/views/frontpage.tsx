@@ -17,7 +17,7 @@ function escHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-function ArticleCard({ article, featured, userContributed }: { article: ConvergenceArticle; featured?: boolean; userContributed?: boolean }) {
+function ArticleCard({ article, featured, userContributed, isLoggedIn }: { article: ConvergenceArticle; featured?: boolean; userContributed?: boolean; isLoggedIn?: boolean }) {
   const ago = timeAgo(article.published_at);
   const source = article.site_name || new URL(article.url).hostname.replace('www.', '');
 
@@ -46,6 +46,18 @@ function ArticleCard({ article, featured, userContributed }: { article: Converge
               </span>
             )}
           </div>
+          <button
+            class={`like-btn${article.liked ? ' liked' : ''}`}
+            data-article-id={article.id}
+            data-logged-in={isLoggedIn ? 'true' : 'false'}
+            onclick="handleLike(event, this)"
+            title="Like this article"
+          >
+            <svg viewBox="0 0 24 24" width="16" height="16" fill={article.liked ? 'currentColor' : 'none'} stroke="currentColor" stroke-width="2">
+              <path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3" />
+            </svg>
+            <span class="like-count">{article.like_count > 0 ? article.like_count : ''}</span>
+          </button>
         </div>
       </a>
     );
@@ -73,6 +85,18 @@ function ArticleCard({ article, featured, userContributed }: { article: Converge
               ✦ Your topic
             </span>
           )}
+          <button
+            class={`like-btn${article.liked ? ' liked' : ''}`}
+            data-article-id={article.id}
+            data-logged-in={isLoggedIn ? 'true' : 'false'}
+            onclick="handleLike(event, this)"
+            title="Like this article"
+          >
+            <svg viewBox="0 0 24 24" width="14" height="14" fill={article.liked ? 'currentColor' : 'none'} stroke="currentColor" stroke-width="2">
+              <path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3" />
+            </svg>
+            <span class="like-count">{article.like_count > 0 ? article.like_count : ''}</span>
+          </button>
         </div>
       </div>
     </a>
@@ -414,7 +438,36 @@ export function FrontPage({
             color: var(--accent);
             padding: 0.1rem 0.4rem;
             border-radius: 99px;
-          }        `}} />
+          }
+
+          /* Like button */
+          .like-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.3rem;
+            background: none;
+            border: 1px solid var(--border);
+            border-radius: 99px;
+            padding: 0.2rem 0.6rem;
+            cursor: pointer;
+            color: var(--text-muted);
+            font-size: 0.75rem;
+            font-family: var(--font-sans);
+            font-weight: 500;
+            transition: all 0.2s;
+            line-height: 1;
+            flex-shrink: 0;
+          }
+          .like-btn:hover {
+            border-color: var(--accent);
+            color: var(--accent);
+          }
+          .like-btn.liked {
+            background: var(--accent-light);
+            border-color: var(--accent);
+            color: var(--accent);
+          }
+          .like-count:empty { display: none; }        `}} />
       </head>
       <body>
         <header class="site-header">
@@ -463,10 +516,10 @@ export function FrontPage({
             </div>
           ) : (
             <div>
-              {featured && <ArticleCard article={featured} featured={true} userContributed={userContributedIds?.has(featured.id)} />}
+              {featured && <ArticleCard article={featured} featured={true} userContributed={userContributedIds?.has(featured.id)} isLoggedIn={isLoggedIn} />}
               <div class="articles-grid">
                 {rest.map((a) => (
-                  <ArticleCard article={a} userContributed={userContributedIds?.has(a.id)} />
+                  <ArticleCard article={a} userContributed={userContributedIds?.has(a.id)} isLoggedIn={isLoggedIn} />
                 ))}
               </div>
             </div>
@@ -481,6 +534,76 @@ export function FrontPage({
             <a href="/privacy">Privacy</a> &middot; <a href="/tos">Terms</a> &middot; <a href="mailto:app@track.social">Contact</a>
           </p>
         </footer>
+
+        <script dangerouslySetInnerHTML={{__html: `
+          function handleLike(e, btn) {
+            e.preventDefault();
+            e.stopPropagation();
+
+            var articleId = btn.dataset.articleId;
+            var isLoggedIn = btn.dataset.loggedIn === 'true';
+
+            if (!isLoggedIn) {
+              // Redirect to login, then back here with pending like
+              var returnUrl = window.location.pathname + window.location.search;
+              var sep = returnUrl.indexOf('?') === -1 ? '?' : '&';
+              window.location.href = '/login?returnTo=' + encodeURIComponent(returnUrl + sep + 'pendingLike=' + articleId);
+              return;
+            }
+
+            // Optimistic toggle
+            var svg = btn.querySelector('svg');
+            var count = btn.querySelector('.like-count');
+            var isLiked = btn.classList.contains('liked');
+            btn.classList.toggle('liked');
+            svg.setAttribute('fill', isLiked ? 'none' : 'currentColor');
+
+            var currentCount = parseInt(count.textContent) || 0;
+            var newCount = isLiked ? Math.max(0, currentCount - 1) : currentCount + 1;
+            count.textContent = newCount > 0 ? newCount : '';
+
+            fetch('/api/articles/' + articleId + '/like', { method: 'POST' })
+              .then(function(r) { return r.json(); })
+              .then(function(data) {
+                if (data.error) {
+                  // Revert
+                  btn.classList.toggle('liked');
+                  svg.setAttribute('fill', isLiked ? 'currentColor' : 'none');
+                  count.textContent = currentCount > 0 ? currentCount : '';
+                } else {
+                  // Sync with server count
+                  count.textContent = data.count > 0 ? data.count : '';
+                  btn.classList.toggle('liked', data.liked);
+                  svg.setAttribute('fill', data.liked ? 'currentColor' : 'none');
+                }
+              })
+              .catch(function() {
+                btn.classList.toggle('liked');
+                svg.setAttribute('fill', isLiked ? 'currentColor' : 'none');
+                count.textContent = currentCount > 0 ? currentCount : '';
+              });
+          }
+
+          // Auto-execute pending like after login redirect
+          (function() {
+            var params = new URLSearchParams(window.location.search);
+            var pendingLike = params.get('pendingLike');
+            if (pendingLike) {
+              // Clean the URL
+              params.delete('pendingLike');
+              var clean = window.location.pathname;
+              var remaining = params.toString();
+              if (remaining) clean += '?' + remaining;
+              window.history.replaceState({}, '', clean);
+
+              // Find and click the like button
+              var btn = document.querySelector('.like-btn[data-article-id="' + pendingLike + '"]');
+              if (btn && !btn.classList.contains('liked')) {
+                btn.click();
+              }
+            }
+          })();
+        `}} />
       </body>
     </html>
   );

@@ -75,18 +75,19 @@ app.get('/', async (c) => {
     getConvergenceStats(),
   ]);
 
+  const userId = c.get('userId' as never) as bigint | undefined;
+
   let articles;
   if (activeTopic) {
-    articles = await getArticlesByTopic(activeTopic, 30);
+    articles = await getArticlesByTopic(activeTopic, 30, userId);
   } else if (view === 'latest') {
-    articles = await getRecentArticles(48, 30);
+    articles = await getRecentArticles(48, 30, userId);
   } else {
-    articles = await getConvergenceArticles(48, 30);
+    articles = await getConvergenceArticles(48, 30, userId);
   }
 
   // Check if logged-in user's tracks contributed to any articles
   let userContributedIds = new Set<number>();
-  const userId = c.get('userId' as never) as bigint | undefined;
   if (userId) {
     const user = await getUserById(userId);
     if (user) {
@@ -102,7 +103,8 @@ app.get('/', async (c) => {
 app.get('/login', (c) => {
   const userId = c.get('userId' as never) as bigint | undefined;
   if (userId) return c.redirect('/chat');
-  return c.html((<LoginPage />) as unknown as string);
+  const returnTo = c.req.query('returnTo') || undefined;
+  return c.html((<LoginPage returnTo={returnTo} />) as unknown as string);
 });
 
 // GET /chat — load or create default conversation

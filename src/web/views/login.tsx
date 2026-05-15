@@ -1,7 +1,7 @@
 /** @jsxImportSource hono/jsx */
 import { Layout } from './layout.js';
 
-export const LoginPage = () => (
+export const LoginPage = ({ returnTo }: { returnTo?: string }) => (
   <Layout title="Sign in">
     <article style="max-width: 420px; margin: 4rem auto; text-align: center;">
       <hgroup>
@@ -9,6 +9,7 @@ export const LoginPage = () => (
         <p>Agentic news discovery.</p>
       </hgroup>
       <form action="/oauth/login" method="get">
+        {returnTo && <input type="hidden" name="returnTo" value={returnTo} />}
         <input
           type="text"
           name="handle"
