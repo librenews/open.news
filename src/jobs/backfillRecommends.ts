@@ -21,10 +21,18 @@ interface BackfillRecommendsData {
 export async function backfillRecommendsJob(job: Job<BackfillRecommendsData>) {
   const offset = job.data.offset || 0;
 
-  // Fetch a batch of known users (anyone who has logged into longform)
+  // Fetch a batch of known DIDs — article authors + logged-in users
   const { rows: users } = await db.query(
-    `SELECT DISTINCT did FROM longform_users
-     WHERE did IS NOT NULL
+    `SELECT did FROM (
+       SELECT did FROM longform_users WHERE did IS NOT NULL
+       UNION
+       SELECT DISTINCT split_part(uri, '/', 3) AS did
+       FROM site_standard_articles
+       WHERE word_count > 100
+         AND (uri LIKE 'at://%/site.standard.document/%'
+              OR uri LIKE 'at://%/pub.leaflet.document/%')
+     ) AS all_dids
+     WHERE did LIKE 'did:%'
      ORDER BY did
      LIMIT $1 OFFSET $2`,
     [BATCH_SIZE, offset]
@@ -34,6 +42,8 @@ export async function backfillRecommendsJob(job: Job<BackfillRecommendsData>) {
     logger.info({ offset }, 'Recommends backfill complete — no more users');
     return;
   }
+
+  logger.info({ offset, batch: users.length, firstDid: users[0]?.did }, 'Starting recommends backfill batch');
 
   let totalRecommends = 0;
   let errors = 0;
