@@ -131,21 +131,22 @@ app.get('/edit/:rkey', async (c) => {
 
   const profile = await fetchUserProfile(sessionDid);
 
-  // Fetch the existing record from PDS
+  // Fetch the existing record (public API, same as reader)
   let doc: any = null;
   try {
-    const oauthSession = await restoreSession(c, sessionDid);
-    if (!oauthSession) return c.redirect('/login');
-    const agent = new Agent(oauthSession);
-    const res = await agent.com.atproto.repo.getRecord({
-      repo: sessionDid,
-      collection: 'site.standard.document',
-      rkey,
-    });
-    doc = res.data.value;
+    const result = await getCachedRecordMulti(
+      sessionDid,
+      ['site.standard.document', 'pub.leaflet.document'],
+      rkey
+    );
+    if (!result) {
+      logger.warn({ rkey }, 'Post not found for editing');
+      return c.redirect('/posts');
+    }
+    doc = result.record as any;
   } catch (err) {
     logger.error({ err, rkey }, 'Failed to fetch post for editing');
-    return c.redirect('/');
+    return c.redirect('/posts');
   }
 
   // Convert Leaflet blocks to Tiptap JSON
