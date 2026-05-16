@@ -283,7 +283,7 @@ app.get('/', async (c) => {
 
   if (view === 'following' && followedPubUris.length > 0) {
     queryText = `SELECT * FROM (
-       SELECT DISTINCT ON (s.uri) s.uri, s.author_did, s.title, s.description, s.published_at, COALESCE(p.url, s.site) as site, s.path, s.word_count,
+       SELECT DISTINCT ON (split_part(s.uri, '/', 5)) s.uri, s.author_did, s.title, s.description, s.published_at, COALESCE(p.url, s.site) as site, s.path, s.word_count,
          split_part(s.uri, '/', 4) AS collection,
          CASE WHEN s.uri LIKE '%/site.standard.document/%' OR s.uri LIKE '%/pub.leaflet.document/%'
            THEN jsonb_path_query_first(s.raw_record, '$.content.pages[0].blocks[*].block ? (@."$type" == "pub.leaflet.blocks.image").image.ref."$link"') #>> '{}'
@@ -299,13 +299,13 @@ app.get('/', async (c) => {
        WHERE s.word_count > 100
          AND s.language = 'eng'
          AND s.raw_record->>'site' = ANY($1)
-       ORDER BY s.uri, s.published_at DESC NULLS LAST
+       ORDER BY split_part(s.uri, '/', 5), s.published_at DESC NULLS LAST
      ) sub ORDER BY published_at DESC NULLS LAST
      LIMIT 40`;
     queryParams = [followedPubUris];
   } else {
     queryText = `SELECT * FROM (
-       SELECT DISTINCT ON (s.uri) s.uri, s.author_did, s.title, s.description, s.published_at, COALESCE(p.url, s.site) as site, s.path, s.word_count,
+       SELECT DISTINCT ON (split_part(s.uri, '/', 5)) s.uri, s.author_did, s.title, s.description, s.published_at, COALESCE(p.url, s.site) as site, s.path, s.word_count,
          split_part(s.uri, '/', 4) AS collection,
          CASE WHEN s.uri LIKE '%/site.standard.document/%' OR s.uri LIKE '%/pub.leaflet.document/%'
            THEN jsonb_path_query_first(s.raw_record, '$.content.pages[0].blocks[*].block ? (@."$type" == "pub.leaflet.blocks.image").image.ref."$link"') #>> '{}'
@@ -321,7 +321,7 @@ app.get('/', async (c) => {
        WHERE s.word_count > 100
          AND s.language = 'eng'
          AND s.suppressed = false
-       ORDER BY s.uri, s.published_at DESC NULLS LAST
+       ORDER BY split_part(s.uri, '/', 5), s.published_at DESC NULLS LAST
      ) sub ORDER BY published_at DESC NULLS LAST
      LIMIT 40`;
   }
@@ -448,7 +448,7 @@ app.get('/tag/:tag', async (c) => {
 
   const { rows } = await db.query(
     `SELECT * FROM (
-       SELECT DISTINCT ON (s.uri) s.uri, s.author_did, s.title, s.description, s.published_at, COALESCE(p.url, s.site) as site, s.path, s.word_count,
+       SELECT DISTINCT ON (split_part(s.uri, '/', 5)) s.uri, s.author_did, s.title, s.description, s.published_at, COALESCE(p.url, s.site) as site, s.path, s.word_count,
          split_part(s.uri, '/', 4) AS collection,
          CASE WHEN s.uri LIKE '%/site.standard.document/%' OR s.uri LIKE '%/pub.leaflet.document/%'
            THEN jsonb_path_query_first(s.raw_record, '$.content.pages[0].blocks[*].block ? (@."$type" == "pub.leaflet.blocks.image").image.ref."$link"') #>> '{}'
@@ -465,7 +465,7 @@ app.get('/tag/:tag', async (c) => {
          AND s.language = 'eng'
          AND s.suppressed = false
          AND s.raw_record->'tags' ? $1
-       ORDER BY s.uri, s.published_at DESC NULLS LAST
+       ORDER BY split_part(s.uri, '/', 5), s.published_at DESC NULLS LAST
      ) sub ORDER BY published_at DESC NULLS LAST
      LIMIT 40`,
     [tag]
@@ -1111,7 +1111,7 @@ app.get('/profile/:identifier', async (c) => {
   // Fetch their articles
   const { rows } = await db.query(
     `SELECT * FROM (
-       SELECT DISTINCT ON (s.uri) s.uri, s.author_did, s.title, s.description, s.published_at, COALESCE(p.url, s.site) as site, s.path, s.word_count,
+       SELECT DISTINCT ON (split_part(s.uri, '/', 5)) s.uri, s.author_did, s.title, s.description, s.published_at, COALESCE(p.url, s.site) as site, s.path, s.word_count,
          split_part(s.uri, '/', 4) AS collection,
          CASE WHEN s.uri LIKE '%/site.standard.document/%' OR s.uri LIKE '%/pub.leaflet.document/%'
            THEN jsonb_path_query_first(s.raw_record, '$.content.pages[0].blocks[*].block ? (@."$type" == "pub.leaflet.blocks.image").image.ref."$link"') #>> '{}'
@@ -1124,7 +1124,7 @@ app.get('/profile/:identifier', async (c) => {
        FROM site_standard_articles s
        LEFT JOIN site_publications p ON p.uri = s.raw_record->>'site'
        WHERE s.author_did = $1
-       ORDER BY s.uri, s.published_at DESC
+       ORDER BY split_part(s.uri, '/', 5), s.published_at DESC
      ) sub ORDER BY published_at DESC`,
     [did]
   );
