@@ -1779,11 +1779,13 @@ app.post('/api/publish', async (c) => {
      }
      const wordCount = textContent.trim().split(/\s+/).length;
 
-     if (wordCount >= 100) {
+     if (wordCount >= 100 && !isRepublish) {
        // Announce the publication via Bot asynchronously (don't await)
        announcePublication(authorHandle, title, res.data.uri).catch(e => {
          logger.error({ err: e }, 'Failed asynchronous bot publication announcement');
        });
+     } else if (isRepublish) {
+       logger.info({ uri: res.data.uri }, 'Skipping bot announcement for article update');
      } else {
        logger.info({ uri: res.data.uri, wordCount }, 'Skipping bot announcement for short post');
      }
