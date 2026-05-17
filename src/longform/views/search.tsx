@@ -1,6 +1,7 @@
 /** @jsxImportSource hono/jsx */
 import { Layout } from './layout.js';
 import { TopHeader, TopHeaderStyles } from './partials.js';
+import { sanitizeInlineHtml } from '../../lib/sanitize.js';
 
 export interface SearchResult {
   uri: string;
@@ -396,7 +397,7 @@ export function SearchPage({
                       <a href={readUrl} class="result-link">
                         <h3 class="result-title">{r.title || 'Untitled'}</h3>
                         {r.highlight && (
-                          <div class="result-highlight" dangerouslySetInnerHTML={{__html: r.highlight}} />
+                          <div class="result-highlight" dangerouslySetInnerHTML={{__html: sanitizeInlineHtml(r.highlight)}} />
                         )}
                       </a>
                       <div class="result-meta">

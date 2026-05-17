@@ -1,6 +1,7 @@
 import { html, raw } from 'hono/html';
 import { LeafletDocument, LeafletBlock } from '../../weblog/lexicons.js';
 import { marked } from 'marked';
+import { sanitizeArticleHtml, sanitizeInlineHtml } from '../../lib/sanitize.js';
 
 function renderFacets(plaintext: string, facets: any[]) {
   const escapeHtml = (str: string) => str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -50,7 +51,8 @@ function renderFacets(plaintext: string, facets: any[]) {
     
     if (isBold) segmentText = `<b>${segmentText}</b>`;
     if (isItalic) segmentText = `<i>${segmentText}</i>`;
-    if (linkUrl) segmentText = `<a href="${linkUrl}" target="_blank" rel="noopener noreferrer" style="color: inherit; text-decoration: underline;">${segmentText}</a>`;
+    // Block javascript: URIs in links
+    if (linkUrl && /^(https?:|mailto:|\/)/.test(linkUrl)) segmentText = `<a href="${escapeHtml(linkUrl)}" target="_blank" rel="noopener noreferrer" style="color: inherit; text-decoration: underline;">${segmentText}</a>`;
     if (mentionDid) segmentText = `<a href="/profile/${mentionDid}" style="color: var(--accent); text-decoration: none; font-weight: 500;">${segmentText}</a>`;
     
     result += segmentText;
@@ -101,7 +103,17 @@ function renderLeafletBlocks(blocks: LeafletBlock[], did: string) {
         
       case 'pub.leaflet.blocks.iframe':
         const iframeUrl = (block as any).url;
-        if (!iframeUrl) return '';
+        if (!iframeUrl || !/^https?:\/\//.test(iframeUrl)) return '';
+        // Only allow iframes from known safe embed domains
+        const ALLOWED_IFRAME_DOMAINS = ['youtube.com', 'youtube-nocookie.com', 'youtu.be', 'vimeo.com', 'open.spotify.com', 'player.vimeo.com', 'bandcamp.com', 'codepen.io', 'airtable.com'];
+        try {
+          const iframeParsed = new URL(iframeUrl);
+          if (!ALLOWED_IFRAME_DOMAINS.some(d => iframeParsed.hostname.endsWith(d))) return html`
+            <div style="padding: 1rem; border: 1px solid var(--border); border-radius: 8px; margin: 1.5rem 0; font-family: var(--font-sans); font-size: 0.85rem; color: var(--text-muted);">
+              <a href="${iframeUrl}" target="_blank" rel="noopener noreferrer">View embedded content →</a>
+            </div>
+          `;
+        } catch { return ''; }
         return html`
           <div style="position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; border-radius: 8px; margin: 1.5rem 0; background: #1a1a1a;">
             <iframe 
@@ -287,13 +299,13 @@ export function ReaderPage(doc: LeafletDocument, authorDid: string, profile: any
       
       <div class="content markdown-body" style="font-size: 18px; line-height: 1.6;">
         ${isMarkdownString 
-          ? raw(marked.parse(rawMarkdown, { async: false }) as string)
+          ? raw(sanitizeArticleHtml(marked.parse(rawMarkdown, { async: false }) as string))
           : blocks.length > 0 
             ? renderLeafletBlocks(blocks, authorDid)
             : (doc as any).textContent
               ? (/^#{1,6}\s|^\*\s|^\d+\.\s|\*\*|__|_|`|\[.*\]\(.*\)/m.test((doc as any).textContent))
-                ? raw(marked.parse((doc as any).textContent, { async: false }) as string)
-                : (doc as any).textContent.split('\\n\\n').map((p: string) => html`<p style="margin-top: 1.25rem; margin-bottom: 1.25rem; min-height: 1.5rem; word-break: break-word;">${raw(p.replace(/\\n/g, '<br />'))}</p>`)
+                ? raw(sanitizeArticleHtml(marked.parse((doc as any).textContent, { async: false }) as string))
+                : raw(sanitizeArticleHtml((doc as any).textContent))
               : html`
                   <div style="text-align: center; padding: 4rem 2rem; background: var(--bg-secondary); border-radius: 12px; margin-top: 2rem;">
                     <svg viewBox="0 0 24 24" width="48" height="48" stroke="var(--text-muted)" stroke-width="1.5" fill="none" style="margin-bottom: 1rem;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="9" y1="15" x2="15" y2="15"></line></svg>
