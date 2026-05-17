@@ -1889,17 +1889,26 @@ app.post('/api/repost', async (c) => {
       uri = `at://${authorDid}/site.standard.document/${rkey}`;
     }
     
-    // Build the longform.social URL for the article
-    const articleUrl = `https://longform.social/post/${authorDid}/${rkey}`;
+    // Build the article URL — prefer the author's own site if they have one
+    let articleUrl = `https://longform.social/post/${authorDid}/${rkey}`;
     
-    // Fetch article title for the post text
+    // Fetch article title and check for a publication domain
     let title = 'Check out this article';
     try {
       const { rows } = await db.query(
-        'SELECT title FROM site_standard_articles WHERE uri = $1 LIMIT 1',
+        `SELECT s.title, p.url AS pub_url, s.path
+         FROM site_standard_articles s
+         LEFT JOIN site_publications p ON p.uri = s.raw_record->>'site'
+         WHERE s.uri = $1 LIMIT 1`,
         [uri]
       );
       if (rows[0]?.title) title = rows[0].title;
+      if (rows[0]?.pub_url && rows[0]?.path) {
+        // Author has a standard.site domain — link to their site
+        const pubBase = rows[0].pub_url.replace(/\/+$/, '');
+        const path = rows[0].path.startsWith('/') ? rows[0].path : `/${rows[0].path}`;
+        articleUrl = `${pubBase}${path}`;
+      }
     } catch {}
     
     const postText = `${title}\n\n${articleUrl}`;
