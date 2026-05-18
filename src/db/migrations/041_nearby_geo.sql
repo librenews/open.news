@@ -1,5 +1,4 @@
--- Enable PostGIS if not already enabled
-CREATE EXTENSION IF NOT EXISTS postgis;
+-- Nearby.at geolocation tables (no PostGIS dependency for Phase 1)
 
 -- Canonical places table with spatial hierarchy
 CREATE TABLE IF NOT EXISTS nearby_places (
@@ -9,11 +8,9 @@ CREATE TABLE IF NOT EXISTS nearby_places (
   parent_place_id TEXT REFERENCES nearby_places(place_id),
   lat DOUBLE PRECISION NOT NULL,
   lng DOUBLE PRECISION NOT NULL,
-  geom GEOGRAPHY(Point, 4326),
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS idx_nearby_places_geom ON nearby_places USING GIST (geom);
 CREATE INDEX IF NOT EXISTS idx_nearby_places_type ON nearby_places (place_type);
 CREATE INDEX IF NOT EXISTS idx_nearby_places_parent ON nearby_places (parent_place_id);
 
