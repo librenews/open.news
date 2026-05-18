@@ -11,6 +11,7 @@ import { indexSiteStandardJob } from '../jobs/indexSiteStandard.js';
 import { backfillSiteStandardJob } from '../jobs/backfillSiteStandard.js';
 import { backfillRecommendsJob } from '../jobs/backfillRecommends.js';
 import { refreshTopicClusters } from '../jobs/refreshTopicClusters.js';
+import { seedGeoFromDomainsJob } from '../jobs/seedGeoFromDomains.js';
 
 async function start() {
   await ensureArticleIndex().catch(err => logger.error({ err }, 'Failed to ensure OpenSearch article index'));
@@ -31,7 +32,7 @@ async function start() {
 
   // pg-boss v10 requires explicit queue creation before send/work.
   // Must be sequential — parallel ALTER TABLE calls deadlock on the FK constraint.
-  const queues = ['fetchArticle', 'syncFollows', 'botReply', 'botPost', 'followSignup', 'deliverWebhook', 'indexSiteStandard', 'backfillSiteStandard', 'backfillRecommends', 'refreshTopicClusters'];
+  const queues = ['fetchArticle', 'syncFollows', 'botReply', 'botPost', 'followSignup', 'deliverWebhook', 'indexSiteStandard', 'backfillSiteStandard', 'backfillRecommends', 'refreshTopicClusters', 'seedGeoFromDomains'];
   for (const q of queues) await boss.createQueue(q);
   logger.info({ queues }, 'Queues created');
 
@@ -105,6 +106,12 @@ async function start() {
     await refreshTopicClusters();
   });
   logger.info('Topic cluster refresh scheduled (hourly)');
+
+  await boss.work('seedGeoFromDomains', { batchSize: 1 }, async (jobs) => {
+    for (const job of jobs) {
+      await seedGeoFromDomainsJob(job as Parameters<typeof seedGeoFromDomainsJob>[0]);
+    }
+  });
 
 
 

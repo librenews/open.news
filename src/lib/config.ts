@@ -13,6 +13,8 @@ const schema = z.object({
   CENTIPEDIA_BSKY_PASSWORD: z.string().optional(),
   CENTIPEDIA_BOT_DID: z.string().optional(),
   CENTIPEDIA_PUBLICATION_URI: z.string().optional(),
+  NEARBY_BOT_DID: z.string().optional(),
+  NEARBY_BOT_PASSWORD: z.string().optional(),
   BSKY_OAUTH_CLIENT_ID: z.string().url(),
   ATPROTO_PDS_URL: z.string().url().default('https://bsky.social'),
 
@@ -42,6 +44,7 @@ const schema = z.object({
   BASE_URL: z.string().url(),
   LONGFORM_DOMAIN: z.string().default('dev.libre.news'),
   CENTIPEDIA_DOMAIN: z.string().default('dev.centipedia.org'),
+  NEARBY_DOMAIN: z.string().default('nearby.at'),
 
   // Operational
   LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error']).default('info'),
