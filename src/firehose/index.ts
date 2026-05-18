@@ -10,6 +10,8 @@ import { enqueueJob } from '../web/jobEnqueue.js';
 import { xaddPost } from '../lib/redis.js';
 import { logModeration } from '../db/queries/moderation.js';
 import { warmRecord, invalidateRecord } from '../lib/pdsCache.js';
+import { refreshGeotaggedDids, geotagFromAccount, getGeoForDid } from '../nearby/geoCache.js';
+import { getNearbyBotDid } from '../nearby/bot.js';
 
 const CURSOR_PERSIST_INTERVAL_MS = 30_000;
 const DID_REFRESH_INTERVAL_MS = 60_000;
@@ -271,6 +273,9 @@ function handleEvent(event: JetstreamEvent): void {
       logger.error({ err, did }, 'Failed to check known site standard DIDs');
     });
 
+    // 3. Auto-geotag if the author is a geotagged account
+    geotagFromAccount(postUri, 'document', did, getNearbyBotDid()).catch(() => {});
+
     return;
   }
 
@@ -284,6 +289,11 @@ function handleEvent(event: JetstreamEvent): void {
   const facets = post.facets ? JSON.stringify(post.facets) : '';
   const embedStr = post.embed ? JSON.stringify(post.embed) : '';
   xaddPost(did, String(post.text ?? ''), postUri, String(event.time_us ?? Date.now() * 1000), langs, facets, embedStr);
+
+  // Auto-geotag posts from geotagged accounts (fire-and-forget)
+  if (getGeoForDid(did)) {
+    geotagFromAccount(postUri, 'post', did, getNearbyBotDid()).catch(() => {});
+  }
 
   // Bot mention detection
   const isMention = Array.isArray(post.facets) &&
@@ -392,6 +402,9 @@ function handleEvent(event: JetstreamEvent): void {
 async function start() {
   currentCursor = await loadCursor();
   watchedDids = new Set(await getAllSourceDids());
+
+  // Load geotagged DIDs into memory for nearby auto-tagging
+  await refreshGeotaggedDids().catch(err => logger.warn({ err }, 'Failed initial geo cache load'));
 
   connect();
 
