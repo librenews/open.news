@@ -32,12 +32,10 @@ export async function seedGeoFromDomainsJob(job: Job<SeedGeoFromDomainsData>) {
       FROM site_standard_articles s
       JOIN nearby_domain_locations d
         ON REPLACE(REPLACE(s.site, 'https://', ''), 'http://', '') = d.domain
-        OR REPLACE(REPLACE(s.site, 'https://www.', ''), 'http://www.', '') = d.domain
       WHERE s.site IS NOT NULL
         AND s.site LIKE 'http%'
       ON CONFLICT (subject, place_id, tagger_did) DO NOTHING
-      LIMIT $2
-    `, [botDid, batchSize]);
+    `, [botDid]);
 
     logger.info({ inserted: docResult.rowCount }, 'Seeded document geotags from domains');
 
@@ -54,7 +52,6 @@ export async function seedGeoFromDomainsJob(job: Job<SeedGeoFromDomainsData>) {
       FROM site_standard_articles s
       JOIN nearby_domain_locations d
         ON REPLACE(REPLACE(s.site, 'https://', ''), 'http://', '') = d.domain
-        OR REPLACE(REPLACE(s.site, 'https://www.', ''), 'http://www.', '') = d.domain
       WHERE s.site IS NOT NULL
         AND s.site LIKE 'http%'
       ON CONFLICT (subject, place_id, tagger_did) DO NOTHING
@@ -77,8 +74,8 @@ export async function seedGeoFromDomainsJob(job: Job<SeedGeoFromDomainsData>) {
       totalPlaces: totals.places
     }, 'Geo seed complete');
 
-  } catch (err) {
-    logger.error({ err }, 'Failed to seed geotags from domains');
+  } catch (err: any) {
+    logger.error({ err, message: err?.message, detail: err?.detail }, 'Failed to seed geotags from domains');
     throw err;
   }
 }
