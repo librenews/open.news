@@ -808,12 +808,14 @@ app.get('/search', async (c) => {
 app.get('/login', async (c) => {
   const sessionDid = await getSession(c);
   if (sessionDid) return c.redirect('/');
+  const returnTo = c.req.query('returnTo') || '';
 
   return c.html((<Layout title={`Sign in — Longform`}>
     <div style="text-align: center; padding-top: 15vh;">
       <img src="/logo.png" alt="Longform" style="height: 64px; margin-bottom: 0.5rem;" onerror="this.outerHTML='<h1 style=\'font-family: var(--font-body); font-weight: 700; font-size: 54px; color: var(--text-main); letter-spacing: -0.03em; margin-bottom: 0.5rem;\'>Longform</h1>'" />
       <p style="color: var(--text-muted); font-family: var(--font-sans); margin-bottom: 3rem; font-size: 18px;">Sign in with your AT Protocol identity to write and publish.</p>
       <form action="/oauth/login" method="get">
+        {returnTo && <input type="hidden" name="returnTo" value={returnTo} />}
         <input
           type="text"
           name="handle"

@@ -102,6 +102,15 @@ authRouter.get('/oauth/login', async (c) => {
     return c.redirect('/');
   }
 
+  // Store returnTo so we can redirect back after auth
+  const returnTo = c.req.query('returnTo')?.trim() || '/';
+  setCookie(c, 'lf_return_to', returnTo, {
+    path: '/',
+    secure: process.env.NODE_ENV !== 'development',
+    httpOnly: true,
+    maxAge: 60 * 10  // 10 minutes
+  });
+
   try {
     const client = await getLongformAuthClient();
     const url = await client.authorize(handle, { scope: 'atproto transition:email repo:site.standard.document repo:site.standard.graph.subscription repo:site.standard.graph.recommend blob:image/jpeg repo:app.bsky.feed.post repo:app.bsky.feed.like' });
@@ -171,7 +180,12 @@ authRouter.get('/oauth/callback', async (c) => {
 
     logger.info({ event: 'longform_login', did, email: email ? '***' : null, emailConfirmed }, 'User successfully authenticated via AT Protocol');
 
-    return c.redirect('/');
+    // Redirect to returnTo URL if set, otherwise home
+    const returnTo = getCookie(c, 'lf_return_to') || '/';
+    setCookie(c, 'lf_return_to', '', { maxAge: 0, path: '/' });
+    // Only allow relative paths to prevent open redirect
+    const safePath = returnTo.startsWith('/') ? returnTo : '/';
+    return c.redirect(safePath);
   } catch (err) {
     logger.error({ err }, 'Longform OAuth callback parsing failed');
     return c.text('Login failure across authentication bridge', 500);

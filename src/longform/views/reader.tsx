@@ -427,7 +427,7 @@ export function ReaderPage(doc: LeafletDocument, authorDid: string, profile: any
           });
           const data = await res.json();
           if (res.status === 401) {
-            alert('Please sign in to interact with articles.');
+            window.location.href = '/login?returnTo=' + encodeURIComponent(window.location.pathname);
           } else if (data.success) {
             // Optimistic update
             const btn = document.getElementById(\`btn-\${action}\`);
@@ -455,7 +455,7 @@ export function ReaderPage(doc: LeafletDocument, authorDid: string, profile: any
           });
           const data = await res.json();
           if (res.status === 401) {
-            alert('Please sign in to interact with comments.');
+            window.location.href = '/login?returnTo=' + encodeURIComponent(window.location.pathname);
           } else if (data.success) {
             // Optimistic update
             btn.dataset.active = "true";
@@ -482,7 +482,7 @@ export function ReaderPage(doc: LeafletDocument, authorDid: string, profile: any
           });
           const data = await res.json();
           if (res.status === 401) {
-            alert('Please sign in to subscribe.');
+            window.location.href = '/login?returnTo=' + encodeURIComponent(window.location.pathname);
           } else if (data.ok || res.status === 200) {
             const btn = document.getElementById('btn-subscribe');
             btn.style.color = '#118156';

@@ -481,7 +481,7 @@ export function ProfilePage({
                 });
                 const data = await res.json();
                 if (res.status === 401) {
-                  alert('Please sign in to interact.');
+                  window.location.href = '/login?returnTo=' + encodeURIComponent(window.location.pathname);
                 } else if (data.success || res.status === 200) {
                   btn.dataset.active = "true";
                   btn.style.color = action === 'like' ? '#f02050' : '#20d070';
