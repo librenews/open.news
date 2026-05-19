@@ -200,6 +200,8 @@ export function FeedPage({ items, page, newPostsTs }: { items: FeedItem[]; page:
         newCount = 0;
         banner.classList.remove('visible');
         countEl.textContent = '0';
+        // Scroll to top so user sees newly loaded posts
+        window.scrollTo({ top: 0, behavior: 'smooth' });
       }
 
       function connectWs() {
