@@ -377,12 +377,12 @@ export function BlogsLayout({ title, children, session }: { title: string; child
             <a href="/" class="bl-logo">blogs<span>.social</span></a>
             <div class="bl-header-actions">
               ${session
-                ? html`
+      ? html`
                   <a href="/compose" class="bl-btn bl-btn-primary">✎ Write</a>
                   <a href="/author/${session.did}" class="bl-btn bl-btn-outline">${session.handle}</a>
                 `
-                : html`<a href="/auth/login" class="bl-btn bl-btn-primary">Sign in</a>`
-              }
+      : html`<a href="/auth/login" class="bl-btn bl-btn-primary">Sign in</a>`
+    }
             </div>
           </div>
         </header>
