@@ -102,6 +102,42 @@ export function BlogsLayout({ title, children, session }: { title: string; child
             border: 1px solid var(--border);
           }
           .bl-btn-outline:hover { border-color: var(--border-hover); color: var(--text); }
+          .bl-btn-follow {
+            font-size: 0.72rem;
+            font-weight: 600;
+            padding: 0.2rem 0.65rem;
+            border-radius: 99px;
+            border: 1px solid var(--accent);
+            background: transparent;
+            color: var(--accent);
+            cursor: pointer;
+            font-family: var(--font);
+            transition: all 0.15s;
+            white-space: nowrap;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+          }
+          .bl-btn-follow:hover { background: var(--accent); color: white; }
+          .bl-btn-following {
+            font-size: 0.72rem;
+            font-weight: 600;
+            padding: 0.2rem 0.65rem;
+            border-radius: 99px;
+            border: 1px solid var(--border);
+            background: transparent;
+            color: var(--text-muted);
+            cursor: pointer;
+            font-family: var(--font);
+            transition: all 0.15s;
+            white-space: nowrap;
+            display: inline-flex;
+            align-items: center;
+          }
+          .bl-btn-following:hover { border-color: var(--red); color: var(--red); }
+          .bl-btn-following:hover::after { content: 'Unfollow'; }
+          .bl-btn-following span { }
+          .bl-btn-following:hover span { display: none; }
 
           /* ── Feed Column ──────────────────────────────────── */
           .bl-feed {

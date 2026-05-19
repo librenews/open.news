@@ -37,12 +37,16 @@ function timeAgo(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-export function AuthorPage({ profile, posts, page, session }: {
+export function AuthorPage({ profile, posts, page, session, followedDids }: {
   profile: AuthorProfile;
   posts: AuthorPost[];
   page: number;
   session: { did: string; handle: string } | null;
+  followedDids: Set<string>;
 }) {
+  const showFollow = session && session.did !== profile.did;
+  const isFollowing = followedDids.has(profile.did);
+
   return html`
     <div class="bl-feed" style="padding-top: 1.5rem;">
 
@@ -63,9 +67,20 @@ export function AuthorPage({ profile, posts, page, session }: {
             ` : ''}
           </div>
         </div>
-        <a href="https://bsky.app/profile/${profile.did}" target="_blank" class="bl-btn bl-btn-outline" style="flex-shrink: 0;">
-          View on Bluesky
-        </a>
+        <div style="display:flex; gap: 0.5rem; flex-shrink: 0; align-items: center;">
+          ${showFollow ? (
+            isFollowing
+              ? html`<form method="POST" action="/unfollow/${profile.did}">
+                  <button type="submit" class="bl-btn-following"><span>Following</span></button>
+                </form>`
+              : html`<form method="POST" action="/follow/${profile.did}">
+                  <button type="submit" class="bl-btn-follow">Follow</button>
+                </form>`
+          ) : ''}
+          <a href="https://bsky.app/profile/${profile.did}" target="_blank" class="bl-btn bl-btn-outline">
+            View on Bluesky
+          </a>
+        </div>
       </div>
 
       <!-- Posts -->

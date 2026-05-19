@@ -31,13 +31,21 @@ function timeAgo(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-function renderPostCard(item: FeedItem): ReturnType<typeof html> {
+function renderPostCard(
+  item: FeedItem,
+  session: { did: string; handle: string } | null,
+  followedDids: Set<string>
+): ReturnType<typeof html> {
   const showTitle = shouldShowTitle(item.title, item.text_content);
   const preview = renderContent(item.text_content || '', 400);
   const isLong = (item.word_count || 0) > 300 || (item.text_content?.length || 0) > 500;
   const canonicalUrl = item.site && item.path
     ? `${item.site.replace(/\/$/, '')}${item.path.startsWith('/') ? '' : '/'}${item.path}`
     : item.site || null;
+
+  // Only show follow button for signed-in users who aren't the author
+  const showFollow = session && session.did !== item.author_did;
+  const isFollowing = followedDids.has(item.author_did);
 
   return html`
     <article class="bl-post">
@@ -53,6 +61,15 @@ function renderPostCard(item: FeedItem): ReturnType<typeof html> {
           </div>
           <div class="bl-post-time">${timeAgo(item.published_at)}</div>
         </div>
+        ${showFollow ? (
+          isFollowing
+            ? html`<form method="POST" action="/unfollow/${item.author_did}" style="margin-left:auto;flex-shrink:0">
+                <button type="submit" class="bl-btn-following"><span>Following</span></button>
+              </form>`
+            : html`<form method="POST" action="/follow/${item.author_did}" style="margin-left:auto;flex-shrink:0">
+                <button type="submit" class="bl-btn-follow">Follow</button>
+              </form>`
+        ) : ''}
       </div>
 
       ${showTitle ? html`
@@ -81,7 +98,13 @@ function renderPostCard(item: FeedItem): ReturnType<typeof html> {
   `;
 }
 
-export function FeedPage({ items, page, newPostsTs }: { items: FeedItem[]; page: number; newPostsTs: string }) {
+export function FeedPage({ items, page, newPostsTs, session, followedDids }: {
+  items: FeedItem[];
+  page: number;
+  newPostsTs: string;
+  session: { did: string; handle: string } | null;
+  followedDids: Set<string>;
+}) {
   return html`
     <div class="bl-feed">
       <div class="bl-new-posts-header">
@@ -98,7 +121,7 @@ export function FeedPage({ items, page, newPostsTs }: { items: FeedItem[]; page:
           </div>
         ` : ''}
 
-        ${items.map(item => renderPostCard(item))}
+        ${items.map(item => renderPostCard(item, session, followedDids))}
       </div>
 
       ${items.length > 0 ? html`

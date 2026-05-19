@@ -9,12 +9,30 @@ import { BlogsLayout } from './views/layout.js';
 import { FeedPage, type FeedItem } from './views/feed.js';
 import { AuthorPage, type AuthorProfile, type AuthorPost } from './views/author.js';
 import { blogsAuthRouter, getBlogsSession } from './routes/auth.js';
+import { blogsFollowRouter } from './routes/follow.js';
 import { attachLiveFeed } from './lib/liveFeed.js';
 
 const app = new Hono();
 
 // ── Auth routes ─────────────────────────────────────────────────────────────
 app.route('/', blogsAuthRouter);
+
+// ── Follow routes ────────────────────────────────────────────────────────────
+app.route('/', blogsFollowRouter);
+
+// ── Helper: get set of DIDs the current user follows ─────────────────────────
+async function getFollowedDids(followerDid: string | null): Promise<Set<string>> {
+  if (!followerDid) return new Set();
+  try {
+    const { rows } = await db.query(
+      'SELECT following_did FROM blogs_follows WHERE follower_did = $1',
+      [followerDid]
+    );
+    return new Set(rows.map((r: any) => r.following_did));
+  } catch {
+    return new Set();
+  }
+}
 
 // ── Health ──────────────────────────────────────────────────────────────────
 app.get('/health', async (c) => {
@@ -89,10 +107,11 @@ app.get('/', async (c) => {
   });
 
   const newPostsTs = rows[0]?.created_at?.toISOString() || new Date().toISOString();
+  const followedDids = await getFollowedDids(session?.did ?? null);
 
   return c.html((
     <BlogsLayout title="blogs.social — Discover the open web" session={session}>
-      <FeedPage items={items} page={page} newPostsTs={newPostsTs} />
+      <FeedPage items={items} page={page} newPostsTs={newPostsTs} session={session} followedDids={followedDids} />
     </BlogsLayout>
   ) as unknown as string);
 });
@@ -194,9 +213,11 @@ app.get('/author/:did', async (c) => {
     };
   });
 
+  const followedDids = await getFollowedDids(session?.did ?? null);
+
   return c.html((
     <BlogsLayout title={`${profile.displayName || profile.handle} — blogs.social`} session={session}>
-      <AuthorPage profile={profile} posts={posts} page={page} session={session} />
+      <AuthorPage profile={profile} posts={posts} page={page} session={session} followedDids={followedDids} />
     </BlogsLayout>
   ) as unknown as string);
 });
@@ -250,6 +271,10 @@ app.get('/read/:did/:rkey', async (c) => {
     if (post.tags_json && Array.isArray(post.tags_json)) tags = post.tags_json;
   } catch {}
 
+  const followedDids = await getFollowedDids(session?.did ?? null);
+  const showFollow = session && session.did !== did;
+  const isFollowing = followedDids.has(did);
+
   const { html: h, raw } = await import('hono/html');
   return c.html((
     <BlogsLayout title={`${post.title || 'Post'} — blogs.social`} session={session}>
@@ -267,6 +292,15 @@ app.get('/read/:did/:rkey', async (c) => {
               </div>
               <div class="bl-post-time">${new Date(post.published_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })} · ${post.word_count || 0} words</div>
             </div>
+            ${showFollow ? (
+              isFollowing
+                ? h`<form method="POST" action="/unfollow/${did}" style="margin-left:auto;flex-shrink:0">
+                    <button type="submit" class="bl-btn-following"><span>Following</span></button>
+                  </form>`
+                : h`<form method="POST" action="/follow/${did}" style="margin-left:auto;flex-shrink:0">
+                    <button type="submit" class="bl-btn-follow">Follow</button>
+                  </form>`
+            ) : ''}
           </div>
 
           ${showTitle ? h`<h1 style="font-size: 1.5rem; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 1rem; line-height: 1.3;">${post.title}</h1>` : ''}
