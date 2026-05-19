@@ -111,7 +111,16 @@ export function BlogsLayout({ title, children, session }: { title: string; child
           }
 
           /* ── New Posts Banner ──────────────────────────────── */
+          .bl-new-posts-header {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 100;
+            pointer-events: none;
+          }
           .bl-new-posts {
+            display: block;
             visibility: hidden;
             width: 100%;
             padding: 0.6rem;
@@ -126,25 +135,13 @@ export function BlogsLayout({ title, children, session }: { title: string; child
             cursor: pointer;
             text-align: center;
             transition: background 0.2s;
+            pointer-events: none;
           }
-          .bl-new-posts.visible { visibility: visible; }
-          .bl-new-posts.visible { display: block; }
-          .bl-new-posts-header {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 2.5rem;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background: var(--bg);
-            z-index: 20;
+          .bl-new-posts.visible {
+            visibility: visible;
+            pointer-events: all;
           }
-          /* Adjust feed padding to account for fixed banner */
-          .bl-feed {
-            padding-top: 2.5rem; /* space for banner */
-          }
+          .bl-new-posts:hover { background: rgba(99,102,241,0.18); }
 
           /* ── Post Card ────────────────────────────────────── */
           .bl-post {
