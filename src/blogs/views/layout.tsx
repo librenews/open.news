@@ -112,7 +112,7 @@ export function BlogsLayout({ title, children, session }: { title: string; child
 
           /* ── New Posts Banner ──────────────────────────────── */
           .bl-new-posts {
-            display: none;
+            visibility: hidden;
             width: 100%;
             padding: 0.6rem;
             margin: 0;
@@ -127,6 +127,8 @@ export function BlogsLayout({ title, children, session }: { title: string; child
             text-align: center;
             transition: background 0.2s;
           }
+          .bl-new-posts.visible { visibility: visible; }
+          .bl-new-posts.visible { display: block; }
           .bl-new-posts-header {
             position: fixed;
             top: 0;
