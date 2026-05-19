@@ -84,9 +84,11 @@ function renderPostCard(item: FeedItem): ReturnType<typeof html> {
 export function FeedPage({ items, page, newPostsTs }: { items: FeedItem[]; page: number; newPostsTs: string }) {
   return html`
     <div class="bl-feed">
-      <button class="bl-new-posts" id="newPostsBanner" onclick="loadNewPosts()">
-        <span id="newPostsCount">0</span> new posts
-      </button>
+      <div class="bl-new-posts-header">
+        <button class="bl-new-posts" id="newPostsBanner" onclick="loadNewPosts()">
+          <span id="newPostsCount">0</span> new posts
+        </button>
+      </div>
 
       <div id="feedContainer">
         ${items.length === 0 ? html`
