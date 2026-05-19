@@ -21,3 +21,7 @@ longform.social {
 weblog.social {
     reverse_proxy localhost:4400
 }
+
+nearby.at {
+    reverse_proxy localhost:4700
+}
