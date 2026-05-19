@@ -120,7 +120,8 @@ async function start() {
     }
   });
 
-
+  await boss.schedule('backfillNearbyPosts', '*/5 * * * *', {});
+  logger.info('Nearby post backfill scheduled (every 5 min)');
 
   // Graceful shutdown
   process.on('SIGTERM', async () => {
