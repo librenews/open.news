@@ -1,10 +1,12 @@
 import { Hono } from 'hono';
+import { html } from 'hono/html';
 import { NodeOAuthClient } from '@atproto/oauth-client-node';
 import { config } from '../../lib/config.js';
 import { logger } from '../../lib/logger.js';
 import { pool } from '../../db/client.js';
 import { setCookie, getCookie } from 'hono/cookie';
 import { Agent } from '@atproto/api';
+import { BlogsLayout } from '../views/layout.js';
 
 const BLOGS_DOMAIN = process.env.BLOGS_DOMAIN || 'blogs.social';
 
@@ -103,8 +105,6 @@ blogsAuthRouter.get('/auth/login', async (c) => {
   const session = await getBlogsSession(c);
   if (session) return c.redirect('/');
 
-  const { html } = await import('hono/html');
-  const { BlogsLayout } = await import('../views/layout.js');
 
   return c.html((
     <BlogsLayout title="Sign in — blogs.social" session={null}>
