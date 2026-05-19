@@ -95,9 +95,10 @@ app.get('/city/:placeId', async (c) => {
   const postQuery = `
     SELECT
       g.subject AS uri, 'post' AS subject_type, g.confidence,
-      NULL AS title, NULL AS description,
+      m.embed->'external'->>'title' AS title,
+      m.embed->'external'->>'description' AS description,
       COALESCE(m.post_text, pc.post_text) AS post_text,
-      NULL AS site,
+      m.embed->'external'->>'uri' AS site,
       COALESCE(m.post_did, pc.post_did, split_part(replace(g.subject, 'at://', ''), '/', 1)) AS author_did,
       COALESCE(m.matched_at, g.created_at) AS sort_date
     FROM nearby_geotags g
@@ -129,19 +130,27 @@ app.get('/city/:placeId', async (c) => {
     }
   }));
 
-  const feedItems = feedRows.map((r: any) => ({
-    uri: r.uri,
-    subject_type: r.subject_type as 'document' | 'post',
-    title: r.title,
-    description: r.description,
-    text: r.post_text,
-    site: r.site,
-    author_did: r.author_did || '',
-    author_handle: profileMap[r.author_did]?.handle || r.author_did || 'unknown',
-    author_avatar: profileMap[r.author_did]?.avatar || null,
-    published_at: r.sort_date?.toISOString() || new Date().toISOString(),
-    confidence: Number(r.confidence),
-  }));
+  const feedItems = feedRows.map((r: any) => {
+    // For posts with embeds but no text, extract embed info
+    const hasText = r.post_text && r.post_text.trim().length > 0;
+    const embedTitle = r.title;
+    const embedDesc = r.description;
+    const embedSite = r.site;
+
+    return {
+      uri: r.uri,
+      subject_type: r.subject_type as 'document' | 'post',
+      title: r.subject_type === 'document' ? r.title : (hasText ? null : embedTitle),
+      description: r.subject_type === 'document' ? r.description : (hasText ? null : embedDesc),
+      text: r.post_text,
+      site: r.subject_type === 'document' ? r.site : (hasText ? null : embedSite),
+      author_did: r.author_did || '',
+      author_handle: profileMap[r.author_did]?.handle || r.author_did || 'unknown',
+      author_avatar: profileMap[r.author_did]?.avatar || null,
+      published_at: r.sort_date?.toISOString() || new Date().toISOString(),
+      confidence: Number(r.confidence),
+    };
+  });
 
   // Sidebar: all cities with content
   const { rows: sidebarCities } = await db.query(`

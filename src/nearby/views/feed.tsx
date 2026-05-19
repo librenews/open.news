@@ -58,6 +58,10 @@ function bskyPostUrl(uri: string, did: string): string {
   return `https://bsky.app/profile/${did}/post/${rkey}`;
 }
 
+function safeHostname(url: string): string {
+  try { return new URL(url).hostname; } catch { return url; }
+}
+
 export function CityFeedPage({
   city, items, cities, accounts, page, filter
 }: {
@@ -129,7 +133,15 @@ export function CityFeedPage({
                 </a>
               ` : html`
                 <a href="${bskyPostUrl(item.uri, item.author_did)}" target="_blank" style="color: var(--text); text-decoration: none;">
-                  <div>${item.text ? item.text.substring(0, 300) : ''}</div>
+                  ${item.text && item.text.trim() ? html`<div>${item.text.substring(0, 300)}</div>` : ''}
+                  ${item.title || item.description ? html`
+                    <div style="margin-top: ${item.text && item.text.trim() ? '0.5rem' : '0'}; padding: 0.6rem 0.75rem; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-hover);">
+                      ${item.title ? html`<div style="font-weight: 600; font-size: 0.85rem; margin-bottom: 0.15rem;">${item.title}</div>` : ''}
+                      ${item.description ? html`<div style="font-size: 0.78rem; color: var(--text-muted); line-height: 1.4;">${item.description.substring(0, 160)}</div>` : ''}
+                      ${item.site ? html`<div style="font-size: 0.7rem; color: var(--text-dim); margin-top: 0.25rem;">${safeHostname(item.site)}</div>` : ''}
+                    </div>
+                  ` : ''}
+                  ${!item.text?.trim() && !item.title && !item.description ? html`<div style="color: var(--text-dim); font-size: 0.82rem; font-style: italic;">View on Bluesky →</div>` : ''}
                 </a>
               `}
             </div>
