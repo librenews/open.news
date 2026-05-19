@@ -4,7 +4,7 @@ import { config } from '../lib/config.js';
 import { logger } from '../lib/logger.js';
 import { db } from '../db/client.js';
 import { runMigrations } from '../db/migrate.js';
-import { getCachedProfile } from '../lib/pdsCache.js';
+import { getCachedProfile, getCachedRecordMulti } from '../lib/pdsCache.js';
 import { BlogsLayout } from './views/layout.js';
 import { FeedPage, type FeedItem } from './views/feed.js';
 import { AuthorPage, type AuthorProfile, type AuthorPost } from './views/author.js';
@@ -278,12 +278,86 @@ app.get('/read/:did/:rkey', async (c) => {
           <div class="bl-post-footer" style="margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border);">
             ${canonicalUrl ? h`<a href="${canonicalUrl}" class="bl-source" target="_blank">📎 ${safeHostname(canonicalUrl)}</a>` : ''}
             ${tags.slice(0, 5).map((tag: string) => h`<span class="bl-tag">${tag.length > 24 ? tag.substring(0, 24) + '…' : tag}</span>`)}
-            <a href="/" class="bl-read-more" style="margin-left: auto;">← Back to feed</a>
+            <a href="/read/${did}/${rkey}/source" class="bl-source" style="margin-left: auto;">⟨/⟩ View Source</a>
+            <a href="/" class="bl-read-more">← Back to feed</a>
           </div>
         </div>
       `}
     </BlogsLayout>
   ) as unknown as string);
+});
+
+// ── View Source ──────────────────────────────────────────────────────────────
+app.get('/read/:did/:rkey/source', async (c) => {
+  const did = c.req.param('did');
+  const rkey = c.req.param('rkey');
+
+  try {
+    const result = await getCachedRecordMulti(
+      did,
+      ['site.standard.document'],
+      rkey
+    );
+    if (!result) {
+      return c.html(`<html><body style="background:#0a0a0c;color:white;font-family:system-ui;display:flex;justify-content:center;align-items:center;min-height:100vh">
+        <div style="text-align:center"><h1 style="font-size:4rem;opacity:0.15">404</h1><p style="opacity:0.4">Record not found</p><a href="/read/${did}/${rkey}" style="color:#6366f1">← Back to post</a></div>
+      </body></html>`, 404);
+    }
+    return c.html(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1" />
+          <title>View Source — blogs.social</title>
+          <link rel="preconnect" href="https://fonts.googleapis.com">
+          <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+          <style>
+            body { background: #0a0a0c; color: #e5e5e5; font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; padding: 0; margin: 0; line-height: 1.6; }
+            .src-header { max-width: 800px; margin: 0 auto; padding: 1.25rem 1.5rem 0.75rem; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.06); }
+            .src-header a { color: #6366f1; text-decoration: none; font-size: 0.82rem; }
+            .src-header a:hover { color: #818cf8; }
+            .src-title { font-size: 0.85rem; font-weight: 500; color: rgba(255,255,255,0.5); }
+            .src-uri { font-size: 0.72rem; color: rgba(255,255,255,0.3); margin-top: 0.15rem; word-break: break-all; }
+            pre { max-width: 800px; margin: 0 auto; padding: 1.5rem; white-space: pre-wrap; word-break: break-word; font-size: 13px; }
+            .key { color: #81a1c1; }
+            .string { color: #a3be8c; }
+            .number { color: #b48ead; }
+            .boolean { color: #d08770; }
+            .null { color: #bf616a; }
+          </style>
+        </head>
+        <body>
+          <div class="src-header">
+            <div>
+              <div class="src-title">⟨/⟩ AT Protocol Record Source</div>
+              <div class="src-uri">at://${did}/site.standard.document/${rkey}</div>
+            </div>
+            <a href="/read/${did}/${rkey}">← Back to post</a>
+          </div>
+          <pre>${JSON.stringify(result.record, null, 2)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, function (match) {
+              let cls = 'number';
+              if (/^"/.test(match)) {
+                if (/:$/.test(match)) {
+                  cls = 'key';
+                } else {
+                  cls = 'string';
+                }
+              } else if (/true|false/.test(match)) {
+                cls = 'boolean';
+              } else if (/null/.test(match)) {
+                cls = 'null';
+              }
+              return '<span class="' + cls + '">' + match + '</span>';
+            })}</pre>
+        </body>
+      </html>
+    `);
+  } catch (err: any) {
+    return c.json({ error: err.message }, 500);
+  }
 });
 
 // ── Error handling ──────────────────────────────────────────────────────────
