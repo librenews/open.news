@@ -13,6 +13,7 @@
     "dev:weblog": "node --watch --env-file=.env --import tsx/esm src/weblog/index.ts",
     "dev:longform": "node --watch --env-file=.env --import tsx/esm src/longform/index.tsx",
     "dev:centipedia": "node --watch --env-file=.env --import tsx/esm src/centipedia/index.tsx",
+    "dev:nearby": "node --watch --env-file=.env --import tsx/esm src/nearby/index.tsx",
     "migrate": "node --env-file=.env --import tsx/esm src/db/migrate.ts",
     "test": "vitest run",
     "test:watch": "vitest",
