@@ -132,8 +132,9 @@ export function FeedPage({ items, page, newPostsTs }: { items: FeedItem[]; page:
         window.location.href = '/';
       }
 
-      // Poll every 10 seconds
-      setInterval(checkNew, 10000);
+      // Poll every 8 seconds, and check immediately on load
+      setInterval(checkNew, 8000);
+      setTimeout(checkNew, 2000); // first check after 2s
     </script>
   `;
 }

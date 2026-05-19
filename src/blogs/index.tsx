@@ -36,12 +36,12 @@ app.get('/', async (c) => {
     SELECT
       s.uri, s.author_did, s.title,
       s.site, s.path, s.published_at,
-      s.word_count,
+      s.word_count, s.created_at,
       LEFT(s.raw_record->>'textContent', 2000) AS text_content,
       s.raw_record->'tags' AS tags_json
     FROM site_standard_articles s
     WHERE s.published_at IS NOT NULL
-    ORDER BY s.published_at DESC
+    ORDER BY s.created_at DESC
     LIMIT $1 OFFSET $2
   `, [perPage, offset]);
 
@@ -88,7 +88,7 @@ app.get('/', async (c) => {
     };
   });
 
-  const newPostsTs = rows[0]?.published_at?.toISOString() || new Date().toISOString();
+  const newPostsTs = rows[0]?.created_at?.toISOString() || new Date().toISOString();
 
   return c.html((
     <BlogsLayout title="blogs.social — Discover the open web" session={session}>
@@ -105,7 +105,7 @@ app.get('/api/count-since', async (c) => {
   try {
     const { rows } = await db.query(
       `SELECT COUNT(*) AS count FROM site_standard_articles
-       WHERE published_at > $1`,
+       WHERE created_at > $1`,
       [ts]
     );
     return c.json({ count: Number(rows[0]?.count || 0) });
