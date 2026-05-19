@@ -95,10 +95,10 @@ app.get('/city/:placeId', async (c) => {
   const postQuery = `
     SELECT
       g.subject AS uri, 'post' AS subject_type, g.confidence,
-      m.embed->'external'->>'title' AS title,
-      m.embed->'external'->>'description' AS description,
+      COALESCE(m.embed->'external'->>'title', pc.embed->'external'->>'title') AS title,
+      COALESCE(m.embed->'external'->>'description', pc.embed->'external'->>'description') AS description,
       COALESCE(m.post_text, pc.post_text) AS post_text,
-      m.embed->'external'->>'uri' AS site,
+      COALESCE(m.embed->'external'->>'uri', pc.embed->'external'->>'uri') AS site,
       COALESCE(m.post_did, pc.post_did, split_part(replace(g.subject, 'at://', ''), '/', 1)) AS author_did,
       COALESCE(m.matched_at, g.created_at) AS sort_date
     FROM nearby_geotags g

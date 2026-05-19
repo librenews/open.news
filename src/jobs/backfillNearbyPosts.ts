@@ -57,13 +57,16 @@ export async function backfillNearbyPostsJob(job: Job) {
           const uri = post.uri;
           const did = post.author?.did || '';
           const text = post.record?.text || '';
+          const embed = post.record?.embed || null;
 
           if (uri && did) {
             await db.query(
-              `INSERT INTO nearby_post_cache (post_uri, post_did, post_text)
-               VALUES ($1, $2, $3)
-               ON CONFLICT (post_uri) DO NOTHING`,
-              [uri, did, text]
+              `INSERT INTO nearby_post_cache (post_uri, post_did, post_text, embed)
+               VALUES ($1, $2, $3, $4)
+               ON CONFLICT (post_uri) DO UPDATE SET
+                 post_text = CASE WHEN nearby_post_cache.post_text = '' THEN EXCLUDED.post_text ELSE nearby_post_cache.post_text END,
+                 embed = COALESCE(EXCLUDED.embed, nearby_post_cache.embed)`,
+              [uri, did, text, embed ? JSON.stringify(embed) : null]
             );
             fetched++;
           }

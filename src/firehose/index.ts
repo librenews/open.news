@@ -292,7 +292,7 @@ function handleEvent(event: JetstreamEvent): void {
 
   // Auto-geotag posts from geotagged accounts (fire-and-forget)
   if (getGeoForDid(did)) {
-    geotagFromAccount(postUri, 'post', did, getNearbyBotDid(), String(post.text ?? '')).catch(() => {});
+    geotagFromAccount(postUri, 'post', did, getNearbyBotDid(), String(post.text ?? ''), post.embed || null).catch(() => {});
   }
 
   // Bot mention detection

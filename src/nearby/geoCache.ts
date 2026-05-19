@@ -56,7 +56,8 @@ export async function geotagFromAccount(
   subjectType: 'post' | 'document',
   authorDid: string,
   taggerDid: string,
-  postText?: string
+  postText?: string,
+  postEmbed?: any
 ): Promise<void> {
   const locations = getGeoForDid(authorDid);
   if (!locations || locations.length === 0) return;
@@ -75,13 +76,13 @@ export async function geotagFromAccount(
     });
   }
 
-  // Cache post text for display
-  if (postText && subjectType === 'post') {
+  // Cache post text + embed for display
+  if (subjectType === 'post') {
     await db.query(
-      `INSERT INTO nearby_post_cache (post_uri, post_did, post_text)
-       VALUES ($1, $2, $3)
+      `INSERT INTO nearby_post_cache (post_uri, post_did, post_text, embed)
+       VALUES ($1, $2, $3, $4)
        ON CONFLICT (post_uri) DO NOTHING`,
-      [recordUri, authorDid, postText]
+      [recordUri, authorDid, postText || '', postEmbed ? JSON.stringify(postEmbed) : null]
     ).catch(() => {});
   }
 }
