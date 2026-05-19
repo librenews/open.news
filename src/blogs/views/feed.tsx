@@ -209,10 +209,12 @@ export function FeedPage({ items, page, newPostsTs }: { items: FeedItem[]; page:
         ws.onmessage = function(e) {
           try {
             const msg = JSON.parse(e.data);
-            if (msg.type === 'new_post' && PAGE === 1) {
-              newCount++;
-              if (buffered.length < MAX_BUFFER) {
-                buffered.push(msg.post);
+            if (msg.type === 'batch' && PAGE === 1) {
+              newCount += msg.count;
+              // Append posts from batch, cap buffer
+              const posts = msg.posts || [];
+              for (let i = 0; i < posts.length && buffered.length < MAX_BUFFER; i++) {
+                buffered.push(posts[i]);
               }
               countEl.textContent = newCount;
               banner.classList.add('visible');
