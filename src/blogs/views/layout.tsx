@@ -113,10 +113,10 @@ export function BlogsLayout({ title, children, session }: { title: string; child
           /* ── New Posts Banner ──────────────────────────────── */
           .bl-new-posts-header {
             position: fixed;
-            top: 0;
+            top: 52px;
             left: 0;
             right: 0;
-            z-index: 100;
+            z-index: 99;
             pointer-events: none;
           }
           .bl-new-posts {
