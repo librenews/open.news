@@ -7,8 +7,13 @@ import { runMigrations } from '../db/migrate.js';
 import { getCachedProfile } from '../lib/pdsCache.js';
 import { BlogsLayout } from './views/layout.js';
 import { FeedPage, type FeedItem } from './views/feed.js';
+import { AuthorPage, type AuthorProfile, type AuthorPost } from './views/author.js';
+import { blogsAuthRouter, getBlogsSession } from './routes/auth.js';
 
 const app = new Hono();
+
+// ── Auth routes ─────────────────────────────────────────────────────────────
+app.route('/', blogsAuthRouter);
 
 // ── Health ──────────────────────────────────────────────────────────────────
 app.get('/health', async (c) => {
@@ -22,6 +27,7 @@ app.get('/health', async (c) => {
 
 // ── Feed (Homepage) ─────────────────────────────────────────────────────────
 app.get('/', async (c) => {
+  const session = await getBlogsSession(c);
   const page = Math.max(1, parseInt(c.req.query('page') || '1'));
   const perPage = 30;
   const offset = (page - 1) * perPage;
@@ -60,7 +66,6 @@ app.get('/', async (c) => {
     const rkey = uriParts[uriParts.length - 1];
     const profile = profileMap[r.author_did] || { handle: r.author_did, avatar: '', displayName: '' };
 
-    // Parse tags from JSON array
     let tags: string[] = [];
     try {
       if (r.tags_json && Array.isArray(r.tags_json)) tags = r.tags_json;
@@ -86,7 +91,7 @@ app.get('/', async (c) => {
   const newPostsTs = rows[0]?.published_at?.toISOString() || new Date().toISOString();
 
   return c.html((
-    <BlogsLayout title="blogs.social — Discover the open web" session={null}>
+    <BlogsLayout title="blogs.social — Discover the open web" session={session}>
       <FeedPage items={items} page={page} newPostsTs={newPostsTs} />
     </BlogsLayout>
   ) as unknown as string);
@@ -109,8 +114,95 @@ app.get('/api/count-since', async (c) => {
   }
 });
 
+// ── Author profile ──────────────────────────────────────────────────────────
+app.get('/author/:did', async (c) => {
+  const session = await getBlogsSession(c);
+  const did = c.req.param('did');
+  const page = Math.max(1, parseInt(c.req.query('page') || '1'));
+  const perPage = 30;
+  const offset = (page - 1) * perPage;
+
+  // Fetch profile
+  let profile: AuthorProfile = {
+    did,
+    handle: did,
+    displayName: '',
+    avatar: null,
+    description: '',
+    postCount: 0,
+    sites: [],
+  };
+
+  try {
+    const p = await getCachedProfile(did);
+    profile.handle = p.handle || did;
+    profile.displayName = p.displayName || '';
+    profile.avatar = p.avatar || null;
+    profile.description = p.description || '';
+  } catch {}
+
+  // Post count
+  const { rows: countRows } = await db.query(
+    'SELECT COUNT(*) AS count FROM site_standard_articles WHERE author_did = $1',
+    [did]
+  );
+  profile.postCount = Number(countRows[0]?.count || 0);
+
+  // Distinct sites
+  const { rows: siteRows } = await db.query(
+    `SELECT DISTINCT site FROM site_standard_articles
+     WHERE author_did = $1 AND site IS NOT NULL
+     LIMIT 10`,
+    [did]
+  );
+  profile.sites = siteRows.map((r: any) => {
+    try { return new URL(r.site).hostname.replace(/^www\./, ''); } catch { return r.site; }
+  });
+
+  // Posts
+  const { rows: postRows } = await db.query(`
+    SELECT
+      s.uri, s.title, s.site, s.path, s.published_at, s.word_count,
+      LEFT(s.raw_record->>'textContent', 2000) AS text_content,
+      s.raw_record->'tags' AS tags_json
+    FROM site_standard_articles s
+    WHERE s.author_did = $1
+    ORDER BY s.published_at DESC NULLS LAST
+    LIMIT $2 OFFSET $3
+  `, [did, perPage, offset]);
+
+  const posts: AuthorPost[] = postRows.map((r: any) => {
+    const uriParts = r.uri.replace('at://', '').split('/');
+    const rkey = uriParts[uriParts.length - 1];
+
+    let tags: string[] = [];
+    try {
+      if (r.tags_json && Array.isArray(r.tags_json)) tags = r.tags_json;
+    } catch {}
+
+    return {
+      uri: r.uri,
+      rkey,
+      title: r.title,
+      text_content: r.text_content,
+      site: r.site,
+      path: r.path,
+      tags,
+      published_at: r.published_at?.toISOString() || new Date().toISOString(),
+      word_count: Number(r.word_count || 0),
+    };
+  });
+
+  return c.html((
+    <BlogsLayout title={`${profile.displayName || profile.handle} — blogs.social`} session={session}>
+      <AuthorPage profile={profile} posts={posts} page={page} session={session} />
+    </BlogsLayout>
+  ) as unknown as string);
+});
+
 // ── Single post reader ──────────────────────────────────────────────────────
 app.get('/read/:did/:rkey', async (c) => {
+  const session = await getBlogsSession(c);
   const did = c.req.param('did');
   const rkey = c.req.param('rkey');
   const uri = `at://${did}/site.standard.document/${rkey}`;
@@ -125,7 +217,7 @@ app.get('/read/:did/:rkey', async (c) => {
 
   if (rows.length === 0) {
     return c.html((
-      <BlogsLayout title="Not Found — blogs.social" session={null}>
+      <BlogsLayout title="Not Found — blogs.social" session={session}>
         <div class="bl-feed">
           <div class="bl-empty">
             <h2>Post not found</h2>
@@ -159,7 +251,7 @@ app.get('/read/:did/:rkey', async (c) => {
 
   const { html: h, raw } = await import('hono/html');
   return c.html((
-    <BlogsLayout title={`${post.title || 'Post'} — blogs.social`} session={null}>
+    <BlogsLayout title={`${post.title || 'Post'} — blogs.social`} session={session}>
       {h`
         <div class="bl-feed" style="padding-top: 1.5rem; padding-bottom: 3rem;">
           <div class="bl-post-header" style="margin-bottom: 1rem;">
