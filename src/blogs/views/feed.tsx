@@ -174,21 +174,30 @@ export function FeedPage({ items, page, newPostsTs }: { items: FeedItem[]; page:
           + '</article>';
       }
 
+      const MAX_BUFFER = 20;
+      let newCount = 0;
+
       function loadNewPosts() {
-        if (buffered.length === 0) return;
+        if (newCount === 0) return;
+        // If we have more than the buffer holds, just reload for a clean state
+        if (newCount > MAX_BUFFER || buffered.length === 0) {
+          window.location.href = '/';
+          return;
+        }
         const empty = document.getElementById('emptyState');
         if (empty) empty.remove();
-        const cards = feed.querySelectorAll('.bl-post');
-        // Prepend buffered (newest first)
-        for (let i = buffered.length - 1; i >= 0; i--) {
-          feed.insertAdjacentHTML('afterbegin', buildCard(buffered[i]));
+        // Prepend buffered (newest first), limit to MAX_BUFFER
+        const toInsert = buffered.slice(-MAX_BUFFER);
+        for (let i = toInsert.length - 1; i >= 0; i--) {
+          feed.insertAdjacentHTML('afterbegin', buildCard(toInsert[i]));
         }
-        // Trim from end to keep ~30 visible
+        // Trim from end to keep 30 visible
         const all = feed.querySelectorAll('.bl-post');
-        while (all.length > 30 + buffered.length) {
-          all[all.length - 1].remove();
+        for (let i = all.length - 1; i >= 30; i--) {
+          all[i].remove();
         }
         buffered.length = 0;
+        newCount = 0;
         banner.classList.remove('visible');
         countEl.textContent = '0';
       }
@@ -201,22 +210,30 @@ export function FeedPage({ items, page, newPostsTs }: { items: FeedItem[]; page:
           try {
             const msg = JSON.parse(e.data);
             if (msg.type === 'new_post' && PAGE === 1) {
-              buffered.push(msg.post);
-              countEl.textContent = buffered.length;
+              newCount++;
+              if (buffered.length < MAX_BUFFER) {
+                buffered.push(msg.post);
+              }
+              countEl.textContent = newCount;
               banner.classList.add('visible');
             }
           } catch {}
         };
 
         ws.onclose = function() {
-          // Reconnect after 3s
-          setTimeout(connectWs, 3000);
+          if (!dead) setTimeout(connectWs, 3000);
         };
 
         ws.onerror = function() {
-          ws.close();
+          try { ws.close(); } catch {}
         };
       }
+
+      let dead = false;
+      window.addEventListener('beforeunload', function() {
+        dead = true;
+        if (ws) { try { ws.close(); } catch {} }
+      });
 
       if (PAGE === 1) {
         connectWs();
