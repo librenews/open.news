@@ -107,7 +107,7 @@ export function BlogsLayout({ title, children, session }: { title: string; child
           .bl-feed {
             max-width: var(--column-width);
             margin: 0 auto;
-            padding: 0 1rem;
+            padding: 2.5rem 1rem 0;
           }
 
           /* ── New Posts Banner ──────────────────────────────── */
