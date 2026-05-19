@@ -56,6 +56,7 @@ app.get('/', async (c) => {
 app.get('/city/:placeId', async (c) => {
   const placeId = c.req.param('placeId');
   const page = Math.max(1, parseInt(c.req.query('page') || '1'));
+  const filter = (c.req.query('filter') || 'all') as 'all' | 'posts' | 'articles';
   const perPage = 30;
   const offset = (page - 1) * perPage;
 
@@ -79,36 +80,42 @@ app.get('/city/:placeId', async (c) => {
     FROM nearby_geotags WHERE place_id = $1
   `, [placeId]);
 
-  // Feed items: documents + posts combined
-  const { rows: feedRows } = await db.query(`
-    (
-      SELECT
-        g.subject AS uri, 'document' AS subject_type, g.confidence,
-        s.title, s.description, NULL AS post_text,
-        s.site,
-        COALESCE(s.author_did, split_part(replace(g.subject, 'at://', ''), '/', 1)) AS author_did,
-        COALESCE(s.published_at, g.created_at) AS sort_date
-      FROM nearby_geotags g
-      LEFT JOIN site_standard_articles s ON s.uri = g.subject
-      WHERE g.place_id = $1 AND g.subject_type = 'document'
-    )
-    UNION ALL
-    (
-      SELECT
-        g.subject AS uri, 'post' AS subject_type, g.confidence,
-        NULL AS title, NULL AS description,
-        COALESCE(m.post_text, pc.post_text) AS post_text,
-        NULL AS site,
-        COALESCE(m.post_did, pc.post_did, split_part(replace(g.subject, 'at://', ''), '/', 1)) AS author_did,
-        COALESCE(m.matched_at, g.created_at) AS sort_date
-      FROM nearby_geotags g
-      LEFT JOIN track_matches m ON m.post_uri = g.subject
-      LEFT JOIN nearby_post_cache pc ON pc.post_uri = g.subject
-      WHERE g.place_id = $1 AND g.subject_type = 'post'
-    )
-    ORDER BY sort_date DESC
-    LIMIT $2 OFFSET $3
-  `, [placeId, perPage, offset]);
+  // Feed items: filtered by type
+  const docQuery = `
+    SELECT
+      g.subject AS uri, 'document' AS subject_type, g.confidence,
+      s.title, s.description, NULL AS post_text,
+      s.site,
+      COALESCE(s.author_did, split_part(replace(g.subject, 'at://', ''), '/', 1)) AS author_did,
+      COALESCE(s.published_at, g.created_at) AS sort_date
+    FROM nearby_geotags g
+    LEFT JOIN site_standard_articles s ON s.uri = g.subject
+    WHERE g.place_id = $1 AND g.subject_type = 'document'
+  `;
+  const postQuery = `
+    SELECT
+      g.subject AS uri, 'post' AS subject_type, g.confidence,
+      NULL AS title, NULL AS description,
+      COALESCE(m.post_text, pc.post_text) AS post_text,
+      NULL AS site,
+      COALESCE(m.post_did, pc.post_did, split_part(replace(g.subject, 'at://', ''), '/', 1)) AS author_did,
+      COALESCE(m.matched_at, g.created_at) AS sort_date
+    FROM nearby_geotags g
+    LEFT JOIN track_matches m ON m.post_uri = g.subject
+    LEFT JOIN nearby_post_cache pc ON pc.post_uri = g.subject
+    WHERE g.place_id = $1 AND g.subject_type = 'post'
+  `;
+
+  let feedSql: string;
+  if (filter === 'posts') {
+    feedSql = `${postQuery} ORDER BY sort_date DESC LIMIT $2 OFFSET $3`;
+  } else if (filter === 'articles') {
+    feedSql = `${docQuery} ORDER BY sort_date DESC LIMIT $2 OFFSET $3`;
+  } else {
+    feedSql = `(${docQuery}) UNION ALL (${postQuery}) ORDER BY sort_date DESC LIMIT $2 OFFSET $3`;
+  }
+
+  const { rows: feedRows } = await db.query(feedSql, [placeId, perPage, offset]);
 
   // Resolve author profiles (batch, cached)
   const uniqueDids = [...new Set(feedRows.map((r: any) => r.author_did).filter(Boolean))];
@@ -191,6 +198,7 @@ app.get('/city/:placeId', async (c) => {
         cities={sidebarCities.map((r: any) => ({ place_id: r.place_id, name: r.name, count: Number(r.count) }))}
         accounts={localAccounts}
         page={page}
+        filter={filter}
       />
     </NearbyLayout>
   ) as unknown as string);

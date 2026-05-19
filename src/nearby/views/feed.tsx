@@ -59,13 +59,14 @@ function bskyPostUrl(uri: string, did: string): string {
 }
 
 export function CityFeedPage({
-  city, items, cities, accounts, page
+  city, items, cities, accounts, page, filter
 }: {
   city: CityInfo;
   items: FeedItem[];
   cities: SidebarCity[];
   accounts: LocalAccount[];
   page: number;
+  filter: 'all' | 'posts' | 'articles';
 }) {
   return html`
     <div class="nb-main">
@@ -93,6 +94,12 @@ export function CityFeedPage({
               ${city.article_count.toLocaleString()} articles · ${city.post_count} posts · ${city.account_count} local accounts
             </div>
           </div>
+        </div>
+
+        <div style="display: flex; gap: 0.35rem; margin-bottom: 1rem;">
+          <a href="/city/${city.place_id}" style="padding: 0.35rem 0.8rem; border-radius: 99px; font-size: 0.78rem; font-weight: 500; border: 1px solid ${filter === 'all' ? 'var(--accent)' : 'var(--border)'}; background: ${filter === 'all' ? 'var(--accent-dim)' : 'transparent'}; color: ${filter === 'all' ? 'var(--accent)' : 'var(--text-muted)'}; text-decoration: none; transition: all 0.15s;">All</a>
+          <a href="/city/${city.place_id}?filter=posts" style="padding: 0.35rem 0.8rem; border-radius: 99px; font-size: 0.78rem; font-weight: 500; border: 1px solid ${filter === 'posts' ? 'var(--accent)' : 'var(--border)'}; background: ${filter === 'posts' ? 'var(--accent-dim)' : 'transparent'}; color: ${filter === 'posts' ? 'var(--accent)' : 'var(--text-muted)'}; text-decoration: none; transition: all 0.15s;">🦋 Posts</a>
+          <a href="/city/${city.place_id}?filter=articles" style="padding: 0.35rem 0.8rem; border-radius: 99px; font-size: 0.78rem; font-weight: 500; border: 1px solid ${filter === 'articles' ? 'var(--accent)' : 'var(--border)'}; background: ${filter === 'articles' ? 'var(--accent-dim)' : 'transparent'}; color: ${filter === 'articles' ? 'var(--accent)' : 'var(--text-muted)'}; text-decoration: none; transition: all 0.15s;">📄 Articles</a>
         </div>
 
         ${items.length === 0 ? html`
