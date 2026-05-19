@@ -127,5 +127,16 @@ module.exports = {
       error_file: '/var/log/opennews/nearby-error.log',
       out_file: '/var/log/opennews/nearby-out.log',
     },
+    {
+      name: 'blogs',
+      script: 'node',
+      args: '--import tsx/esm src/blogs/index.tsx',
+      cwd: '/home/opennews/open-news',
+      instances: 1, autorestart: true, watch: false,
+      max_memory_restart: '256M',
+      env: { ...envVars, BLOGS_PORT: '4800', BLOGS_DOMAIN: 'blogs.social' },
+      error_file: '/var/log/opennews/blogs-error.log',
+      out_file: '/var/log/opennews/blogs-out.log',
+    },
   ],
 };
