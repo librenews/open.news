@@ -276,7 +276,7 @@ app.get('/read/:did/:rkey', async (c) => {
 
           <div class="bl-post-footer" style="margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border);">
             ${canonicalUrl ? h`<a href="${canonicalUrl}" class="bl-source" target="_blank">📎 ${safeHostname(canonicalUrl)}</a>` : ''}
-            ${tags.map((tag: string) => h`<span class="bl-tag">${tag}</span>`)}
+            ${tags.slice(0, 5).map((tag: string) => h`<span class="bl-tag">${tag.length > 24 ? tag.substring(0, 24) + '…' : tag}</span>`)}
             <a href="/" class="bl-read-more" style="margin-left: auto;">← Back to feed</a>
           </div>
         </div>

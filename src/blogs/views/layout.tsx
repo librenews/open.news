@@ -246,8 +246,11 @@ export function BlogsLayout({ title, children, session }: { title: string; child
           .bl-post-footer {
             display: flex;
             align-items: center;
-            gap: 0.75rem;
+            gap: 0.5rem;
             margin-top: 0.5rem;
+            flex-wrap: wrap;
+            overflow: hidden;
+            max-height: 3rem;
           }
           .bl-source {
             display: inline-flex;
@@ -259,6 +262,10 @@ export function BlogsLayout({ title, children, session }: { title: string; child
             background: var(--bg-hover);
             border-radius: 99px;
             text-decoration: none;
+            max-width: 200px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
           }
           .bl-source:hover { color: var(--text-secondary); }
           .bl-tag {
@@ -267,6 +274,10 @@ export function BlogsLayout({ title, children, session }: { title: string; child
             background: var(--accent-dim);
             padding: 0.12rem 0.4rem;
             border-radius: 99px;
+            max-width: 160px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
           }
 
           /* ── Read More ────────────────────────────────────── */

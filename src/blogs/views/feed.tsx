@@ -75,7 +75,7 @@ function renderPostCard(item: FeedItem): ReturnType<typeof html> {
             ${safeHostname(canonicalUrl)}
           </a>
         ` : ''}
-        ${item.tags.map(tag => html`<span class="bl-tag">${tag}</span>`)}
+        ${item.tags.slice(0, 3).map(tag => html`<span class="bl-tag">${tag.length > 24 ? tag.substring(0, 24) + '…' : tag}</span>`)}
       </div>
     </article>
   `;

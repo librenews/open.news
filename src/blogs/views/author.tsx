@@ -98,7 +98,7 @@ export function AuthorPage({ profile, posts, page, session }: {
             <div class="bl-post-footer">
               <span class="bl-post-time">${timeAgo(post.published_at)}</span>
               ${canonicalUrl ? html`<a href="${canonicalUrl}" class="bl-source" target="_blank">${safeHostname(canonicalUrl)}</a>` : ''}
-              ${post.tags.map(tag => html`<span class="bl-tag">${tag}</span>`)}
+              ${post.tags.slice(0, 3).map(tag => html`<span class="bl-tag">${tag.length > 24 ? tag.substring(0, 24) + '…' : tag}</span>`)}
             </div>
           </article>
         `;
