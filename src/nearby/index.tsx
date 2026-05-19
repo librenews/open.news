@@ -79,20 +79,33 @@ app.get('/city/:placeId', async (c) => {
     FROM nearby_geotags WHERE place_id = $1
   `, [placeId]);
 
-  // Feed items: documents with article metadata
-  const { rows: docItems } = await db.query(`
-    SELECT
-      g.subject AS uri, g.subject_type, g.confidence,
-      s.title, s.description, s.site, s.author_did, s.published_at
-    FROM nearby_geotags g
-    LEFT JOIN site_standard_articles s ON s.uri = g.subject
-    WHERE g.place_id = $1 AND g.subject_type = 'document'
-    ORDER BY COALESCE(s.published_at, g.created_at) DESC
+  // Feed items: documents + posts combined
+  const { rows: feedRows } = await db.query(`
+    (
+      SELECT
+        g.subject AS uri, 'document' AS subject_type, g.confidence,
+        s.title, s.description, NULL AS post_text,
+        s.site, s.author_did, COALESCE(s.published_at, g.created_at) AS sort_date
+      FROM nearby_geotags g
+      LEFT JOIN site_standard_articles s ON s.uri = g.subject
+      WHERE g.place_id = $1 AND g.subject_type = 'document'
+    )
+    UNION ALL
+    (
+      SELECT
+        g.subject AS uri, 'post' AS subject_type, g.confidence,
+        NULL AS title, NULL AS description, m.post_text,
+        NULL AS site, m.post_did AS author_did, m.matched_at AS sort_date
+      FROM nearby_geotags g
+      LEFT JOIN track_matches m ON m.post_uri = g.subject
+      WHERE g.place_id = $1 AND g.subject_type = 'post'
+    )
+    ORDER BY sort_date DESC
     LIMIT $2 OFFSET $3
   `, [placeId, perPage, offset]);
 
   // Resolve author profiles (batch, cached)
-  const uniqueDids = [...new Set(docItems.map((r: any) => r.author_did).filter(Boolean))];
+  const uniqueDids = [...new Set(feedRows.map((r: any) => r.author_did).filter(Boolean))];
   const profileMap: Record<string, { handle: string; avatar: string; displayName: string }> = {};
   await Promise.all(uniqueDids.slice(0, 20).map(async (did) => {
     try {
@@ -103,17 +116,17 @@ app.get('/city/:placeId', async (c) => {
     }
   }));
 
-  const feedItems = docItems.map((r: any) => ({
+  const feedItems = feedRows.map((r: any) => ({
     uri: r.uri,
     subject_type: r.subject_type as 'document' | 'post',
     title: r.title,
     description: r.description,
-    text: null,
+    text: r.post_text,
     site: r.site,
     author_did: r.author_did || '',
     author_handle: profileMap[r.author_did]?.handle || r.author_did || 'unknown',
     author_avatar: profileMap[r.author_did]?.avatar || null,
-    published_at: r.published_at?.toISOString() || new Date().toISOString(),
+    published_at: r.sort_date?.toISOString() || new Date().toISOString(),
     confidence: Number(r.confidence),
   }));
 

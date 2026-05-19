@@ -51,6 +51,13 @@ function timeAgo(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
+function bskyPostUrl(uri: string, did: string): string {
+  // at://did:plc:xxx/app.bsky.feed.post/rkey → https://bsky.app/profile/did/post/rkey
+  const parts = uri.replace('at://', '').split('/');
+  const rkey = parts[parts.length - 1];
+  return `https://bsky.app/profile/${did}/post/${rkey}`;
+}
+
 export function CityFeedPage({
   city, items, cities, accounts, page
 }: {
@@ -114,12 +121,14 @@ export function CityFeedPage({
                   ${item.description ? html`<div class="nb-card-description">${item.description.substring(0, 200)}</div>` : ''}
                 </a>
               ` : html`
-                <div>${item.text ? item.text.substring(0, 300) : ''}</div>
+                <a href="${bskyPostUrl(item.uri, item.author_did)}" target="_blank" style="color: var(--text); text-decoration: none;">
+                  <div>${item.text ? item.text.substring(0, 300) : ''}</div>
+                </a>
               `}
             </div>
             <div class="nb-tags">
               ${item.subject_type === 'post'
-                ? html`<span class="nb-tag post">🦋 Bluesky post</span>`
+                ? html`<a href="${bskyPostUrl(item.uri, item.author_did)}" target="_blank" class="nb-tag post" style="text-decoration: none;">🦋 Bluesky post</a>`
                 : html`<span class="nb-tag article">📄 Article</span>`
               }
               <span class="nb-tag city">📍 ${city.name}</span>
