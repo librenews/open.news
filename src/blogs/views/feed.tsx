@@ -90,7 +90,7 @@ export function FeedPage({ items, page, newPostsTs }: { items: FeedItem[]; page:
 
       <div id="feedContainer">
         ${items.length === 0 ? html`
-          <div class="bl-empty">
+          <div class="bl-empty" id="emptyState">
             <h2>No posts yet</h2>
             <p>The firehose is running. Posts will appear here as they're published.</p>
           </div>
@@ -109,32 +109,118 @@ export function FeedPage({ items, page, newPostsTs }: { items: FeedItem[]; page:
     </div>
 
     <script>
-      // Live new-posts counter
-      let lastTs = '${newPostsTs}';
-      let newCount = 0;
+      const PAGE = ${page};
       const banner = document.getElementById('newPostsBanner');
       const countEl = document.getElementById('newPostsCount');
+      const feed = document.getElementById('feedContainer');
+      const buffered = [];
+      let ws;
 
-      function checkNew() {
-        fetch('/api/count-since?ts=' + encodeURIComponent(lastTs))
-          .then(r => r.json())
-          .then(data => {
-            if (data.count > 0) {
-              newCount = data.count;
-              countEl.textContent = newCount;
-              banner.classList.add('visible');
-            }
-          })
-          .catch(() => {});
+      function escHtml(s) {
+        const d = document.createElement('div');
+        d.textContent = s;
+        return d.innerHTML;
+      }
+
+      function timeAgo(ts) {
+        const diff = Date.now() - new Date(ts).getTime();
+        const m = Math.floor(diff / 60000);
+        if (m < 1) return 'just now';
+        if (m < 60) return m + 'm';
+        const h = Math.floor(m / 60);
+        if (h < 24) return h + 'h';
+        const d = Math.floor(h / 24);
+        return d + 'd';
+      }
+
+      function hostname(url) {
+        try { return new URL(url).hostname.replace(/^www\\./, ''); }
+        catch { return ''; }
+      }
+
+      function buildCard(p) {
+        const showTitle = p.title && p.text_content && !p.text_content.toLowerCase().startsWith(p.title.toLowerCase());
+        const canon = p.site && p.path
+          ? p.site.replace(/\\/$/, '') + (p.path.startsWith('/') ? '' : '/') + p.path
+          : p.site || null;
+        const avatarHtml = p.author_avatar
+          ? '<img class="bl-avatar" src="' + escHtml(p.author_avatar) + '" alt="" loading="lazy" />'
+          : '<div class="bl-avatar-ph">' + escHtml((p.author_display_name || p.author_handle || '?')[0].toUpperCase()) + '</div>';
+        const handleSpan = p.author_display_name
+          ? '<span class="bl-post-handle">@' + escHtml(p.author_handle) + '</span>'
+          : '';
+        const titleHtml = showTitle
+          ? '<div class="bl-post-title"><a href="/read/' + p.author_did + '/' + p.rkey + '">' + escHtml(p.title) + '</a></div>'
+          : '';
+        const preview = escHtml((p.text_content || '').substring(0, 300) + ((p.text_content || '').length > 300 ? '…' : ''));
+        const srcHtml = canon
+          ? '<a href="' + escHtml(canon) + '" class="bl-source" target="_blank">' + escHtml(hostname(canon)) + '</a>'
+          : '';
+        const tags = (p.tags || []).slice(0, 3).map(function(t) {
+          const s = t.length > 24 ? t.substring(0, 24) + '…' : t;
+          return '<span class="bl-tag">' + escHtml(s) + '</span>';
+        }).join('');
+
+        return '<article class="bl-post">'
+          + '<div class="bl-post-header">' + avatarHtml
+          + '<div class="bl-post-meta"><div>'
+          + '<a href="/author/' + p.author_did + '" class="bl-post-author">' + escHtml(p.author_display_name || p.author_handle) + '</a>'
+          + handleSpan + '</div>'
+          + '<div class="bl-post-time">' + timeAgo(p.published_at) + '</div>'
+          + '</div></div>'
+          + titleHtml
+          + '<div class="bl-post-body"><p>' + preview + '</p></div>'
+          + '<div class="bl-post-footer">' + srcHtml + tags + '</div>'
+          + '</article>';
       }
 
       function loadNewPosts() {
-        window.location.href = '/';
+        if (buffered.length === 0) return;
+        const empty = document.getElementById('emptyState');
+        if (empty) empty.remove();
+        const cards = feed.querySelectorAll('.bl-post');
+        // Prepend buffered (newest first)
+        for (let i = buffered.length - 1; i >= 0; i--) {
+          feed.insertAdjacentHTML('afterbegin', buildCard(buffered[i]));
+        }
+        // Trim from end to keep ~30 visible
+        const all = feed.querySelectorAll('.bl-post');
+        while (all.length > 30 + buffered.length) {
+          all[all.length - 1].remove();
+        }
+        buffered.length = 0;
+        banner.classList.remove('visible');
+        countEl.textContent = '0';
       }
 
-      // Poll every 8 seconds, and check immediately on load
-      setInterval(checkNew, 8000);
-      setTimeout(checkNew, 2000); // first check after 2s
+      function connectWs() {
+        const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+        ws = new WebSocket(proto + '//' + location.host + '/ws/feed');
+
+        ws.onmessage = function(e) {
+          try {
+            const msg = JSON.parse(e.data);
+            if (msg.type === 'new_post' && PAGE === 1) {
+              buffered.push(msg.post);
+              countEl.textContent = buffered.length;
+              banner.classList.add('visible');
+            }
+          } catch {}
+        };
+
+        ws.onclose = function() {
+          // Reconnect after 3s
+          setTimeout(connectWs, 3000);
+        };
+
+        ws.onerror = function() {
+          ws.close();
+        };
+      }
+
+      if (PAGE === 1) {
+        connectWs();
+      }
     </script>
   `;
 }

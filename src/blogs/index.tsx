@@ -9,6 +9,7 @@ import { BlogsLayout } from './views/layout.js';
 import { FeedPage, type FeedItem } from './views/feed.js';
 import { AuthorPage, type AuthorProfile, type AuthorPost } from './views/author.js';
 import { blogsAuthRouter, getBlogsSession } from './routes/auth.js';
+import { attachLiveFeed } from './lib/liveFeed.js';
 
 const app = new Hono();
 
@@ -305,9 +306,12 @@ const BLOGS_PORT = Number(process.env.BLOGS_PORT) || 4800;
 async function start() {
   await runMigrations();
 
-  serve({ fetch: app.fetch, port: BLOGS_PORT }, () => {
+  const server = serve({ fetch: app.fetch, port: BLOGS_PORT }, () => {
     logger.info({ port: BLOGS_PORT }, 'blogs.social server started');
   });
+
+  // Attach WebSocket live feed
+  attachLiveFeed(server);
 }
 
 start().catch((err) => {
