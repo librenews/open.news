@@ -96,12 +96,14 @@ app.get('/city/:placeId', async (c) => {
     (
       SELECT
         g.subject AS uri, 'post' AS subject_type, g.confidence,
-        NULL AS title, NULL AS description, m.post_text,
+        NULL AS title, NULL AS description,
+        COALESCE(m.post_text, pc.post_text) AS post_text,
         NULL AS site,
-        COALESCE(m.post_did, split_part(replace(g.subject, 'at://', ''), '/', 1)) AS author_did,
+        COALESCE(m.post_did, pc.post_did, split_part(replace(g.subject, 'at://', ''), '/', 1)) AS author_did,
         COALESCE(m.matched_at, g.created_at) AS sort_date
       FROM nearby_geotags g
       LEFT JOIN track_matches m ON m.post_uri = g.subject
+      LEFT JOIN nearby_post_cache pc ON pc.post_uri = g.subject
       WHERE g.place_id = $1 AND g.subject_type = 'post'
     )
     ORDER BY sort_date DESC

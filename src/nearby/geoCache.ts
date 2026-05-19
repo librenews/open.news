@@ -49,12 +49,14 @@ export function getGeoForDid(did: string): { place_id: string; confidence: numbe
 /**
  * Creates geotag records for a post/document from a geotagged account.
  * Uses lower confidence (halved) since this is inherited, not direct.
+ * Optionally caches the post text for display.
  */
 export async function geotagFromAccount(
   recordUri: string,
   subjectType: 'post' | 'document',
   authorDid: string,
-  taggerDid: string
+  taggerDid: string,
+  postText?: string
 ): Promise<void> {
   const locations = getGeoForDid(authorDid);
   if (!locations || locations.length === 0) return;
@@ -71,5 +73,15 @@ export async function geotagFromAccount(
     ).catch(err => {
       logger.debug({ err, recordUri, place_id: loc.place_id }, 'Failed to insert inherited geotag');
     });
+  }
+
+  // Cache post text for display
+  if (postText && subjectType === 'post') {
+    await db.query(
+      `INSERT INTO nearby_post_cache (post_uri, post_did, post_text)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (post_uri) DO NOTHING`,
+      [recordUri, authorDid, postText]
+    ).catch(() => {});
   }
 }
