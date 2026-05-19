@@ -1,10 +1,16 @@
 import { Hono } from 'hono';
-import { Agent, TID } from '@atproto/api';
+import { Agent } from '@atproto/api';
+import { randomBytes } from 'crypto';
 import { pool } from '../../db/client.js';
 import { logger } from '../../lib/logger.js';
 import { getBlogsSession, getBlogsAuthClient } from './auth.js';
 
 export const blogsFollowRouter = new Hono();
+
+// Generate a compact base32-like rkey similar to AT Protocol TIDs
+function genRkey(): string {
+  return randomBytes(10).toString('base64url').slice(0, 13).toLowerCase();
+}
 
 // POST /follow/:did  — create a subscription record on the user's PDS + mirror locally
 blogsFollowRouter.post('/follow/:did', async (c) => {
@@ -29,7 +35,7 @@ blogsFollowRouter.post('/follow/:did', async (c) => {
     const oauthSession = await client.restore(session.did);
     const agent = new Agent(oauthSession);
 
-    const rkey = TID.nextStr();
+    const rkey = genRkey();
     const record = {
       $type: 'site.standard.graph.subscription',
       subject: targetDid,
