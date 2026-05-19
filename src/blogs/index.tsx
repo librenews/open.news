@@ -38,10 +38,9 @@ app.get('/', async (c) => {
       s.uri, s.author_did, s.title,
       s.site, s.path, s.published_at,
       s.word_count, s.created_at,
-      LEFT(s.raw_record->>'textContent', 2000) AS text_content,
+      COALESCE(s.description, LEFT(s.raw_record->>'textContent', 600)) AS text_content,
       s.raw_record->'tags' AS tags_json
     FROM site_standard_articles s
-    WHERE s.published_at IS NOT NULL
     ORDER BY s.created_at DESC
     LIMIT $1 OFFSET $2
   `, [perPage, offset]);
@@ -164,11 +163,12 @@ app.get('/author/:did', async (c) => {
   const { rows: postRows } = await db.query(`
     SELECT
       s.uri, s.title, s.site, s.path, s.published_at, s.word_count,
-      LEFT(s.raw_record->>'textContent', 2000) AS text_content,
+      s.created_at,
+      COALESCE(s.description, LEFT(s.raw_record->>'textContent', 600)) AS text_content,
       s.raw_record->'tags' AS tags_json
     FROM site_standard_articles s
     WHERE s.author_did = $1
-    ORDER BY s.published_at DESC NULLS LAST
+    ORDER BY s.created_at DESC
     LIMIT $2 OFFSET $3
   `, [did, perPage, offset]);
 
