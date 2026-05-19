@@ -116,5 +116,16 @@ module.exports = {
       error_file: '/var/log/opennews/centipedia-error.log',
       out_file: '/var/log/opennews/centipedia-out.log',
     },
+    {
+      name: 'nearby',
+      script: 'node',
+      args: '--import tsx/esm src/nearby/index.tsx',
+      cwd: '/home/opennews/open-news',
+      instances: 1, autorestart: true, watch: false,
+      max_memory_restart: '256M',
+      env: { ...envVars, NEARBY_PORT: '4700', NEARBY_DOMAIN: 'nearby.at' },
+      error_file: '/var/log/opennews/nearby-error.log',
+      out_file: '/var/log/opennews/nearby-out.log',
+    },
   ],
 };
