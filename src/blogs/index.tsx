@@ -83,7 +83,7 @@ app.get('/', async (c) => {
       site: r.site,
       path: r.path,
       tags,
-      published_at: r.published_at?.toISOString() || new Date().toISOString(),
+      published_at: r.created_at?.toISOString() || r.published_at?.toISOString() || new Date().toISOString(),
       word_count: Number(r.word_count || 0),
     };
   });
