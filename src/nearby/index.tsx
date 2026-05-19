@@ -85,7 +85,9 @@ app.get('/city/:placeId', async (c) => {
       SELECT
         g.subject AS uri, 'document' AS subject_type, g.confidence,
         s.title, s.description, NULL AS post_text,
-        s.site, s.author_did, COALESCE(s.published_at, g.created_at) AS sort_date
+        s.site,
+        COALESCE(s.author_did, split_part(replace(g.subject, 'at://', ''), '/', 1)) AS author_did,
+        COALESCE(s.published_at, g.created_at) AS sort_date
       FROM nearby_geotags g
       LEFT JOIN site_standard_articles s ON s.uri = g.subject
       WHERE g.place_id = $1 AND g.subject_type = 'document'
@@ -95,7 +97,9 @@ app.get('/city/:placeId', async (c) => {
       SELECT
         g.subject AS uri, 'post' AS subject_type, g.confidence,
         NULL AS title, NULL AS description, m.post_text,
-        NULL AS site, m.post_did AS author_did, m.matched_at AS sort_date
+        NULL AS site,
+        COALESCE(m.post_did, split_part(replace(g.subject, 'at://', ''), '/', 1)) AS author_did,
+        COALESCE(m.matched_at, g.created_at) AS sort_date
       FROM nearby_geotags g
       LEFT JOIN track_matches m ON m.post_uri = g.subject
       WHERE g.place_id = $1 AND g.subject_type = 'post'
