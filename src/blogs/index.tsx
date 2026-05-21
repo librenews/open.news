@@ -217,7 +217,7 @@ app.get('/author/:did', async (c) => {
     SELECT
       s.uri, s.title, s.site, s.path, s.published_at, s.word_count,
       s.created_at,
-      COALESCE(s.description, LEFT(s.raw_record->>'textContent', 600)) AS text_content,
+    COALESCE(s.description, LEFT(COALESCE(s.raw_record->>'content', s.raw_record->>'textContent'), 600)) AS text_content,
       s.raw_record->'tags' AS tags_json
     FROM site_standard_articles s
     WHERE s.author_did = $1
@@ -265,7 +265,8 @@ app.get('/read/:did/:rkey', async (c) => {
 
   const { rows } = await db.query(
     `SELECT s.uri, s.author_did, s.title, s.site, s.path, s.published_at,
-            s.word_count, s.raw_record->>'textContent' AS text_content,
+            s.word_count,
+            COALESCE(s.raw_record->>'content', s.raw_record->>'textContent') AS text_content,
             s.raw_record->'tags' AS tags_json
      FROM site_standard_articles s WHERE s.uri = $1`,
     [uri]

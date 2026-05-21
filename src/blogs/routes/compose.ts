@@ -67,7 +67,7 @@ blogsComposeRouter.post('/compose', async (c) => {
 
     const rkey = genRkey();
     const publishedAt = new Date().toISOString();
-    const postPath = `/author/${session.did}/${rkey}`;
+    const postPath = `/read/${session.did}/${rkey}`;
 
     const record: Record<string, unknown> = {
       $type: 'site.standard.document',
