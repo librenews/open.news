@@ -49,6 +49,10 @@ async function main() {
   }
   console.log('✅ Embed service is healthy\n');
 
+  // Log expected dimension
+  const { config } = await import('../lib/config.js');
+  console.log(`  Expected embedding dimension: ${config.EMBED_DIMENSION}\n`);
+
   // 2. Ensure OpenSearch index exists
   await ensureSiteStandardChunksIndex();
   console.log('✅ OpenSearch site_standard_chunks index ready\n');
@@ -173,11 +177,16 @@ async function main() {
         const res = await os.bulk({ body: bulkBody });
         if (res.body.errors) {
           errors++;
-          // Log first failing item for diagnosis
           const failedItems = (res.body.items || []).filter((item: any) => item.index?.error);
           if (failedItems.length > 0) {
             const first = failedItems[0].index;
             console.error(`  ⚠️  Bulk error (${failedItems.length}/${res.body.items.length} items): ${first.error?.type}: ${first.error?.reason} [id: ${first._id}]`);
+            // Deep diagnostic: check what we actually sent
+            const firstDoc = bulkBody[1]; // first document (index 0 is the action)
+            if (firstDoc) {
+              const e = firstDoc.embedding;
+              console.error(`  🔬 Sent embedding: type=${typeof e}, isArray=${Array.isArray(e)}, len=${e?.length}, dim=${config.EMBED_DIMENSION}, first3=${JSON.stringify(e?.slice?.(0,3))}`);
+            }
           }
         }
       }
