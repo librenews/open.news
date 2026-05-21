@@ -245,7 +245,8 @@ export async function indexSiteStandardJob(job: Job<IndexSiteStandardData>) {
         path: path,
         language: language,
         word_count: wordCount,
-        bsky_post_uri: record.bskyPostRef?.uri || null
+        bsky_post_uri: record.bskyPostRef?.uri || null,
+        verified: false,
       }
     });
     
@@ -261,6 +262,14 @@ export async function indexSiteStandardJob(job: Job<IndexSiteStandardData>) {
           'UPDATE site_standard_articles SET verified = $1, verified_at = NOW() WHERE uri = $2',
           [verified, postUri]
         );
+        // Update OpenSearch verified flag
+        try {
+          await os.update({
+            index: SITE_STANDARD_INDEX,
+            id: postUri,
+            body: { doc: { verified } },
+          });
+        } catch { /* non-fatal */ }
         if (verified) {
           logger.info({ uri: postUri }, 'Document verified via standard.site');
 

@@ -78,6 +78,35 @@ export function BlogsLayout({ title, children, session, navPage = '', headExtra 
             padding-left: 0.75rem;
           }
           .bl-logo span { color: var(--accent); }
+          .bl-header-search {
+            flex: 1;
+            max-width: 420px;
+            position: relative;
+          }
+          .bl-header-search input {
+            width: 100%;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 0.4rem 0.75rem 0.4rem 2.1rem;
+            font-size: 0.82rem;
+            color: var(--text);
+            font-family: var(--font);
+            outline: none;
+            transition: border-color 0.15s;
+          }
+          .bl-header-search input:focus { border-color: var(--accent); }
+          .bl-header-search input::placeholder { color: var(--text-muted); }
+          .bl-header-search svg {
+            position: absolute;
+            left: 0.6rem;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 14px;
+            height: 14px;
+            color: var(--text-muted);
+            pointer-events: none;
+          }
           .bl-header-spacer { flex: 1; }
           .bl-header-actions {
             display: flex;
@@ -573,6 +602,7 @@ export function BlogsLayout({ title, children, session, navPage = '', headExtra 
           /* ── Responsive ───────────────────────────────────── */
           @media (max-width: 640px) {
             .bl-header-inner { padding: 0 0.75rem; }
+            .bl-header-search { display: none; }
             .bl-feed { padding: 0 0.75rem; }
           }
 
@@ -993,6 +1023,10 @@ export function BlogsLayout({ title, children, session, navPage = '', headExtra 
         <header class="bl-header">
           <div class="bl-header-inner">
             <a href="/" class="bl-logo">blogs<span>.social</span></a>
+            <form action="/search" method="GET" class="bl-header-search">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+              <input type="text" name="q" placeholder="Search posts…" autocomplete="off" />
+            </form>
             <div class="bl-header-spacer"></div>
             <div class="bl-header-actions">
               ${session

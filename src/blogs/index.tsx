@@ -10,6 +10,8 @@ import { FeedPage, type FeedItem } from './views/feed.js';
 import { AuthorPage, type AuthorProfile, type AuthorPost } from './views/author.js';
 import { SubscriptionsPage, type SubscriptionItem } from './views/subscriptions.js';
 import { StatsPage } from './views/stats.js';
+import { BlogSearchPage, type BlogSearchResult } from './views/search.js';
+import { searchSiteStandardArticles } from '../track/opensearch.js';
 import { getBlogStats, startStatsWarm } from './lib/statsCache.js';
 import { blogsAuthRouter, getBlogsSession } from './routes/auth.js';
 import { blogsFollowRouter } from './routes/follow.js';
@@ -354,6 +356,58 @@ app.get('/stats', async (c) => {
     logger.error({ err }, 'Stats page error');
     return c.text('Stats temporarily unavailable', 503);
   }
+});
+
+// ── Search page ─────────────────────────────────────────────────────────────
+app.get('/search', async (c) => {
+  const q = (c.req.query('q') || '').trim();
+  const sort = (c.req.query('sort') || 'relevant') as 'relevant' | 'latest';
+  const filter = (c.req.query('filter') || 'verified') as 'verified' | 'all';
+  const session = await enrichSession(await getBlogsSession(c));
+
+  let results: BlogSearchResult[] = [];
+
+  if (q) {
+    try {
+      const osSort = sort === 'latest' ? 'recent' : 'relevant';
+      const hits = await searchSiteStandardArticles(q, 'all', osSort, 50);
+
+      const hitList = hits.hits || [];
+      if (hitList.length > 0) {
+        // Get author profiles
+        const uniqueDids = [...new Set(hitList.map((h: any) => h._source.did))] as string[];
+        const profileMap = await getCachedProfiles(uniqueDids);
+
+        results = hitList.map((hit: any) => {
+          const s = hit._source;
+          const p = profileMap.get(s.did) || { displayName: s.did, avatar: '', handle: s.did };
+          const highlights = hit.highlight || {};
+          const textHighlights = Object.keys(highlights)
+            .filter((k: string) => k.startsWith('text_content'))
+            .flatMap((k: string) => highlights[k]);
+
+          return {
+            uri: s.uri,
+            did: s.did,
+            title: s.title || 'Untitled',
+            site: s.site || null,
+            path: s.path || null,
+            publishedAt: s.published_at || null,
+            wordCount: s.word_count || 0,
+            highlight: textHighlights.length > 0 ? textHighlights[0] : null,
+            authorHandle: p.handle,
+            authorName: p.displayName,
+            authorAvatar: p.avatar,
+            verified: s.verified === true,
+          };
+        });
+      }
+    } catch (err: any) {
+      logger.error({ err, q }, 'Blog search failed');
+    }
+  }
+
+  return c.html(BlogSearchPage({ query: q, results, sort, filter, session }) as unknown as string);
 });
 
 // ── Subscriptions page ──────────────────────────────────────────────────────

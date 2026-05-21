@@ -164,6 +164,7 @@ export async function ensureSiteStandardIndex(): Promise<void> {
       site: { type: 'keyword' },
       path: { type: 'keyword' },
       language: { type: 'keyword' },
+      verified: { type: 'boolean' },
     },
   };
 
@@ -266,7 +267,7 @@ export async function percolatePost(
 /**
  * Searches the site.standard.document index using multi-language fields and highlighting.
  */
-export async function searchSiteStandardArticles(query: string, len: 'all' | 'long' = 'all', sortBy: 'relevant' | 'recent' = 'relevant', limit: number = 20) {
+export async function searchSiteStandardArticles(query: string, len: 'all' | 'long' = 'all', sortBy: 'relevant' | 'recent' = 'relevant', limit: number = 20, verifiedOnly: boolean = false) {
   const os = getOsClient();
   
   const must: any[] = [
@@ -287,11 +288,17 @@ export async function searchSiteStandardArticles(query: string, len: 'all' | 'lo
     });
   }
 
+  const filter: any[] = [];
+  if (verifiedOnly) {
+    filter.push({ term: { verified: true } });
+  }
+
   const body: any = {
     size: limit,
     query: {
       bool: {
-        must: must
+        must: must,
+        ...(filter.length > 0 ? { filter } : {}),
       }
     },
     highlight: {
@@ -302,7 +309,7 @@ export async function searchSiteStandardArticles(query: string, len: 'all' | 'lo
       pre_tags: ['<em class="bg-indigo-100 text-indigo-900 font-bold px-0.5 rounded">'],
       post_tags: ['</em>'],
     },
-    _source: ['title', 'did', 'site', 'path', 'language', 'published_at', 'uri', 'bsky_post_uri', 'word_count'],
+    _source: ['title', 'did', 'site', 'path', 'language', 'published_at', 'uri', 'bsky_post_uri', 'word_count', 'verified'],
   };
 
   if (sortBy === 'recent') {
