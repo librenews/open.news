@@ -8,6 +8,8 @@ import { getCachedProfile, getCachedRecordMulti } from '../lib/pdsCache.js';
 import { BlogsLayout } from './views/layout.js';
 import { FeedPage, type FeedItem } from './views/feed.js';
 import { AuthorPage, type AuthorProfile, type AuthorPost } from './views/author.js';
+import { StatsPage } from './views/stats.js';
+import { getBlogStats } from './lib/statsCache.js';
 import { blogsAuthRouter, getBlogsSession } from './routes/auth.js';
 import { blogsFollowRouter } from './routes/follow.js';
 import { attachLiveFeed } from './lib/liveFeed.js';
@@ -130,6 +132,22 @@ app.get('/api/count-since', async (c) => {
     return c.json({ count: Number(rows[0]?.count || 0) });
   } catch {
     return c.json({ count: 0 });
+  }
+});
+
+// ── Stats page ─────────────────────────────────────────────────────────────
+app.get('/stats', async (c) => {
+  const session = await getBlogsSession(c);
+  try {
+    const stats = await getBlogStats();
+    return c.html((
+      <BlogsLayout title="Platform Stats — blogs.social" session={session}>
+        <StatsPage stats={stats} />
+      </BlogsLayout>
+    ) as unknown as string);
+  } catch (err) {
+    logger.error({ err }, 'Stats page error');
+    return c.text('Stats temporarily unavailable', 503);
   }
 });
 

@@ -369,6 +369,92 @@ export function BlogsLayout({ title, children, session }: { title: string; child
             .bl-header-inner { padding: 0 0.75rem; }
             .bl-feed { padding: 0 0.75rem; }
           }
+
+          /* ── Stats Page ───────────────────────────────────── */
+          .bl-stats {
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 2rem 1.5rem 4rem;
+          }
+          .bl-stats-hero {
+            margin-bottom: 2rem;
+          }
+          .bl-stats-hero h1 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            letter-spacing: -0.03em;
+            margin-bottom: 0.25rem;
+          }
+          .bl-stats-updated {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+          }
+          .bl-kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+          }
+          .bl-kpi-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 1.1rem 1.25rem;
+          }
+          .bl-kpi-value {
+            font-size: 2rem;
+            font-weight: 700;
+            letter-spacing: -0.04em;
+            color: var(--text);
+            line-height: 1;
+          }
+          .bl-kpi-label {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            margin-top: 0.35rem;
+            font-weight: 600;
+          }
+          .bl-kpi-sub {
+            font-size: 0.68rem;
+            color: var(--text-muted);
+            margin-top: 0.15rem;
+          }
+          .bl-charts-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.25rem;
+          }
+          .bl-chart-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 1.25rem;
+          }
+          .bl-chart-wide {
+            grid-column: 1 / -1;
+          }
+          .bl-chart-title {
+            font-size: 0.85rem;
+            font-weight: 700;
+            margin-bottom: 0.15rem;
+          }
+          .bl-chart-sub {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            margin-bottom: 1rem;
+          }
+          .bl-heatmap { overflow-x: auto; }
+          .bl-heatmap-inner { display: flex; flex-direction: column; gap: 3px; min-width: 600px; }
+          .bl-hm-row { display: flex; gap: 3px; align-items: center; }
+          .bl-hm-label { width: 30px; font-size: 0.68rem; color: var(--text-muted); flex-shrink: 0; text-align: right; padding-right: 4px; }
+          .bl-hm-hlabel { width: 24px; font-size: 0.6rem; color: var(--text-muted); text-align: center; flex-shrink: 0; }
+          .bl-hm-cell { width: 24px; height: 20px; border-radius: 3px; flex-shrink: 0; cursor: default; transition: opacity 0.15s; }
+          .bl-hm-cell:hover { opacity: 0.75; }
+          @media (max-width: 768px) {
+            .bl-charts-grid { grid-template-columns: 1fr; }
+            .bl-chart-wide { grid-column: 1; }
+            .bl-kpi-grid { grid-template-columns: repeat(2, 1fr); }
+          }
         </style>
       </head>
       <body>
@@ -376,6 +462,7 @@ export function BlogsLayout({ title, children, session }: { title: string; child
           <div class="bl-header-inner">
             <a href="/" class="bl-logo">blogs<span>.social</span></a>
             <div class="bl-header-actions">
+              <a href="/stats" class="bl-btn bl-btn-outline" style="font-size:0.75rem;padding:0.3rem 0.7rem;">Stats</a>
               ${session
       ? html`
                   <a href="/compose" class="bl-btn bl-btn-primary">✎ Write</a>
