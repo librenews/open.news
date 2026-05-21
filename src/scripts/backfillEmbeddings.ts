@@ -140,17 +140,15 @@ async function main() {
         allEmbeddings.push(...embeddings);
       }
 
-      // Build OpenSearch bulk body (skip chunks with null/invalid embeddings)
+      // Build OpenSearch bulk body (skip chunks with invalid/wrong-dimension embeddings)
       const bulkBody: any[] = [];
-      let skippedNull = 0;
+      let skippedBad = 0;
       for (let j = 0; j < chunkMap.length; j++) {
         const emb = allEmbeddings[j];
-        const hasInvalid = !emb || !Array.isArray(emb) || emb.length === 0 || emb.some((v: any) => v === null || v === undefined || Number.isNaN(v) || !Number.isFinite(v));
-        if (hasInvalid) {
-          skippedNull++;
-          if (skippedNull === 1) {
-            const sample = emb ? emb.slice(0, 5) : emb;
-            console.log(`  🔍 Debug: bad embedding. hasNaN=${emb?.some((v: any) => Number.isNaN(v))}, sample=${JSON.stringify(sample)}`);
+        if (!emb || !Array.isArray(emb) || emb.length !== config.EMBED_DIMENSION || emb.some((v: any) => !Number.isFinite(v))) {
+          skippedBad++;
+          if (skippedBad === 1) {
+            console.log(`  ⏭️  Skipping bad embedding: len=${emb?.length ?? 'null'} (expected ${config.EMBED_DIMENSION})`);
           }
           continue;
         }
@@ -169,8 +167,8 @@ async function main() {
           embedding: emb,
         });
       }
-      if (skippedNull > 0) {
-        console.log(`  ⏭️  Skipped ${skippedNull}/${chunkMap.length} chunks with null embeddings`);
+      if (skippedBad > 0) {
+        console.log(`  ⏭️  Skipped ${skippedBad}/${chunkMap.length} chunks (wrong dimension or invalid)`);
       }
 
       if (bulkBody.length > 0) {
