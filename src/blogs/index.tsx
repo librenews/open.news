@@ -8,6 +8,7 @@ import { getCachedProfile, getCachedProfiles, getCachedRecordMulti } from '../li
 import { BlogsLayout } from './views/layout.js';
 import { FeedPage, type FeedItem } from './views/feed.js';
 import { AuthorPage, type AuthorProfile, type AuthorPost } from './views/author.js';
+import { SubscriptionsPage, type SubscriptionItem } from './views/subscriptions.js';
 import { StatsPage } from './views/stats.js';
 import { getBlogStats, warmStatsCache } from './lib/statsCache.js';
 import { blogsAuthRouter, getBlogsSession } from './routes/auth.js';
@@ -340,6 +341,68 @@ app.get('/stats', async (c) => {
     logger.error({ err }, 'Stats page error');
     return c.text('Stats temporarily unavailable', 503);
   }
+});
+
+// ── Subscriptions page ──────────────────────────────────────────────────────
+app.get('/subscriptions', async (c) => {
+  const session = await enrichSession(await getBlogsSession(c));
+  if (!session) return c.redirect('/auth/login');
+
+  const page = Math.max(1, parseInt(c.req.query('page') || '1'));
+  const perPage = 20;
+  const offset = (page - 1) * perPage;
+
+  // Total count
+  const { rows: countRows } = await db.query(
+    'SELECT COUNT(*)::int AS cnt FROM blogs_follows WHERE follower_did = $1',
+    [session.did]
+  );
+  const totalCount = countRows[0]?.cnt || 0;
+  const totalPages = Math.max(1, Math.ceil(totalCount / perPage));
+
+  // Fetch followed DIDs for this page
+  const { rows: followRows } = await db.query(
+    `SELECT following_did FROM blogs_follows
+     WHERE follower_did = $1
+     ORDER BY created_at DESC
+     LIMIT $2 OFFSET $3`,
+    [session.did, perPage, offset]
+  );
+
+  const followedDids = followRows.map((r: any) => r.following_did);
+
+  // Batch-fetch profiles
+  const profileMap = await getCachedProfiles(followedDids);
+
+  // Batch-fetch post counts
+  let postCounts: Record<string, number> = {};
+  if (followedDids.length > 0) {
+    const { rows: pcRows } = await db.query(
+      `SELECT author_did, COUNT(*)::int AS cnt
+       FROM site_standard_articles
+       WHERE author_did = ANY($1)
+       GROUP BY author_did`,
+      [followedDids]
+    );
+    for (const r of pcRows) postCounts[r.author_did] = r.cnt;
+  }
+
+  const subs: SubscriptionItem[] = followedDids.map(did => {
+    const p = profileMap.get(did);
+    return {
+      did,
+      handle: p?.handle || did,
+      displayName: p?.displayName || '',
+      avatar: p?.avatar || '',
+      postCount: postCounts[did] || 0,
+    };
+  });
+
+  return c.html((
+    <BlogsLayout title="Subscriptions — blogs.social" session={session} navPage="subscriptions">
+      <SubscriptionsPage subs={subs} page={page} totalPages={totalPages} totalCount={totalCount} />
+    </BlogsLayout>
+  ) as unknown as string);
 });
 
 // ── Author post redirect: /author/:did/:rkey → /read/:did/:rkey ─────────────
