@@ -9,7 +9,7 @@ import { getCachedProfile } from '../lib/pdsCache.js';
 import { upsertSiteStandardArticle } from '../db/queries/siteStandard.js';
 import { verifyDocument } from '../lib/verification.js';
 import { chunkText } from '../lib/chunking.js';
-import { embedTexts } from '../track/embedClient.js';
+import { embedTexts, getEmbedDimension } from '../track/embedClient.js';
 
 interface IndexSiteStandardData {
   postUri: string;
@@ -273,7 +273,8 @@ export async function indexSiteStandardJob(job: Job<IndexSiteStandardData>) {
                 if (embeddings.length === chunks.length) {
                   const bulkBody: any[] = [];
                   for (let i = 0; i < chunks.length; i++) {
-                    if (!embeddings[i] || !Array.isArray(embeddings[i]) || embeddings[i].length !== 384 || embeddings[i].some((v: any) => !Number.isFinite(v))) continue;
+                    const dim = await getEmbedDimension();
+                    if (!embeddings[i] || !Array.isArray(embeddings[i]) || embeddings[i].length !== dim || embeddings[i].some((v: any) => !Number.isFinite(v))) continue;
                     bulkBody.push({ index: { _index: SITE_STANDARD_CHUNKS_INDEX, _id: `${postUri}_chunk_${i}` } });
                     bulkBody.push({
                       uri: postUri,

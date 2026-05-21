@@ -10,6 +10,14 @@ interface EmbedResponse {
   elapsed_ms: number;
 }
 
+interface HealthResponse {
+  status: string;
+  model: string;
+  device: string;
+  dimension: number;
+  cuda_available: boolean;
+}
+
 /** Batch-embed an array of texts. Returns embeddings and toxicity masks. */
 export async function embedTexts(texts: string[]): Promise<{embeddings: number[][], isToxic: boolean[]}> {
   if (texts.length === 0) return { embeddings: [], isToxic: [] };
@@ -47,4 +55,26 @@ export async function checkEmbedHealth(): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+/** Cached embed dimension — auto-detected from the service's /health endpoint. */
+let _cachedDimension: number | null = null;
+
+/** Get the embedding dimension from the running embed service. Cached after first call. */
+export async function getEmbedDimension(): Promise<number> {
+  if (_cachedDimension) return _cachedDimension;
+  try {
+    const res = await fetch(`${EMBED_URL}/health`);
+    if (res.ok) {
+      const data = (await res.json()) as HealthResponse;
+      _cachedDimension = data.dimension;
+      logger.info({ dimension: data.dimension, model: data.model }, 'Auto-detected embed dimension');
+      return data.dimension;
+    }
+  } catch {}
+  // Fallback to config
+  const { config } = await import('../lib/config.js');
+  _cachedDimension = config.EMBED_DIMENSION;
+  logger.warn({ dimension: _cachedDimension }, 'Failed to auto-detect embed dimension, using config fallback');
+  return _cachedDimension;
 }

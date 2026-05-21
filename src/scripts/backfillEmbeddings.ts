@@ -16,7 +16,7 @@
 import { db } from '../db/client.js';
 import { logger } from '../lib/logger.js';
 import { chunkText } from '../lib/chunking.js';
-import { embedTexts, checkEmbedHealth } from '../track/embedClient.js';
+import { embedTexts, checkEmbedHealth, getEmbedDimension } from '../track/embedClient.js';
 import { getOsClient, SITE_STANDARD_CHUNKS_INDEX, ensureSiteStandardChunksIndex } from '../track/opensearch.js';
 import { extractTextFromSiteStandard } from '../jobs/indexSiteStandard.js';
 
@@ -49,9 +49,9 @@ async function main() {
   }
   console.log('✅ Embed service is healthy\n');
 
-  // Log expected dimension
-  const { config } = await import('../lib/config.js');
-  console.log(`  Expected embedding dimension: ${config.EMBED_DIMENSION}\n`);
+  // Auto-detect dimension from running embed service
+  const embedDim = await getEmbedDimension();
+  console.log(`  Embedding dimension: ${embedDim}\n`);
 
   // 2. Ensure OpenSearch index exists
   await ensureSiteStandardChunksIndex();
@@ -145,10 +145,10 @@ async function main() {
       let skippedBad = 0;
       for (let j = 0; j < chunkMap.length; j++) {
         const emb = allEmbeddings[j];
-        if (!emb || !Array.isArray(emb) || emb.length !== config.EMBED_DIMENSION || emb.some((v: any) => !Number.isFinite(v))) {
+        if (!emb || !Array.isArray(emb) || emb.length !== embedDim || emb.some((v: any) => !Number.isFinite(v))) {
           skippedBad++;
           if (skippedBad === 1) {
-            console.log(`  ⏭️  Skipping bad embedding: len=${emb?.length ?? 'null'} (expected ${config.EMBED_DIMENSION})`);
+            console.log(`  ⏭️  Skipping bad embedding: len=${emb?.length ?? 'null'} (expected ${embedDim})`);
           }
           continue;
         }
@@ -183,7 +183,7 @@ async function main() {
             const firstDoc = bulkBody[1]; // first document (index 0 is the action)
             if (firstDoc) {
               const e = firstDoc.embedding;
-              console.error(`  🔬 Sent embedding: type=${typeof e}, isArray=${Array.isArray(e)}, len=${e?.length}, dim=${config.EMBED_DIMENSION}, first3=${JSON.stringify(e?.slice?.(0,3))}`);
+              console.error(`  🔬 Sent embedding: type=${typeof e}, isArray=${Array.isArray(e)}, len=${e?.length}, dim=${embedDim}, first3=${JSON.stringify(e?.slice?.(0,3))}`);
             }
           }
         }

@@ -1,6 +1,7 @@
 import { Client } from '@opensearch-project/opensearch';
 import { config } from '../lib/config.js';
 import { logger } from '../lib/logger.js';
+import { getEmbedDimension } from './embedClient.js';
 
 const PERCOLATE_INDEX = 'track_queries';
 
@@ -48,6 +49,8 @@ export async function ensureArticleIndex(): Promise<void> {
   const exists = await os.indices.exists({ index: ARTICLE_INDEX });
   if (exists.body) return;
 
+  const dimension = await getEmbedDimension();
+
   await os.indices.create({
     index: ARTICLE_INDEX,
     body: {
@@ -64,7 +67,7 @@ export async function ensureArticleIndex(): Promise<void> {
           text_content: { type: 'text' },
           embedding: { 
             type: 'knn_vector', 
-            dimension: config.EMBED_DIMENSION, 
+            dimension: dimension, 
             method: {
               name: 'hnsw',
               space_type: 'cosinesimil',
@@ -84,6 +87,8 @@ export async function ensureSiteStandardChunksIndex(): Promise<void> {
   const exists = await os.indices.exists({ index: SITE_STANDARD_CHUNKS_INDEX });
   if (exists.body) return;
 
+  const dimension = await getEmbedDimension();
+
   await os.indices.create({
     index: SITE_STANDARD_CHUNKS_INDEX,
     body: {
@@ -101,7 +106,7 @@ export async function ensureSiteStandardChunksIndex(): Promise<void> {
           language: { type: 'keyword' },
           embedding: {
             type: 'knn_vector',
-            dimension: config.EMBED_DIMENSION,
+            dimension: dimension,
             method: {
               name: 'hnsw',
               space_type: 'cosinesimil',
