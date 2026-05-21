@@ -251,46 +251,8 @@ export async function indexSiteStandardJob(job: Job<IndexSiteStandardData>) {
     
     logger.info({ uri: postUri, did }, 'Successfully indexed site.standard.document');
 
-    // 4. Chunk + embed for semantic search (skip short posts)
-    if (wordCount >= 50) {
-      setImmediate(async () => {
-        try {
-          const chunks = chunkText(textContent);
-          if (chunks.length === 0) return;
-
-          const { embeddings } = await embedTexts(chunks);
-          if (embeddings.length !== chunks.length) return;
-
-          // Build bulk body
-          const bulkBody: any[] = [];
-          for (let i = 0; i < chunks.length; i++) {
-            bulkBody.push({ index: { _index: SITE_STANDARD_CHUNKS_INDEX, _id: `${postUri}_chunk_${i}` } });
-            bulkBody.push({
-              uri: postUri,
-              did: did,
-              chunk_index: i,
-              published_at: publishedAt.toISOString(),
-              text_content: chunks[i],
-              site: site,
-              language: language,
-              embedding: embeddings[i],
-            });
-          }
-
-          const os = getOsClient();
-          const res = await os.bulk({ body: bulkBody });
-          if (res.body.errors) {
-            logger.warn({ uri: postUri }, 'Some chunks failed to index');
-          } else {
-            logger.debug({ uri: postUri, chunks: chunks.length }, 'Indexed document chunks with embeddings');
-          }
-        } catch (err) {
-          logger.debug({ err, uri: postUri }, 'Chunk+embed failed (non-fatal)');
-        }
-      });
-    }
-
-    // 7. Async verification — never blocks indexing
+    // Async verification + embed — never blocks indexing
+    // Embeddings only generated for verified documents
     setImmediate(async () => {
       try {
         const publicationUri = (record.site && typeof record.site === 'string' && record.site.startsWith('at://')) ? record.site : null;
@@ -301,6 +263,39 @@ export async function indexSiteStandardJob(job: Job<IndexSiteStandardData>) {
         );
         if (verified) {
           logger.info({ uri: postUri }, 'Document verified via standard.site');
+
+          // Chunk + embed verified documents for semantic search
+          if (wordCount >= 50) {
+            try {
+              const chunks = chunkText(textContent);
+              if (chunks.length > 0) {
+                const { embeddings } = await embedTexts(chunks);
+                if (embeddings.length === chunks.length) {
+                  const bulkBody: any[] = [];
+                  for (let i = 0; i < chunks.length; i++) {
+                    bulkBody.push({ index: { _index: SITE_STANDARD_CHUNKS_INDEX, _id: `${postUri}_chunk_${i}` } });
+                    bulkBody.push({
+                      uri: postUri,
+                      did: did,
+                      chunk_index: i,
+                      published_at: publishedAt.toISOString(),
+                      text_content: chunks[i],
+                      site: site,
+                      language: language,
+                      embedding: embeddings[i],
+                    });
+                  }
+                  const os = getOsClient();
+                  const res = await os.bulk({ body: bulkBody });
+                  if (!res.body.errors) {
+                    logger.debug({ uri: postUri, chunks: chunks.length }, 'Indexed verified document chunks with embeddings');
+                  }
+                }
+              }
+            } catch (err) {
+              logger.debug({ err, uri: postUri }, 'Chunk+embed failed (non-fatal)');
+            }
+          }
         }
       } catch (err) {
         logger.debug({ err, uri: postUri }, 'Verification step failed (non-fatal)');
