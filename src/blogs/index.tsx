@@ -67,9 +67,12 @@ app.get('/health', async (c) => {
   }
 });
 
-// ── Pre-warm stats cache at startup, refresh every 5 minutes ─────────────────
-warmStatsCache().catch(() => {});
-setInterval(() => warmStatsCache().catch(() => {}), 5 * 60 * 1000);
+// ── Pre-warm stats cache after a delay, refresh every 5 minutes ──────────────
+// Delayed so startup doesn't compete with first user requests for DB connections
+setTimeout(() => {
+  warmStatsCache().catch(() => {});
+  setInterval(() => warmStatsCache().catch(() => {}), 5 * 60 * 1000);
+}, 15_000);
 
 // ── Feed helpers ─────────────────────────────────────────────────────────────
 async function buildFeedItems(rows: any[], sessionDid: string | null): Promise<FeedItem[]> {
