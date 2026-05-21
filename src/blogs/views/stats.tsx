@@ -62,45 +62,50 @@ export function StatsPage({ stats }: { stats: BlogStats }) {
           <div class="bl-kpi-value">${fmt(stats.waa)}</div>
           <div class="bl-kpi-label">Weekly Active Authors</div>
           <div class="bl-kpi-sub">rolling 7 days</div>
-          <div class="bl-kpi-split">
+          <div class="bl-kpi-split bl-kpi-split-wrap">
             <span class="bl-kpi-native">🌐 ${fmt(stats.waa_native)} native</span>
             <span class="bl-kpi-bridgy">🌉 ${fmt(stats.waa_bridgyfed)} bridgyfed</span>
+            <span class="bl-kpi-verified">✅ ${fmt(stats.waa_verified)} verified</span>
           </div>
         </div>
         <div class="bl-kpi-card">
           <div class="bl-kpi-value">${fmt(stats.daa)}</div>
           <div class="bl-kpi-label">Daily Active Authors</div>
           <div class="bl-kpi-sub">yesterday</div>
-          <div class="bl-kpi-split">
+          <div class="bl-kpi-split bl-kpi-split-wrap">
             <span class="bl-kpi-native">🌐 ${fmt(stats.daa_native)} native</span>
             <span class="bl-kpi-bridgy">🌉 ${fmt(stats.daa_bridgyfed)} bridgyfed</span>
+            <span class="bl-kpi-verified">✅ ${fmt(stats.daa_verified)} verified</span>
           </div>
         </div>
         <div class="bl-kpi-card">
           <div class="bl-kpi-value">${fmt(stats.postsYesterday)}</div>
           <div class="bl-kpi-label">Posts Yesterday</div>
           <div class="bl-kpi-sub">${(stats.postsYesterday / Math.max(stats.daa, 1)).toFixed(1)} per author</div>
-          <div class="bl-kpi-split">
+          <div class="bl-kpi-split bl-kpi-split-wrap">
             <span class="bl-kpi-native">🌐 ${fmt(stats.posts_native)} native</span>
             <span class="bl-kpi-bridgy">🌉 ${fmt(stats.posts_bridgyfed)} bridgyfed</span>
+            <span class="bl-kpi-verified">✅ ${fmt(stats.posts_verified)} verified</span>
           </div>
         </div>
         <div class="bl-kpi-card">
           <div class="bl-kpi-value">${fmt(stats.totalAuthors)}</div>
           <div class="bl-kpi-label">Total Authors</div>
           <div class="bl-kpi-sub">all time</div>
-          <div class="bl-kpi-split">
+          <div class="bl-kpi-split bl-kpi-split-wrap">
             <span class="bl-kpi-native">🌐 ${fmt(stats.totalAuthors_native)} native</span>
             <span class="bl-kpi-bridgy">🌉 ${fmt(stats.totalAuthors_bridgyfed)} bridgyfed</span>
+            <span class="bl-kpi-verified">✅ ${fmt(stats.totalAuthors_verified)} verified</span>
           </div>
         </div>
         <div class="bl-kpi-card">
           <div class="bl-kpi-value">${fmt(stats.totalPosts)}</div>
           <div class="bl-kpi-label">Total Posts</div>
           <div class="bl-kpi-sub">all time</div>
-          <div class="bl-kpi-split">
+          <div class="bl-kpi-split bl-kpi-split-wrap">
             <span class="bl-kpi-native">🌐 ${fmt(stats.totalPosts_native)} native</span>
             <span class="bl-kpi-bridgy">🌉 ${fmt(stats.totalPosts_bridgyfed)} bridgyfed</span>
+            <span class="bl-kpi-verified">✅ ${fmt(stats.totalPosts_verified)} verified</span>
           </div>
         </div>
         <div class="bl-kpi-card">
@@ -128,15 +133,35 @@ export function StatsPage({ stats }: { stats: BlogStats }) {
 
         <!-- WAA Trend -->
         <div class="bl-chart-card bl-chart-wide">
-          <div class="bl-chart-title">Weekly Active Authors — 30 Day Trend</div>
-          <div class="bl-chart-sub">Rolling 7-day unique authors</div>
+          <div class="bl-chart-header">
+            <div>
+              <div class="bl-chart-title">Weekly Active Authors — 30 Day Trend</div>
+              <div class="bl-chart-sub">Rolling 7-day unique authors</div>
+            </div>
+            <div class="bl-toggle" data-target="waa">
+              <button class="bl-toggle-btn active" data-mode="all">All</button>
+              <button class="bl-toggle-btn" data-mode="native">Native</button>
+              <button class="bl-toggle-btn" data-mode="bridgyfed">BridgyFed</button>
+              <button class="bl-toggle-btn" data-mode="verified">Verified</button>
+            </div>
+          </div>
           <canvas id="waaChart" height="80"></canvas>
         </div>
 
         <!-- Daily Activity -->
         <div class="bl-chart-card bl-chart-wide">
-          <div class="bl-chart-title">Daily Posts & Authors</div>
-          <div class="bl-chart-sub">Last 30 days</div>
+          <div class="bl-chart-header">
+            <div>
+              <div class="bl-chart-title">Daily Posts & Authors</div>
+              <div class="bl-chart-sub">Last 30 days</div>
+            </div>
+            <div class="bl-toggle" data-target="daily">
+              <button class="bl-toggle-btn active" data-mode="all">All</button>
+              <button class="bl-toggle-btn" data-mode="native">Native</button>
+              <button class="bl-toggle-btn" data-mode="bridgyfed">BridgyFed</button>
+              <button class="bl-toggle-btn" data-mode="verified">Verified</button>
+            </div>
+          </div>
           <canvas id="dailyChart" height="80"></canvas>
         </div>
 
@@ -159,8 +184,18 @@ export function StatsPage({ stats }: { stats: BlogStats }) {
 
         <!-- New authors per day -->
         <div class="bl-chart-card">
-          <div class="bl-chart-title">New Authors Per Day</div>
-          <div class="bl-chart-sub">First-time publishers — 30 days</div>
+          <div class="bl-chart-header">
+            <div>
+              <div class="bl-chart-title">New Authors Per Day</div>
+              <div class="bl-chart-sub">First-time publishers — 30 days</div>
+            </div>
+            <div class="bl-toggle" data-target="newauth">
+              <button class="bl-toggle-btn active" data-mode="all">All</button>
+              <button class="bl-toggle-btn" data-mode="native">Native</button>
+              <button class="bl-toggle-btn" data-mode="bridgyfed">BridgyFed</button>
+              <button class="bl-toggle-btn" data-mode="verified">Verified</button>
+            </div>
+          </div>
           <canvas id="newAuthChart" height="140"></canvas>
         </div>
 
@@ -256,7 +291,10 @@ export function StatsPage({ stats }: { stats: BlogStats }) {
             btn.classList.add('active');
             var target = toggle.dataset.target;
             var mode = btn.dataset.mode;
+            if (target === 'waa') updateWaa(mode);
+            if (target === 'daily') updateDaily(mode);
             if (target === 'retention') updateRetention(mode);
+            if (target === 'newauth') updateNewAuth(mode);
             if (target === 'heatmap') renderHeatmap(mode);
             if (target === 'sites') updateSites(mode);
             if (target === 'lang') updateLang(mode);
@@ -264,8 +302,8 @@ export function StatsPage({ stats }: { stats: BlogStats }) {
         });
       });
 
-      // ── WAA Trend ──────────────────────────────────────────
-      new Chart(document.getElementById('waaChart'), {
+      // ── WAA Trend (togglable) ──────────────────────────────
+      var waaChart = new Chart(document.getElementById('waaChart'), {
         type: 'line',
         data: {
           labels: WAA_DATA.map(d => d.day.slice(5)),
@@ -288,6 +326,12 @@ export function StatsPage({ stats }: { stats: BlogStats }) {
               data: WAA_DATA.map(d => d.waa_bridgyfed),
               borderColor: GREEN, backgroundColor: 'transparent',
               tension: 0.4, pointRadius: 1, pointHoverRadius: 4, borderWidth: 1.5, borderDash: [4, 2],
+            },
+            {
+              label: 'Verified',
+              data: WAA_DATA.map(d => d.waa_verified),
+              borderColor: VERIFIED, backgroundColor: 'transparent',
+              tension: 0.4, pointRadius: 1, pointHoverRadius: 4, borderWidth: 1.5, borderDash: [2, 2],
             }
           ]
         },
@@ -297,9 +341,15 @@ export function StatsPage({ stats }: { stats: BlogStats }) {
           scales: { x: { grid: { color: GRID } }, y: { grid: { color: GRID }, beginAtZero: false } }
         }
       });
+      function updateWaa(mode) {
+        var show = { all: [true,true,true,true], native: [false,true,false,false], bridgyfed: [false,false,true,false], verified: [false,false,false,true] };
+        var vis = show[mode] || show.all;
+        waaChart.data.datasets.forEach(function(ds, i) { ds.hidden = !vis[i]; });
+        waaChart.update();
+      }
 
-      // ── Daily Activity ─────────────────────────────────────
-      new Chart(document.getElementById('dailyChart'), {
+      // ── Daily Activity (togglable) ──────────────────────────
+      var dailyChart = new Chart(document.getElementById('dailyChart'), {
         type: 'bar',
         data: {
           labels: DAILY_DATA.map(d => d.day.slice(5)),
@@ -320,6 +370,50 @@ export function StatsPage({ stats }: { stats: BlogStats }) {
           }
         }
       });
+      function updateDaily(mode) {
+        if (mode === 'verified') {
+          dailyChart.data.datasets[0].data = DAILY_DATA.map(d => d.posts_verified);
+          dailyChart.data.datasets[0].backgroundColor = 'rgba(34,211,238,0.55)';
+          dailyChart.data.datasets[0].label = 'Posts (Verified)';
+          dailyChart.data.datasets[1].data = DAILY_DATA.map(d => 0);
+          dailyChart.data.datasets[1].backgroundColor = 'transparent';
+          dailyChart.data.datasets[2].data = DAILY_DATA.map(d => d.authors_verified);
+          dailyChart.data.datasets[2].borderColor = VERIFIED;
+          dailyChart.data.datasets[2].label = 'Authors (Verified)';
+          dailyChart.data.datasets[3].data = DAILY_DATA.map(d => 0);
+        } else if (mode === 'native') {
+          dailyChart.data.datasets[0].data = DAILY_DATA.map(d => d.posts_native);
+          dailyChart.data.datasets[0].backgroundColor = 'rgba(245,158,11,0.55)';
+          dailyChart.data.datasets[0].label = 'Posts (Native)';
+          dailyChart.data.datasets[1].data = DAILY_DATA.map(d => 0);
+          dailyChart.data.datasets[1].backgroundColor = 'transparent';
+          dailyChart.data.datasets[2].data = DAILY_DATA.map(d => d.authors_native);
+          dailyChart.data.datasets[2].borderColor = AMBER;
+          dailyChart.data.datasets[2].label = 'Authors (Native)';
+          dailyChart.data.datasets[3].data = DAILY_DATA.map(d => 0);
+        } else if (mode === 'bridgyfed') {
+          dailyChart.data.datasets[0].data = DAILY_DATA.map(d => d.posts_bridgyfed);
+          dailyChart.data.datasets[0].backgroundColor = 'rgba(16,185,129,0.55)';
+          dailyChart.data.datasets[0].label = 'Posts (BridgyFed)';
+          dailyChart.data.datasets[1].data = DAILY_DATA.map(d => 0);
+          dailyChart.data.datasets[1].backgroundColor = 'transparent';
+          dailyChart.data.datasets[2].data = DAILY_DATA.map(d => d.authors_bridgyfed);
+          dailyChart.data.datasets[2].borderColor = GREEN;
+          dailyChart.data.datasets[2].label = 'Authors (BridgyFed)';
+          dailyChart.data.datasets[3].data = DAILY_DATA.map(d => 0);
+        } else {
+          dailyChart.data.datasets[0].data = DAILY_DATA.map(d => d.posts_native);
+          dailyChart.data.datasets[0].backgroundColor = 'rgba(99,102,241,0.55)';
+          dailyChart.data.datasets[0].label = 'Posts (Native)';
+          dailyChart.data.datasets[1].data = DAILY_DATA.map(d => d.posts_bridgyfed);
+          dailyChart.data.datasets[1].backgroundColor = 'rgba(16,185,129,0.45)';
+          dailyChart.data.datasets[2].data = DAILY_DATA.map(d => d.authors_native);
+          dailyChart.data.datasets[2].borderColor = AMBER;
+          dailyChart.data.datasets[2].label = 'Authors (Native)';
+          dailyChart.data.datasets[3].data = DAILY_DATA.map(d => d.authors_bridgyfed);
+        }
+        dailyChart.update();
+      }
 
       // ── Retention stacked bar (togglable) ───────────────────
       var retChart = new Chart(document.getElementById('retentionChart'), {
@@ -343,6 +437,8 @@ export function StatsPage({ stats }: { stats: BlogStats }) {
           ? { ret: 'retained_native', nw: 'new_native', ch: 'churned_native' }
           : mode === 'bridgyfed'
           ? { ret: 'retained_bridgyfed', nw: 'new_bridgyfed', ch: 'churned_bridgyfed' }
+          : mode === 'verified'
+          ? { ret: 'retained_verified', nw: 'new_verified', ch: 'churned_verified' }
           : { ret: 'retained', nw: 'new_authors', ch: 'churned' };
         retChart.data.datasets[0].data = RET_DATA.map(d => d[r.ret]);
         retChart.data.datasets[1].data = RET_DATA.map(d => d[r.nw]);
@@ -350,14 +446,15 @@ export function StatsPage({ stats }: { stats: BlogStats }) {
         retChart.update();
       }
 
-      // ── New Authors ────────────────────────────────────────
-      new Chart(document.getElementById('newAuthChart'), {
+      // ── New Authors (togglable) ─────────────────────────────
+      var newAuthChart = new Chart(document.getElementById('newAuthChart'), {
         type: 'bar',
         data: {
           labels: NEWAUTH_DATA.map(d => d.day.slice(5)),
           datasets: [
             { label: 'Native', data: NEWAUTH_DATA.map(d => d.new_native), backgroundColor: 'rgba(245,158,11,0.6)', stack: 'a' },
-            { label: 'BridgyFed', data: NEWAUTH_DATA.map(d => d.new_bridgyfed), backgroundColor: 'rgba(16,185,129,0.6)', stack: 'a' }
+            { label: 'BridgyFed', data: NEWAUTH_DATA.map(d => d.new_bridgyfed), backgroundColor: 'rgba(16,185,129,0.6)', stack: 'a' },
+            { label: 'Verified', data: NEWAUTH_DATA.map(d => d.new_verified), backgroundColor: 'rgba(34,211,238,0.6)', stack: 'a', hidden: true }
           ]
         },
         options: {
@@ -366,6 +463,26 @@ export function StatsPage({ stats }: { stats: BlogStats }) {
           scales: { x: { grid: { color: GRID }, stacked: true }, y: { grid: { color: GRID }, beginAtZero: true, stacked: true } }
         }
       });
+      function updateNewAuth(mode) {
+        if (mode === 'verified') {
+          newAuthChart.data.datasets[0].hidden = true;
+          newAuthChart.data.datasets[1].hidden = true;
+          newAuthChart.data.datasets[2].hidden = false;
+        } else if (mode === 'native') {
+          newAuthChart.data.datasets[0].hidden = false;
+          newAuthChart.data.datasets[1].hidden = true;
+          newAuthChart.data.datasets[2].hidden = true;
+        } else if (mode === 'bridgyfed') {
+          newAuthChart.data.datasets[0].hidden = true;
+          newAuthChart.data.datasets[1].hidden = false;
+          newAuthChart.data.datasets[2].hidden = true;
+        } else {
+          newAuthChart.data.datasets[0].hidden = false;
+          newAuthChart.data.datasets[1].hidden = false;
+          newAuthChart.data.datasets[2].hidden = true;
+        }
+        newAuthChart.update();
+      }
 
       // ── Heatmap (togglable) ─────────────────────────────────
       function renderHeatmap(mode) {
