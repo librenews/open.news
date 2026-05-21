@@ -10,7 +10,7 @@ import { FeedPage, type FeedItem } from './views/feed.js';
 import { AuthorPage, type AuthorProfile, type AuthorPost } from './views/author.js';
 import { SubscriptionsPage, type SubscriptionItem } from './views/subscriptions.js';
 import { StatsPage } from './views/stats.js';
-import { BlogSearchPage, type BlogSearchResult } from './views/search.js';
+import { BlogSearchContent, BlogSearchStyles, type BlogSearchResult } from './views/search.js';
 import { searchSiteStandardArticles } from '../track/opensearch.js';
 import { getBlogStats, startStatsWarm } from './lib/statsCache.js';
 import { blogsAuthRouter, getBlogsSession } from './routes/auth.js';
@@ -412,8 +412,13 @@ app.get('/search', async (c) => {
       logger.error({ err, q }, 'Blog search failed');
     }
   }
-
-  return c.html(BlogSearchPage({ query: q, results, sort, filter, page, perPage, total, session }) as unknown as string);
+  const searchTitle = q ? `"${q}" — Search blogs.social` : 'Search — blogs.social';
+  const searchHead = html`<style>${BlogSearchStyles}</style>`;
+  return c.html((
+    <BlogsLayout title={searchTitle} session={session} navPage="search" headExtra={searchHead}>
+      {BlogSearchContent({ query: q, results, sort, filter, page, perPage, total })}
+    </BlogsLayout>
+  ) as unknown as string);
 });
 
 // ── Subscriptions page ──────────────────────────────────────────────────────
