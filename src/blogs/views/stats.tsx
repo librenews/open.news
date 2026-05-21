@@ -120,8 +120,8 @@ export function StatsPage({ stats }: { stats: BlogStats }) {
         </div>
         <div class="bl-kpi-card">
           <div class="bl-kpi-value">${wowAll}</div>
-          <div class="bl-kpi-label">WAA Growth</div>
-          <div class="bl-kpi-sub">week-over-week change</div>
+          <div class="bl-kpi-label">Author Growth</div>
+          <div class="bl-kpi-sub">weekly active authors · week-over-week</div>
           <div class="bl-kpi-split bl-kpi-split-wrap">
             <span class="bl-kpi-native">🌐 ${wowNative} native</span>
             <span class="bl-kpi-bridgy">🌉 ${wowBridgy} bridgyfed</span>
