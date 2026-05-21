@@ -166,7 +166,7 @@ app.get('/', async (c) => {
           SELECT DISTINCT ON (s.author_did)
             s.uri, s.author_did, s.title, s.site, s.path,
             s.published_at, s.word_count, s.created_at,
-            COALESCE(s.description, LEFT(COALESCE(s.raw_record->>'content', s.raw_record->>'textContent'), 600)) AS text_content,
+            COALESCE(s.description, s.raw_record->>'content', s.raw_record->>'textContent') AS text_content,
             s.raw_record->'tags' AS tags_json,
             COALESCE(ai_counts.like_count, 0) AS like_count,
             COALESCE(ai_counts.share_count, 0) AS share_count,
@@ -196,7 +196,7 @@ app.get('/', async (c) => {
       SELECT
         s.uri, s.author_did, s.title, s.site, s.path,
         s.published_at, s.word_count, s.created_at,
-        COALESCE(s.description, LEFT(COALESCE(s.raw_record->>'content', s.raw_record->>'textContent'), 600)) AS text_content,
+        COALESCE(s.description, s.raw_record->>'content', s.raw_record->>'textContent') AS text_content,
         s.raw_record->'tags' AS tags_json,
         COALESCE(ai_counts.like_count, 0) AS like_count,
         COALESCE(ai_counts.share_count, 0) AS share_count,
@@ -254,7 +254,7 @@ app.get('/tag/:tag', async (c) => {
     SELECT
       s.uri, s.author_did, s.title, s.site, s.path,
       s.published_at, s.word_count, s.created_at,
-      COALESCE(s.description, LEFT(COALESCE(s.raw_record->>'content', s.raw_record->>'textContent'), 600)) AS text_content,
+      COALESCE(s.description, s.raw_record->>'content', s.raw_record->>'textContent') AS text_content,
       s.raw_record->'tags' AS tags_json,
       COALESCE(ai_counts.like_count, 0) AS like_count,
       COALESCE(ai_counts.share_count, 0) AS share_count,
@@ -395,12 +395,11 @@ app.get('/author/:did', async (c) => {
     try { return new URL(r.site).hostname.replace(/^www\./, ''); } catch { return r.site; }
   });
 
-  // Posts
   const { rows: postRows } = await db.query(`
     SELECT
       s.uri, s.title, s.site, s.path, s.published_at, s.word_count,
       s.created_at,
-    COALESCE(s.description, LEFT(COALESCE(s.raw_record->>'content', s.raw_record->>'textContent'), 600)) AS text_content,
+      COALESCE(s.description, s.raw_record->>'content', s.raw_record->>'textContent') AS text_content,
       s.raw_record->'tags' AS tags_json
     FROM site_standard_articles s
     WHERE s.author_did = $1
