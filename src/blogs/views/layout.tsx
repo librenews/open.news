@@ -1,6 +1,6 @@
 import { html, raw } from 'hono/html';
 
-export function BlogsLayout({ title, children, session }: { title: string; children: any; session?: { did: string; handle: string } | null }) {
+export function BlogsLayout({ title, children, session, navPage = '' }: { title: string; children: any; session?: { did: string; handle: string } | null; navPage?: string }) {
   return html`
     <!DOCTYPE html>
     <html lang="en">
@@ -749,6 +749,112 @@ export function BlogsLayout({ title, children, session }: { title: string; child
             .bl-feed-layout { grid-template-columns: 1fr; }
             .bl-sidebar { display: none; }
           }
+
+          /* ── App shell (three-column) ──────────────────────────── */
+          .bl-app-shell {
+            display: flex;
+            min-height: calc(100vh - 3.5rem);
+            max-width: 1240px;
+            margin: 0 auto;
+          }
+          .bl-left-nav {
+            width: 196px;
+            flex-shrink: 0;
+            border-right: 1px solid var(--border);
+            position: sticky;
+            top: 3.5rem;
+            height: calc(100vh - 3.5rem);
+            overflow-y: auto;
+            padding: 1.25rem 0.75rem;
+            display: flex;
+            flex-direction: column;
+          }
+          .bl-nav-items {
+            display: flex;
+            flex-direction: column;
+            gap: 0.15rem;
+            flex: 1;
+          }
+          .bl-nav-item {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.6rem 0.85rem;
+            border-radius: 10px;
+            color: var(--text-muted);
+            text-decoration: none;
+            font-size: 0.88rem;
+            font-weight: 500;
+            transition: all 0.15s;
+          }
+          .bl-nav-item svg {
+            width: 18px;
+            height: 18px;
+            flex-shrink: 0;
+          }
+          .bl-nav-item:hover {
+            background: var(--surface);
+            color: var(--text);
+          }
+          .bl-nav-active {
+            background: rgba(99,102,241,0.1);
+            color: var(--accent);
+            font-weight: 600;
+          }
+          .bl-nav-footer {
+            padding-top: 1rem;
+            border-top: 1px solid var(--border);
+          }
+          .bl-nav-write-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            width: 100%;
+            padding: 0.6rem 1rem;
+            background: var(--accent);
+            color: var(--bg);
+            border: none;
+            border-radius: 99px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            font-family: inherit;
+            cursor: pointer;
+            text-decoration: none;
+            transition: opacity 0.15s;
+          }
+          .bl-nav-write-btn:hover { opacity: 0.85; }
+          .bl-content {
+            flex: 1;
+            min-width: 0;
+            padding: 1.5rem 1.5rem 3rem;
+          }
+
+          /* Remove the bl-feed centering when inside the app shell */
+          .bl-content .bl-feed {
+            max-width: 660px;
+            margin: 0;
+            padding-top: 0;
+          }
+          .bl-content .bl-feed-layout {
+            max-width: 860px;
+            margin: 0;
+          }
+
+          /* ── Left nav responsive ────────────────────────────────── */
+          @media (max-width: 900px) {
+            .bl-left-nav { width: 56px; padding: 1rem 0.4rem; }
+            .bl-nav-item { padding: 0.6rem; justify-content: center; gap: 0; }
+            .bl-nav-item svg { width: 20px; height: 20px; }
+            .bl-nav-item span, .bl-nav-item:not(:has(svg)) { font-size: 0; }
+            .bl-nav-write-btn { padding: 0.6rem; font-size: 0; }
+            .bl-nav-write-btn svg { width: 18px; height: 18px; }
+            .bl-content { padding: 1rem 0.75rem; }
+          }
+          @media (max-width: 600px) {
+            .bl-left-nav { display: none; }
+            .bl-content { padding: 0.75rem; }
+          }
         </style>
       </head>
       <body>
@@ -756,12 +862,8 @@ export function BlogsLayout({ title, children, session }: { title: string; child
           <div class="bl-header-inner">
             <a href="/" class="bl-logo">blogs<span>.social</span></a>
             <div class="bl-header-actions">
-              <a href="/stats" class="bl-btn bl-btn-outline" style="font-size:0.75rem;padding:0.3rem 0.7rem;">Stats</a>
               ${session
-      ? html`
-                  <button onclick="openCompose()" class="bl-btn bl-btn-primary" style="cursor:pointer;">✎ Write</button>
-                  <a href="/author/${session.did}" class="bl-btn bl-btn-outline">${session.handle}</a>
-                `
+      ? html`<a href="/author/${session.did}" class="bl-btn bl-btn-outline" style="font-size:0.8rem;">${session.handle}</a>`
       : html`<a href="/auth/login" class="bl-btn bl-btn-primary">Sign in</a>`
     }
             </div>
@@ -815,7 +917,41 @@ export function BlogsLayout({ title, children, session }: { title: string; child
         </div>
         ` : ''}
 
-        ${children}
+        <div class="bl-app-shell">
+          <nav class="bl-left-nav">
+            <div class="bl-nav-items">
+              <a href="/" class="bl-nav-item ${navPage === 'home' ? 'bl-nav-active' : ''}">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+                Home
+              </a>
+              <a href="/stats" class="bl-nav-item ${navPage === 'stats' ? 'bl-nav-active' : ''}">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+                Stats
+              </a>
+              ${session ? `
+              <a href="/author/${session.did}" class="bl-nav-item ${navPage === 'profile' ? 'bl-nav-active' : ''}">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                Profile
+              </a>
+              <a href="/?view=following" class="bl-nav-item ${navPage === 'following' ? 'bl-nav-active' : ''}">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                Following
+              </a>
+              ` : ''}
+            </div>
+            ${session ? `
+            <div class="bl-nav-footer">
+              <button onclick="openCompose()" class="bl-nav-write-btn">
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                Write
+              </button>
+            </div>
+            ` : ''}
+          </nav>
+          <div class="bl-content">
+            ${children}
+          </div>
+        </div>
 
         <script src="/js/blogs.js"></script>
       </body>

@@ -227,7 +227,7 @@ app.get('/', async (c) => {
   const newPostsTs = rows[0]?.created_at?.toISOString() || new Date().toISOString();
 
   return c.html((
-    <BlogsLayout title="blogs.social — Discover the open web" session={session}>
+    <BlogsLayout title="blogs.social — Discover the open web" session={session} navPage="home">
       <FeedPage
         items={items}
         page={page}
@@ -333,7 +333,7 @@ app.get('/stats', async (c) => {
   try {
     const stats = await getBlogStats();
     return c.html((
-      <BlogsLayout title="Platform Stats — blogs.social" session={session}>
+      <BlogsLayout title="Platform Stats — blogs.social" session={session} navPage="stats">
         <StatsPage stats={stats} />
       </BlogsLayout>
     ) as unknown as string);
@@ -374,7 +374,7 @@ app.get('/author/:did', async (c) => {
     profile.handle = p.handle || did;
     profile.displayName = p.displayName || '';
     profile.avatar = p.avatar || null;
-    profile.description = p.description || '';
+    profile.description = (p as any).description || '';
   } catch {}
 
   // Post count
@@ -433,7 +433,7 @@ app.get('/author/:did', async (c) => {
   const followedDids = await getFollowedDids(session?.did ?? null);
 
   return c.html((
-    <BlogsLayout title={`${profile.displayName || profile.handle} — blogs.social`} session={session}>
+    <BlogsLayout title={`${profile.displayName || profile.handle} — blogs.social`} session={session} navPage="profile">
       <AuthorPage profile={profile} posts={posts} page={page} session={session} followedDids={followedDids} />
     </BlogsLayout>
   ) as unknown as string);
