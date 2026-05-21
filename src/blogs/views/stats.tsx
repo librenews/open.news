@@ -15,6 +15,10 @@ function pct(a: number, b: number): string {
 export function StatsPage({ stats }: { stats: BlogStats }) {
   const updatedAt = new Date(stats.updatedAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZoneName: 'short' });
 
+  // Verification rate (of checked posts only)
+  const checkedTotal = stats.totalVerified + stats.totalUnverified;
+  const verificationRate = checkedTotal > 0 ? Math.round(stats.totalVerified / checkedTotal * 100) + '%' : '—';
+
   // Average retention across 14-day window (native-only — bridgyfed aggregators post daily and inflate to 100%)
   const retDaysNative = stats.retention.filter(d => d.retained_native + d.churned_native > 0);
   const avgRetentionNative = retDaysNative.length > 0
@@ -99,6 +103,16 @@ export function StatsPage({ stats }: { stats: BlogStats }) {
           <div class="bl-kpi-sub">14-day avg · native only</div>
           <div class="bl-kpi-split">
             <span class="bl-kpi-bridgy">🌉 ${avgRetentionBridgy} bridgyfed</span>
+          </div>
+        </div>
+        <div class="bl-kpi-card">
+          <div class="bl-kpi-value">${verificationRate}</div>
+          <div class="bl-kpi-label">Verification Rate</div>
+          <div class="bl-kpi-sub">standard.site verified</div>
+          <div class="bl-kpi-split">
+            <span class="bl-kpi-native">✅ ${fmt(stats.totalVerified)} verified</span>
+            <span class="bl-kpi-bridgy">❌ ${fmt(stats.totalUnverified)} unverified</span>
+            <span style="font-size:0.68rem;color:rgba(255,255,255,0.35)">⏳ ${fmt(stats.totalUnchecked)} unchecked</span>
           </div>
         </div>
       </div>

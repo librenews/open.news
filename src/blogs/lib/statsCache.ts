@@ -26,6 +26,11 @@ export interface BlogStats {
   totalPosts_native: number;
   totalPosts_bridgyfed: number;
 
+  // Verification
+  totalVerified: number;
+  totalUnverified: number;
+  totalUnchecked: number;
+
   // 30-day trend (WAA rolling)
   waaTrend: { day: string; waa: number; waa_native: number; waa_bridgyfed: number }[];
 
@@ -124,7 +129,10 @@ async function _fetchStats(): Promise<BlogStats> {
            WHERE created_at >= NOW() - INTERVAL '14 days'
              AND EXTRACT(DOW FROM created_at) BETWEEN 1 AND 5
            GROUP BY DATE(created_at)
-         ) sub) AS avg_posts_per_author
+         ) sub) AS avg_posts_per_author,
+        (SELECT COUNT(*) FROM site_standard_articles WHERE verified = true) AS total_verified,
+        (SELECT COUNT(*) FROM site_standard_articles WHERE verified = false) AS total_unverified,
+        (SELECT COUNT(*) FROM site_standard_articles WHERE verified IS NULL) AS total_unchecked
     `),
 
     // WAA 30-day rolling trend
@@ -300,6 +308,9 @@ async function _fetchStats(): Promise<BlogStats> {
     totalAuthors_bridgyfed: Number(kpi.total_authors_bridgyfed),
     totalPosts_native: Number(kpi.total_posts_native),
     totalPosts_bridgyfed: Number(kpi.total_posts_bridgyfed),
+    totalVerified: Number(kpi.total_verified),
+    totalUnverified: Number(kpi.total_unverified),
+    totalUnchecked: Number(kpi.total_unchecked),
     waaTrend: waaTrendRows.rows.map((r: any) => ({ day: r.day.toISOString().slice(0, 10), waa: Number(r.waa), waa_native: Number(r.waa_native), waa_bridgyfed: Number(r.waa_bridgyfed) })),
     dailyActivity: dailyRows.rows.map((r: any) => ({ day: r.day.toISOString().slice(0, 10), posts: Number(r.posts), authors: Number(r.authors), posts_native: Number(r.posts_native), posts_bridgyfed: Number(r.posts_bridgyfed), authors_native: Number(r.authors_native), authors_bridgyfed: Number(r.authors_bridgyfed) })),
     retention: retentionRows.rows.map((r: any) => ({ day: r.day.slice(0, 10), retained: Number(r.retained), new_authors: Number(r.new_authors), churned: Number(r.churned), retained_native: Number(r.retained_native), new_native: Number(r.new_native), churned_native: Number(r.churned_native), retained_bridgyfed: Number(r.retained_bridgyfed), new_bridgyfed: Number(r.new_bridgyfed), churned_bridgyfed: Number(r.churned_bridgyfed) })),
