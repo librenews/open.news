@@ -17,7 +17,11 @@ export function StatsPage({ stats }: { stats: BlogStats }) {
 
   // Verification rate (of checked posts only)
   const checkedTotal = stats.totalVerified + stats.totalUnverified;
-  const verificationRate = checkedTotal > 0 ? Math.round(stats.totalVerified / checkedTotal * 100) + '%' : '—';
+  const verificationRate = checkedTotal > 0
+    ? ((stats.totalVerified / checkedTotal * 100) < 1
+        ? (stats.totalVerified / checkedTotal * 100).toFixed(1) + '%'
+        : Math.round(stats.totalVerified / checkedTotal * 100) + '%')
+    : '—';
 
   // Average retention across 14-day window (native-only — bridgyfed aggregators post daily and inflate to 100%)
   const retDaysNative = stats.retention.filter(d => d.retained_native + d.churned_native > 0);
@@ -37,9 +41,11 @@ export function StatsPage({ stats }: { stats: BlogStats }) {
   const topSitesJson = JSON.stringify(stats.topSites);
   const topSitesNativeJson = JSON.stringify(stats.topSitesNative);
   const topSitesBridgyfedJson = JSON.stringify(stats.topSitesBridgyfed);
+  const topSitesVerifiedJson = JSON.stringify(stats.topSitesVerified);
   const langJson = JSON.stringify(stats.languages);
   const langNativeJson = JSON.stringify(stats.languagesNative);
   const langBridgyfedJson = JSON.stringify(stats.languagesBridgyfed);
+  const langVerifiedJson = JSON.stringify(stats.languagesVerified);
   const newAuthJson = JSON.stringify(stats.newAuthors);
 
   return html`
@@ -109,10 +115,10 @@ export function StatsPage({ stats }: { stats: BlogStats }) {
           <div class="bl-kpi-value">${verificationRate}</div>
           <div class="bl-kpi-label">Verification Rate</div>
           <div class="bl-kpi-sub">standard.site verified</div>
-          <div class="bl-kpi-split">
-            <span class="bl-kpi-native">✅ ${fmt(stats.totalVerified)} verified</span>
+          <div class="bl-kpi-split bl-kpi-split-wrap">
+            <span class="bl-kpi-verified">✅ ${fmt(stats.totalVerified)} verified</span>
             <span class="bl-kpi-bridgy">❌ ${fmt(stats.totalUnverified)} unverified</span>
-            <span style="font-size:0.68rem;color:rgba(255,255,255,0.35)">⏳ ${fmt(stats.totalUnchecked)} unchecked</span>
+            <span class="bl-kpi-unchecked">⏳ ${fmt(stats.totalUnchecked)} unchecked</span>
           </div>
         </div>
       </div>
@@ -145,6 +151,7 @@ export function StatsPage({ stats }: { stats: BlogStats }) {
               <button class="bl-toggle-btn active" data-mode="all">All</button>
               <button class="bl-toggle-btn" data-mode="native">Native</button>
               <button class="bl-toggle-btn" data-mode="bridgyfed">BridgyFed</button>
+              <button class="bl-toggle-btn" data-mode="verified">Verified</button>
             </div>
           </div>
           <canvas id="retentionChart" height="140"></canvas>
@@ -168,6 +175,7 @@ export function StatsPage({ stats }: { stats: BlogStats }) {
               <button class="bl-toggle-btn active" data-mode="all">All</button>
               <button class="bl-toggle-btn" data-mode="native">Native</button>
               <button class="bl-toggle-btn" data-mode="bridgyfed">BridgyFed</button>
+              <button class="bl-toggle-btn" data-mode="verified">Verified</button>
             </div>
           </div>
           <div id="heatmap" class="bl-heatmap"></div>
@@ -184,6 +192,7 @@ export function StatsPage({ stats }: { stats: BlogStats }) {
               <button class="bl-toggle-btn active" data-mode="all">All</button>
               <button class="bl-toggle-btn" data-mode="native">Native</button>
               <button class="bl-toggle-btn" data-mode="bridgyfed">BridgyFed</button>
+              <button class="bl-toggle-btn" data-mode="verified">Verified</button>
             </div>
           </div>
           <canvas id="sitesChart" height="220"></canvas>
@@ -200,6 +209,7 @@ export function StatsPage({ stats }: { stats: BlogStats }) {
               <button class="bl-toggle-btn active" data-mode="all">All</button>
               <button class="bl-toggle-btn" data-mode="native">Native</button>
               <button class="bl-toggle-btn" data-mode="bridgyfed">BridgyFed</button>
+              <button class="bl-toggle-btn" data-mode="verified">Verified</button>
             </div>
           </div>
           <canvas id="langChart" height="220"></canvas>
@@ -217,18 +227,21 @@ export function StatsPage({ stats }: { stats: BlogStats }) {
       const SITES_DATA  = ${raw(topSitesJson)};
       const SITES_NATIVE = ${raw(topSitesNativeJson)};
       const SITES_BRIDGY = ${raw(topSitesBridgyfedJson)};
+      const SITES_VERIFIED = ${raw(topSitesVerifiedJson)};
       const LANG_DATA   = ${raw(langJson)};
       const LANG_NATIVE = ${raw(langNativeJson)};
       const LANG_BRIDGY = ${raw(langBridgyfedJson)};
+      const LANG_VERIFIED = ${raw(langVerifiedJson)};
       const NEWAUTH_DATA = ${raw(newAuthJson)};
 
-      const ACCENT  = '#6366f1';
-      const GREEN   = '#10b981';
-      const AMBER   = '#f59e0b';
-      const RED     = '#ef4444';
-      const MUTED   = 'rgba(255,255,255,0.12)';
-      const TEXT    = 'rgba(255,255,255,0.7)';
-      const GRID    = 'rgba(255,255,255,0.05)';
+      const ACCENT    = '#6366f1';
+      const GREEN     = '#10b981';
+      const AMBER     = '#f59e0b';
+      const RED       = '#ef4444';
+      const VERIFIED  = '#22d3ee';
+      const MUTED     = 'rgba(255,255,255,0.12)';
+      const TEXT      = 'rgba(255,255,255,0.7)';
+      const GRID      = 'rgba(255,255,255,0.05)';
 
       Chart.defaults.color = TEXT;
       Chart.defaults.borderColor = GRID;
@@ -357,7 +370,7 @@ export function StatsPage({ stats }: { stats: BlogStats }) {
       // ── Heatmap (togglable) ─────────────────────────────────
       function renderHeatmap(mode) {
         var DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-        var field = mode === 'native' ? 'posts_native' : mode === 'bridgyfed' ? 'posts_bridgyfed' : 'posts';
+        var field = mode === 'native' ? 'posts_native' : mode === 'bridgyfed' ? 'posts_bridgyfed' : mode === 'verified' ? 'posts_verified' : 'posts';
         var map = {}, maxVal = 0;
         HEAT_DATA.forEach(function(d) {
           var v = d[field];
@@ -374,7 +387,7 @@ export function StatsPage({ stats }: { stats: BlogStats }) {
           for (var hour = 0; hour < 24; hour++) {
             var v = map[dow + '_' + hour] || 0;
             var a = maxVal ? (0.08 + (v / maxVal) * 0.88).toFixed(2) : '0.08';
-            var color = mode === 'bridgyfed' ? '16,185,129' : mode === 'native' ? '245,158,11' : '99,102,241';
+            var color = mode === 'bridgyfed' ? '16,185,129' : mode === 'native' ? '245,158,11' : mode === 'verified' ? '34,211,238' : '99,102,241';
             h += '<div class="bl-hm-cell" style="background:rgba(' + color + ',' + a + ')" title="' + DAYS[dow] + ' ' + hour + 'h: ' + v.toLocaleString() + ' posts"></div>';
           }
           h += '</div>';
@@ -398,8 +411,8 @@ export function StatsPage({ stats }: { stats: BlogStats }) {
         }
       });
       function updateSites(mode) {
-        var src = mode === 'native' ? SITES_NATIVE : mode === 'bridgyfed' ? SITES_BRIDGY : SITES_DATA;
-        var color = mode === 'bridgyfed' ? 'rgba(16,185,129,0.6)' : mode === 'native' ? 'rgba(245,158,11,0.6)' : 'rgba(99,102,241,0.6)';
+        var src = mode === 'native' ? SITES_NATIVE : mode === 'bridgyfed' ? SITES_BRIDGY : mode === 'verified' ? SITES_VERIFIED : SITES_DATA;
+        var color = mode === 'bridgyfed' ? 'rgba(16,185,129,0.6)' : mode === 'native' ? 'rgba(245,158,11,0.6)' : mode === 'verified' ? 'rgba(34,211,238,0.6)' : 'rgba(99,102,241,0.6)';
         sitesChart.data.labels = src.map(d => d.site.length > 30 ? d.site.slice(0,28)+'…' : d.site);
         sitesChart.data.datasets[0].data = src.map(d => d.posts);
         sitesChart.data.datasets[0].backgroundColor = color;
@@ -423,7 +436,7 @@ export function StatsPage({ stats }: { stats: BlogStats }) {
         }
       });
       function updateLang(mode) {
-        var src = mode === 'native' ? LANG_NATIVE : mode === 'bridgyfed' ? LANG_BRIDGY : LANG_DATA;
+        var src = mode === 'native' ? LANG_NATIVE : mode === 'bridgyfed' ? LANG_BRIDGY : mode === 'verified' ? LANG_VERIFIED : LANG_DATA;
         langChart.data.labels = src.map(d => d.language);
         langChart.data.datasets[0].data = src.map(d => d.count);
         langChart.update();

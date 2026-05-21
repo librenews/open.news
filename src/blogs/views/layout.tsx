@@ -633,8 +633,14 @@ export function BlogsLayout({ title, children, session, navPage = '', headExtra 
             border-top: 1px solid var(--border);
             font-size: 0.68rem;
           }
+          .bl-kpi-split-wrap {
+            flex-wrap: wrap;
+            gap: 0.35rem 0.75rem;
+          }
           .bl-kpi-native { color: var(--accent); }
           .bl-kpi-bridgy { color: var(--green); }
+          .bl-kpi-verified { color: #22d3ee; }
+          .bl-kpi-unchecked { color: rgba(255,255,255,0.35); }
           .bl-charts-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
