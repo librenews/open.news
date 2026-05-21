@@ -15,6 +15,26 @@ export interface FeedItem {
   tags: string[];
   published_at: string;
   word_count: number;
+  like_count: number;
+  share_count: number;
+  user_liked: boolean;
+}
+
+export interface TrendingTag {
+  tag: string;
+  count: number;
+}
+
+export interface PopularPost {
+  uri: string;
+  rkey: string;
+  author_did: string;
+  author_name: string;
+  author_handle: string;
+  title: string | null;
+  published_at: string;
+  like_count: number;
+  share_count: number;
 }
 
 function timeAgo(dateStr: string): string {
@@ -43,9 +63,9 @@ function renderPostCard(
     ? `${item.site.replace(/\/$/, '')}${item.path.startsWith('/') ? '' : '/'}${item.path}`
     : item.site || null;
 
-  // Only show follow button for signed-in users who aren't the author
   const showFollow = session && session.did !== item.author_did;
   const isFollowing = followedDids.has(item.author_did);
+  const liked = item.user_liked;
 
   return html`
     <article class="bl-post">
@@ -87,54 +107,130 @@ function renderPostCard(
       ` : ''}
 
       <div class="bl-post-footer">
+        <div class="bl-post-actions">
+          ${session ? html`
+            <button
+              class="bl-action-btn bl-like-btn ${liked ? 'liked' : ''}"
+              data-uri="${item.uri}"
+              data-liked="${liked ? 'true' : 'false'}"
+              data-count="${item.like_count}"
+              onclick="toggleLike(this)"
+            >
+              ${liked ? '♥' : '♡'} <span class="bl-action-count">${item.like_count > 0 ? item.like_count : ''}</span>
+            </button>
+            <button
+              class="bl-action-btn bl-share-btn"
+              data-uri="${item.uri}"
+              onclick="sharePost(this)"
+              title="Share to Bluesky"
+            >
+              ↗ <span class="bl-action-count">${item.share_count > 0 ? item.share_count : ''}</span>
+            </button>
+          ` : html`
+            <span class="bl-action-btn bl-action-static">♡ ${item.like_count > 0 ? item.like_count : ''}</span>
+          `}
+        </div>
         ${canonicalUrl ? html`
           <a href="${canonicalUrl}" class="bl-source" target="_blank">
             ${safeHostname(canonicalUrl)}
           </a>
         ` : ''}
-        ${item.tags.slice(0, 3).map(tag => html`<span class="bl-tag">${tag.length > 24 ? tag.substring(0, 24) + '…' : tag}</span>`)}
+        ${item.tags.slice(0, 3).map(tag => html`<a href="/tag/${encodeURIComponent(tag)}" class="bl-tag">${tag.length > 24 ? tag.substring(0, 24) + '…' : tag}</a>`)}
       </div>
     </article>
   `;
 }
 
-export function FeedPage({ items, page, newPostsTs, session, followedDids }: {
+export function FeedPage({ items, page, newPostsTs, session, followedDids, view = 'latest', trendingTags = [], popularPosts = [] }: {
   items: FeedItem[];
   page: number;
   newPostsTs: string;
   session: { did: string; handle: string } | null;
   followedDids: Set<string>;
+  view?: 'latest' | 'following';
+  trendingTags?: TrendingTag[];
+  popularPosts?: PopularPost[];
 }) {
   return html`
-    <div class="bl-feed">
-      <div class="bl-new-posts-header">
-        <button class="bl-new-posts" id="newPostsBanner" onclick="loadNewPosts()">
-          <span id="newPostsCount">0</span> new posts
-        </button>
+    <div class="bl-feed-layout">
+
+      <!-- Main feed column -->
+      <div class="bl-feed-main">
+
+        <!-- Tabs -->
+        <div class="bl-tabs">
+          <a href="/" class="bl-tab ${view === 'latest' ? 'bl-tab-active' : ''}">Latest</a>
+          ${session ? html`
+            <a href="/?view=following" class="bl-tab ${view === 'following' ? 'bl-tab-active' : ''}">Following</a>
+          ` : ''}
+        </div>
+
+        <div class="bl-new-posts-header">
+          <button class="bl-new-posts" id="newPostsBanner" onclick="loadNewPosts()">
+            <span id="newPostsCount">0</span> new posts
+          </button>
+        </div>
+
+        <div id="feedContainer">
+          ${items.length === 0 ? html`
+            <div class="bl-empty" id="emptyState">
+              ${view === 'following'
+                ? html`<h2>Your following feed is empty</h2><p>Follow some authors to see their posts here.</p><a href="/" class="bl-btn bl-btn-primary" style="margin-top:1rem;display:inline-block;">Browse latest</a>`
+                : html`<h2>No posts yet</h2><p>The firehose is running. Posts will appear here as they're published.</p>`
+              }
+            </div>
+          ` : ''}
+
+          ${items.map(item => renderPostCard(item, session, followedDids))}
+        </div>
+
+        ${items.length > 0 ? html`
+          <div class="bl-pagination">
+            ${page > 1 ? html`<a href="/?page=${page - 1}${view === 'following' ? '&view=following' : ''}">← Newer</a>` : ''}
+            <span>Page ${page}</span>
+            ${items.length >= 30 ? html`<a href="/?page=${page + 1}${view === 'following' ? '&view=following' : ''}">Older →</a>` : ''}
+          </div>
+        ` : ''}
       </div>
 
-      <div id="feedContainer">
-        ${items.length === 0 ? html`
-          <div class="bl-empty" id="emptyState">
-            <h2>No posts yet</h2>
-            <p>The firehose is running. Posts will appear here as they're published.</p>
+      <!-- Sidebar -->
+      <aside class="bl-sidebar">
+
+        ${popularPosts.length > 0 ? html`
+          <div class="bl-sidebar-section">
+            <div class="bl-sidebar-title">🔥 Popular</div>
+            ${popularPosts.map(p => html`
+              <a href="/read/${p.author_did}/${p.rkey}" class="bl-popular-item">
+                <div class="bl-popular-title">${p.title || '(untitled)'}</div>
+                <div class="bl-popular-meta">
+                  @${p.author_handle}
+                  · ♥ ${p.like_count}
+                  ${p.share_count > 0 ? html` · ↗ ${p.share_count}` : ''}
+                </div>
+              </a>
+            `)}
           </div>
         ` : ''}
 
-        ${items.map(item => renderPostCard(item, session, followedDids))}
-      </div>
+        ${trendingTags.length > 0 ? html`
+          <div class="bl-sidebar-section">
+            <div class="bl-sidebar-title">📌 Trending tags</div>
+            <div class="bl-tag-cloud">
+              ${trendingTags.slice(0, 20).map(t => html`
+                <a href="/tag/${encodeURIComponent(t.tag)}" class="bl-tag-chip">
+                  #${t.tag} <span>${t.count}</span>
+                </a>
+              `)}
+            </div>
+          </div>
+        ` : ''}
 
-      ${items.length > 0 ? html`
-        <div class="bl-pagination">
-          ${page > 1 ? html`<a href="/?page=${page - 1}">← Newer</a>` : ''}
-          <span>Page ${page}</span>
-          ${items.length >= 30 ? html`<a href="/?page=${page + 1}">Older →</a>` : ''}
-        </div>
-      ` : ''}
+      </aside>
     </div>
 
     <script>
       const PAGE = ${page};
+      const VIEW = '${view}';
       const banner = document.getElementById('newPostsBanner');
       const countEl = document.getElementById('newPostsCount');
       const feed = document.getElementById('feedContainer');
@@ -177,13 +273,13 @@ export function FeedPage({ items, page, newPostsTs, session, followedDids }: {
         const titleHtml = showTitle
           ? '<div class="bl-post-title"><a href="/read/' + p.author_did + '/' + p.rkey + '">' + escHtml(p.title) + '</a></div>'
           : '';
-        const preview = escHtml((p.text_content || '').substring(0, 300) + ((p.text_content || '').length > 300 ? '…' : ''));
+        const preview = escHtml((p.text_content || '').substring(0, 300) + ((p.text_content || '').length > 300 ? '...' : ''));
         const srcHtml = canon
           ? '<a href="' + escHtml(canon) + '" class="bl-source" target="_blank">' + escHtml(hostname(canon)) + '</a>'
           : '';
         const tags = (p.tags || []).slice(0, 3).map(function(t) {
-          const s = t.length > 24 ? t.substring(0, 24) + '…' : t;
-          return '<span class="bl-tag">' + escHtml(s) + '</span>';
+          const s = t.length > 24 ? t.substring(0, 24) + '...' : t;
+          return '<a href="/tag/' + encodeURIComponent(t) + '" class="bl-tag">' + escHtml(s) + '</a>';
         }).join('');
 
         return '<article class="bl-post">'
@@ -195,7 +291,7 @@ export function FeedPage({ items, page, newPostsTs, session, followedDids }: {
           + '</div></div>'
           + titleHtml
           + '<div class="bl-post-body"><p>' + preview + '</p></div>'
-          + '<div class="bl-post-footer">' + srcHtml + tags + '</div>'
+          + '<div class="bl-post-footer"><div class="bl-post-actions"></div>' + srcHtml + tags + '</div>'
           + '</article>';
       }
 
@@ -204,58 +300,42 @@ export function FeedPage({ items, page, newPostsTs, session, followedDids }: {
 
       function loadNewPosts() {
         if (newCount === 0) return;
-        // If we have more than the buffer holds, just reload for a clean state
         if (newCount > MAX_BUFFER || buffered.length === 0) {
-          window.location.href = '/';
+          window.location.href = VIEW === 'following' ? '/?view=following' : '/';
           return;
         }
         const empty = document.getElementById('emptyState');
         if (empty) empty.remove();
-        // Prepend buffered (newest first), limit to MAX_BUFFER
         const toInsert = buffered.slice(-MAX_BUFFER);
         for (let i = toInsert.length - 1; i >= 0; i--) {
           feed.insertAdjacentHTML('afterbegin', buildCard(toInsert[i]));
         }
-        // Trim from end to keep 30 visible
         const all = feed.querySelectorAll('.bl-post');
-        for (let i = all.length - 1; i >= 30; i--) {
-          all[i].remove();
-        }
+        for (let i = all.length - 1; i >= 30; i--) { all[i].remove(); }
         buffered.length = 0;
         newCount = 0;
         banner.classList.remove('visible');
         countEl.textContent = '0';
-        // Scroll to top so user sees newly loaded posts
         window.scrollTo({ top: 0, behavior: 'smooth' });
       }
 
       function connectWs() {
         const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
         ws = new WebSocket(proto + '//' + location.host + '/ws/feed');
-
         ws.onmessage = function(e) {
           try {
             const msg = JSON.parse(e.data);
-            if (msg.type === 'batch' && PAGE === 1) {
+            if (msg.type === 'batch' && PAGE === 1 && VIEW === 'latest') {
               newCount += msg.count;
-              // Append posts from batch, cap buffer
               const posts = msg.posts || [];
-              for (let i = 0; i < posts.length && buffered.length < MAX_BUFFER; i++) {
-                buffered.push(posts[i]);
-              }
+              for (let i = 0; i < posts.length && buffered.length < MAX_BUFFER; i++) { buffered.push(posts[i]); }
               countEl.textContent = newCount;
               banner.classList.add('visible');
             }
           } catch {}
         };
-
-        ws.onclose = function() {
-          if (!dead) setTimeout(connectWs, 3000);
-        };
-
-        ws.onerror = function() {
-          try { ws.close(); } catch {}
-        };
+        ws.onclose = function() { if (!dead) setTimeout(connectWs, 3000); };
+        ws.onerror = function() { try { ws.close(); } catch {} };
       }
 
       let dead = false;
@@ -264,9 +344,7 @@ export function FeedPage({ items, page, newPostsTs, session, followedDids }: {
         if (ws) { try { ws.close(); } catch {} }
       });
 
-      if (PAGE === 1) {
-        connectWs();
-      }
+      if (PAGE === 1 && VIEW === 'latest') { connectWs(); }
     </script>
   `;
 }

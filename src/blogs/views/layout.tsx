@@ -623,6 +623,132 @@ export function BlogsLayout({ title, children, session }: { title: string; child
             font-size: 0.7rem;
             color: var(--text-muted);
           }
+
+          /* ── Feed two-column layout ─────────────────────────────── */
+          .bl-feed-layout {
+            display: grid;
+            grid-template-columns: 1fr 264px;
+            gap: 2rem;
+            max-width: 920px;
+            margin: 0 auto;
+            align-items: start;
+          }
+          .bl-feed-main { min-width: 0; }
+          .bl-sidebar {
+            position: sticky;
+            top: 5.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1.25rem;
+          }
+
+          /* ── Tabs ──────────────────────────────────────────────── */
+          .bl-tabs {
+            display: flex;
+            gap: 0;
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 0.75rem;
+          }
+          .bl-tab {
+            padding: 0.6rem 1.1rem;
+            font-size: 0.82rem;
+            font-weight: 500;
+            color: var(--text-muted);
+            text-decoration: none;
+            border-bottom: 2px solid transparent;
+            margin-bottom: -1px;
+            transition: color 0.15s, border-color 0.15s;
+          }
+          .bl-tab:hover { color: var(--text); }
+          .bl-tab-active {
+            color: var(--accent);
+            border-bottom-color: var(--accent);
+          }
+
+          /* ── Sidebar sections ───────────────────────────────────── */
+          .bl-sidebar-section {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1rem;
+          }
+          .bl-sidebar-title {
+            font-size: 0.72rem;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            margin-bottom: 0.75rem;
+          }
+
+          /* Trending tags cloud */
+          .bl-tag-cloud { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+          .bl-tag-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.3rem;
+            padding: 0.25rem 0.6rem;
+            background: rgba(99,102,241,0.08);
+            border: 1px solid rgba(99,102,241,0.18);
+            border-radius: 99px;
+            font-size: 0.73rem;
+            color: var(--text-secondary);
+            text-decoration: none;
+            transition: background 0.15s, border-color 0.15s;
+          }
+          .bl-tag-chip:hover { background: rgba(99,102,241,0.16); border-color: rgba(99,102,241,0.35); color: var(--accent); }
+          .bl-tag-chip span { font-size: 0.65rem; color: var(--text-muted); }
+
+          /* Popular post items */
+          .bl-popular-item {
+            display: block;
+            padding: 0.55rem 0;
+            border-bottom: 1px solid var(--border);
+            text-decoration: none;
+          }
+          .bl-popular-item:last-child { border-bottom: none; padding-bottom: 0; }
+          .bl-popular-title {
+            font-size: 0.8rem;
+            font-weight: 500;
+            color: var(--text);
+            line-height: 1.35;
+            margin-bottom: 0.2rem;
+          }
+          .bl-popular-item:hover .bl-popular-title { color: var(--accent); }
+          .bl-popular-meta { font-size: 0.7rem; color: var(--text-muted); }
+
+          /* ── Like / Share buttons ───────────────────────────────── */
+          .bl-post-actions {
+            display: flex;
+            gap: 0.4rem;
+            align-items: center;
+            margin-right: 0.5rem;
+          }
+          .bl-action-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.2rem;
+            padding: 0.2rem 0.55rem;
+            background: none;
+            border: 1px solid var(--border);
+            border-radius: 99px;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            cursor: pointer;
+            transition: all 0.15s;
+            white-space: nowrap;
+          }
+          .bl-action-btn:hover { border-color: var(--border-hover); color: var(--text); }
+          .bl-like-btn.liked { color: #e11d48; border-color: rgba(225,29,72,0.35); background: rgba(225,29,72,0.06); }
+          .bl-like-btn.liked:hover { background: rgba(225,29,72,0.12); }
+          .bl-action-static { border: none; padding-left: 0; cursor: default; }
+          .bl-action-count { min-width: 0.5ch; }
+
+          /* ── Responsive sidebar ─────────────────────────────────── */
+          @media (max-width: 720px) {
+            .bl-feed-layout { grid-template-columns: 1fr; }
+            .bl-sidebar { display: none; }
+          }
         </style>
       </head>
       <body>

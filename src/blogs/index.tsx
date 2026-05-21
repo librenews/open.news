@@ -13,7 +13,9 @@ import { getBlogStats, warmStatsCache } from './lib/statsCache.js';
 import { blogsAuthRouter, getBlogsSession } from './routes/auth.js';
 import { blogsFollowRouter } from './routes/follow.js';
 import { blogsComposeRouter } from './routes/compose.js';
+import { blogsInteractRouter } from './routes/interact.js';
 import { attachLiveFeed } from './lib/liveFeed.js';
+import { type TrendingTag, type PopularPost } from './views/feed.js';
 
 const app = new Hono();
 
@@ -25,6 +27,9 @@ app.route('/', blogsFollowRouter);
 
 // ── Compose routes ──────────────────────────────────────────────────────────
 app.route('/', blogsComposeRouter);
+
+// ── Interact routes (like/unlike/share/stats) ─────────────────────────────────
+app.route('/', blogsInteractRouter);
 
 // ── Helper: get set of DIDs the current user follows ─────────────────────────
 async function getFollowedDids(followerDid: string | null): Promise<Set<string>> {
@@ -54,51 +59,24 @@ app.get('/health', async (c) => {
 warmStatsCache().catch(() => {});
 setInterval(() => warmStatsCache().catch(() => {}), 5 * 60 * 1000);
 
-// ── Feed (Homepage) ─────────────────────────────────────────────────────────
-app.get('/', async (c) => {
-  const session = await getBlogsSession(c);
-  const page = Math.max(1, parseInt(c.req.query('page') || '1'));
-  const perPage = 30;
-  const offset = (page - 1) * perPage;
-
-  const { rows } = await db.query(`
-    SELECT
-      s.uri, s.author_did, s.title,
-      s.site, s.path, s.published_at,
-      s.word_count, s.created_at,
-      COALESCE(s.description, LEFT(s.raw_record->>'textContent', 600)) AS text_content,
-      s.raw_record->'tags' AS tags_json
-    FROM site_standard_articles s
-    ORDER BY s.created_at DESC
-    LIMIT $1 OFFSET $2
-  `, [perPage, offset]);
-
-  // Resolve profiles
+// ── Feed helpers ─────────────────────────────────────────────────────────────
+async function buildFeedItems(rows: any[], sessionDid: string | null): Promise<FeedItem[]> {
   const uniqueDids = [...new Set(rows.map((r: any) => r.author_did))];
   const profileMap: Record<string, { handle: string; avatar: string; displayName: string }> = {};
   await Promise.all(uniqueDids.slice(0, 30).map(async (did) => {
     try {
       const p = await getCachedProfile(did as string);
-      profileMap[did as string] = {
-        handle: p.handle || did as string,
-        avatar: p.avatar || '',
-        displayName: p.displayName || ''
-      };
+      profileMap[did as string] = { handle: p.handle || did as string, avatar: p.avatar || '', displayName: p.displayName || '' };
     } catch {
       profileMap[did as string] = { handle: did as string, avatar: '', displayName: '' };
     }
   }));
 
-  const items: FeedItem[] = rows.map((r: any) => {
-    const uriParts = r.uri.replace('at://', '').split('/');
-    const rkey = uriParts[uriParts.length - 1];
+  return rows.map((r: any) => {
+    const rkey = r.uri.replace('at://', '').split('/').pop();
     const profile = profileMap[r.author_did] || { handle: r.author_did, avatar: '', displayName: '' };
-
     let tags: string[] = [];
-    try {
-      if (r.tags_json && Array.isArray(r.tags_json)) tags = r.tags_json;
-    } catch {}
-
+    try { if (r.tags_json && Array.isArray(r.tags_json)) tags = r.tags_json; } catch {}
     return {
       uri: r.uri,
       rkey,
@@ -113,15 +91,209 @@ app.get('/', async (c) => {
       tags,
       published_at: r.created_at?.toISOString() || r.published_at?.toISOString() || new Date().toISOString(),
       word_count: Number(r.word_count || 0),
+      like_count: Number(r.like_count || 0),
+      share_count: Number(r.share_count || 0),
+      user_liked: r.user_liked === true,
     };
   });
+}
+
+async function fetchSidebarData(): Promise<{ trendingTags: TrendingTag[]; popularPosts: PopularPost[] }> {
+  const [tagRows, popRows] = await Promise.all([
+    db.query(`
+      SELECT tag, COUNT(*)::int AS cnt
+      FROM site_standard_articles s,
+           jsonb_array_elements_text(s.raw_record->'tags') AS tag
+      WHERE s.published_at > NOW() - INTERVAL '7 days'
+      GROUP BY tag ORDER BY cnt DESC LIMIT 20
+    `),
+    db.query(`
+      SELECT s.uri, s.author_did, s.title, s.published_at,
+        COUNT(CASE WHEN ai.interaction_type = 'like' THEN 1 END)::int AS like_count,
+        COUNT(CASE WHEN ai.interaction_type IN ('share','repost') THEN 1 END)::int AS share_count,
+        COUNT(*) * EXP(-EXTRACT(EPOCH FROM (NOW() - s.published_at)) / (7 * 86400)) AS decay_score
+      FROM article_interactions ai
+      JOIN site_standard_articles s ON s.uri = ai.article_uri
+      WHERE s.published_at > NOW() - INTERVAL '30 days'
+      GROUP BY s.uri, s.author_did, s.title, s.published_at
+      HAVING COUNT(*) >= 1
+      ORDER BY decay_score DESC LIMIT 6
+    `),
+  ]);
+
+  const trendingTags: TrendingTag[] = tagRows.rows.map((r: any) => ({ tag: r.tag, count: r.cnt }));
+
+  const popDids = [...new Set(popRows.rows.map((r: any) => r.author_did))];
+  const popProfiles: Record<string, { handle: string; displayName: string }> = {};
+  await Promise.all(popDids.slice(0, 10).map(async (did) => {
+    try { const p = await getCachedProfile(did as string); popProfiles[did as string] = { handle: p.handle || did as string, displayName: p.displayName || '' }; }
+    catch { popProfiles[did as string] = { handle: did as string, displayName: '' }; }
+  }));
+
+  const popularPosts: PopularPost[] = popRows.rows.map((r: any) => ({
+    uri: r.uri,
+    rkey: r.uri.split('/').pop(),
+    author_did: r.author_did,
+    author_name: popProfiles[r.author_did]?.displayName || r.author_did,
+    author_handle: popProfiles[r.author_did]?.handle || r.author_did,
+    title: r.title,
+    published_at: r.published_at?.toISOString() ?? '',
+    like_count: r.like_count,
+    share_count: r.share_count,
+  }));
+
+  return { trendingTags, popularPosts };
+}
+
+// ── Feed (Homepage) ─────────────────────────────────────────────────────────
+app.get('/', async (c) => {
+  const session = await getBlogsSession(c);
+  const page = Math.max(1, parseInt(c.req.query('page') || '1'));
+  const view = (c.req.query('view') === 'following' && session) ? 'following' : 'latest';
+  const perPage = 30;
+  const offset = (page - 1) * perPage;
+
+  const followedDids = await getFollowedDids(session?.did ?? null);
+
+  let rows: any[] = [];
+  if (view === 'following') {
+    if (followedDids.size === 0) {
+      rows = [];
+    } else {
+      const didsArray = [...followedDids];
+      const { rows: r } = await db.query(`
+        SELECT * FROM (
+          SELECT DISTINCT ON (s.author_did)
+            s.uri, s.author_did, s.title, s.site, s.path,
+            s.published_at, s.word_count, s.created_at,
+            COALESCE(s.description, LEFT(COALESCE(s.raw_record->>'content', s.raw_record->>'textContent'), 600)) AS text_content,
+            s.raw_record->'tags' AS tags_json,
+            COALESCE(ai_counts.like_count, 0) AS like_count,
+            COALESCE(ai_counts.share_count, 0) AS share_count,
+            COALESCE(ul.user_liked, false) AS user_liked
+          FROM site_standard_articles s
+          LEFT JOIN LATERAL (
+            SELECT
+              COUNT(CASE WHEN interaction_type='like' THEN 1 END)::int AS like_count,
+              COUNT(CASE WHEN interaction_type IN ('share','repost') THEN 1 END)::int AS share_count
+            FROM article_interactions WHERE article_uri = s.uri
+          ) ai_counts ON true
+          LEFT JOIN LATERAL (
+            SELECT COUNT(*) > 0 AS user_liked
+            FROM article_interactions
+            WHERE article_uri = s.uri AND actor_did = $3 AND interaction_type = 'like'
+          ) ul ON true
+          WHERE s.author_did = ANY($1)
+          ORDER BY s.author_did, s.published_at DESC NULLS LAST
+        ) sub
+        ORDER BY published_at DESC NULLS LAST
+        LIMIT $2
+      `, [didsArray, perPage, session!.did]);
+      rows = r;
+    }
+  } else {
+    const { rows: r } = await db.query(`
+      SELECT
+        s.uri, s.author_did, s.title, s.site, s.path,
+        s.published_at, s.word_count, s.created_at,
+        COALESCE(s.description, LEFT(COALESCE(s.raw_record->>'content', s.raw_record->>'textContent'), 600)) AS text_content,
+        s.raw_record->'tags' AS tags_json,
+        COALESCE(ai_counts.like_count, 0) AS like_count,
+        COALESCE(ai_counts.share_count, 0) AS share_count,
+        COALESCE(ul.user_liked, false) AS user_liked
+      FROM site_standard_articles s
+      LEFT JOIN LATERAL (
+        SELECT
+          COUNT(CASE WHEN interaction_type='like' THEN 1 END)::int AS like_count,
+          COUNT(CASE WHEN interaction_type IN ('share','repost') THEN 1 END)::int AS share_count
+        FROM article_interactions WHERE article_uri = s.uri
+      ) ai_counts ON true
+      LEFT JOIN LATERAL (
+        SELECT COUNT(*) > 0 AS user_liked
+        FROM article_interactions
+        WHERE article_uri = s.uri AND actor_did = $3 AND interaction_type = 'like'
+      ) ul ON true
+      ORDER BY s.created_at DESC
+      LIMIT $1 OFFSET $2
+    `, [perPage, offset, session?.did ?? '']);
+    rows = r;
+  }
+
+  const [items, { trendingTags, popularPosts }] = await Promise.all([
+    buildFeedItems(rows, session?.did ?? null),
+    fetchSidebarData(),
+  ]);
 
   const newPostsTs = rows[0]?.created_at?.toISOString() || new Date().toISOString();
-  const followedDids = await getFollowedDids(session?.did ?? null);
 
   return c.html((
     <BlogsLayout title="blogs.social — Discover the open web" session={session}>
-      <FeedPage items={items} page={page} newPostsTs={newPostsTs} session={session} followedDids={followedDids} />
+      <FeedPage
+        items={items}
+        page={page}
+        newPostsTs={newPostsTs}
+        session={session}
+        followedDids={followedDids}
+        view={view}
+        trendingTags={trendingTags}
+        popularPosts={popularPosts}
+      />
+    </BlogsLayout>
+  ) as unknown as string);
+});
+
+// ── Tag page ─────────────────────────────────────────────────────────────────
+app.get('/tag/:tag', async (c) => {
+  const session = await getBlogsSession(c);
+  const tag = decodeURIComponent(c.req.param('tag'));
+  const page = Math.max(1, parseInt(c.req.query('page') || '1'));
+  const perPage = 30;
+  const offset = (page - 1) * perPage;
+
+  const { rows } = await db.query(`
+    SELECT
+      s.uri, s.author_did, s.title, s.site, s.path,
+      s.published_at, s.word_count, s.created_at,
+      COALESCE(s.description, LEFT(COALESCE(s.raw_record->>'content', s.raw_record->>'textContent'), 600)) AS text_content,
+      s.raw_record->'tags' AS tags_json,
+      COALESCE(ai_counts.like_count, 0) AS like_count,
+      COALESCE(ai_counts.share_count, 0) AS share_count,
+      COALESCE(ul.user_liked, false) AS user_liked
+    FROM site_standard_articles s
+    LEFT JOIN LATERAL (
+      SELECT
+        COUNT(CASE WHEN interaction_type='like' THEN 1 END)::int AS like_count,
+        COUNT(CASE WHEN interaction_type IN ('share','repost') THEN 1 END)::int AS share_count
+      FROM article_interactions WHERE article_uri = s.uri
+    ) ai_counts ON true
+    LEFT JOIN LATERAL (
+      SELECT COUNT(*) > 0 AS user_liked
+      FROM article_interactions
+      WHERE article_uri = s.uri AND actor_did = $3 AND interaction_type = 'like'
+    ) ul ON true
+    WHERE s.raw_record->'tags' ? $1
+    ORDER BY s.published_at DESC NULLS LAST
+    LIMIT $2 OFFSET $4
+  `, [tag, perPage, session?.did ?? '', offset]);
+
+  const [items, { trendingTags, popularPosts }, followedDids] = await Promise.all([
+    buildFeedItems(rows, session?.did ?? null),
+    fetchSidebarData(),
+    getFollowedDids(session?.did ?? null),
+  ]);
+
+  return c.html((
+    <BlogsLayout title={`#${tag} — blogs.social`} session={session}>
+      <FeedPage
+        items={items}
+        page={page}
+        newPostsTs={new Date().toISOString()}
+        session={session}
+        followedDids={followedDids}
+        view="latest"
+        trendingTags={trendingTags}
+        popularPosts={popularPosts}
+      />
     </BlogsLayout>
   ) as unknown as string);
 });

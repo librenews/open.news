@@ -1,7 +1,59 @@
-// Compose modal + follow intercept JavaScript
+// Compose modal + follow intercept + like/share JavaScript
 // Served as /js/blogs.js to avoid TSX/Hono html-template escaping issues
 
 (function () {
+  // ── Like / Share ────────────────────────────────────────────────────────────
+  window.toggleLike = function (btn) {
+    var uri = btn.getAttribute('data-uri');
+    var liked = btn.getAttribute('data-liked') === 'true';
+    var countEl = btn.querySelector('.bl-action-count');
+    var endpoint = liked ? '/api/unlike' : '/api/like';
+
+    btn.disabled = true;
+    fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ uri: uri }),
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data.success !== false) {
+          var nowLiked = !liked;
+          btn.setAttribute('data-liked', nowLiked ? 'true' : 'false');
+          btn.classList.toggle('liked', nowLiked);
+          btn.childNodes[0].textContent = nowLiked ? '\u2665 ' : '\u2661 ';
+          if (countEl) countEl.textContent = data.likeCount > 0 ? data.likeCount : '';
+        }
+      })
+      .catch(function () {})
+      .finally(function () { btn.disabled = false; });
+  };
+
+  window.sharePost = function (btn) {
+    var uri = btn.getAttribute('data-uri');
+    btn.disabled = true;
+    btn.textContent = 'Sharing...';
+    fetch('/api/share', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ uri: uri }),
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data.success !== false) {
+          btn.textContent = '\u2197 Shared!';
+          setTimeout(function () {
+            btn.innerHTML = '\u2197 <span class="bl-action-count"></span>';
+            btn.disabled = false;
+          }, 2000);
+        } else {
+          btn.textContent = '\u2197 Failed';
+          btn.disabled = false;
+        }
+      })
+      .catch(function () { btn.textContent = '\u2197'; btn.disabled = false; });
+  };
+
   // ── Compose Modal ──────────────────────────────────────────────────────────
   window.openCompose = function () {
     var overlay = document.getElementById('composeOverlay');
