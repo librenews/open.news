@@ -450,6 +450,7 @@ app.get('/read/:did/:rkey', async (c) => {
     `SELECT s.uri, s.author_did, s.title, s.site, s.path, s.published_at,
             s.word_count,
             COALESCE(s.raw_record->>'content', s.raw_record->>'textContent') AS text_content,
+            s.raw_record->'content' AS content_json,
             s.raw_record->'tags' AS tags_json
      FROM site_standard_articles s WHERE s.uri = $1`,
     [uri]
@@ -476,8 +477,13 @@ app.get('/read/:did/:rkey', async (c) => {
     profile = { handle: p.handle || did, avatar: p.avatar || '', displayName: p.displayName || '' };
   } catch {}
 
-  const { renderContent, shouldShowTitle, safeHostname } = await import('./lib/contentRenderer.js');
-  const renderedBody = renderContent(post.text_content || '');
+  const { renderContent, shouldShowTitle, safeHostname, isLeafletContent, renderLeafletHtml } = await import('./lib/contentRenderer.js');
+  let renderedBody: string;
+  if (post.content_json && typeof post.content_json === 'object' && isLeafletContent(post.content_json)) {
+    renderedBody = renderLeafletHtml(post.content_json, did);
+  } else {
+    renderedBody = renderContent(post.text_content || '');
+  }
   const showTitle = shouldShowTitle(post.title, post.text_content);
 
   const canonicalUrl = post.site && post.path
