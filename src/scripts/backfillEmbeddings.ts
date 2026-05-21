@@ -141,10 +141,12 @@ async function main() {
       let skippedNull = 0;
       for (let j = 0; j < chunkMap.length; j++) {
         const emb = allEmbeddings[j];
-        if (!emb || !Array.isArray(emb) || emb.length === 0 || emb[0] === null) {
+        const hasInvalid = !emb || !Array.isArray(emb) || emb.length === 0 || emb.some((v: any) => v === null || v === undefined || Number.isNaN(v) || !Number.isFinite(v));
+        if (hasInvalid) {
           skippedNull++;
           if (skippedNull === 1) {
-            console.log(`  🔍 Debug: skipping null embedding. Type=${typeof emb}, isArray=${Array.isArray(emb)}, value=${JSON.stringify(emb)?.substring(0, 80)}`);
+            const sample = emb ? emb.slice(0, 5) : emb;
+            console.log(`  🔍 Debug: bad embedding. hasNaN=${emb?.some((v: any) => Number.isNaN(v))}, sample=${JSON.stringify(sample)}`);
           }
           continue;
         }

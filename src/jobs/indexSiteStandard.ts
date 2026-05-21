@@ -273,7 +273,7 @@ export async function indexSiteStandardJob(job: Job<IndexSiteStandardData>) {
                 if (embeddings.length === chunks.length) {
                   const bulkBody: any[] = [];
                   for (let i = 0; i < chunks.length; i++) {
-                    if (!embeddings[i] || !Array.isArray(embeddings[i])) continue;
+                    if (!embeddings[i] || !Array.isArray(embeddings[i]) || embeddings[i].some((v: any) => !Number.isFinite(v))) continue;
                     bulkBody.push({ index: { _index: SITE_STANDARD_CHUNKS_INDEX, _id: `${postUri}_chunk_${i}` } });
                     bulkBody.push({
                       uri: postUri,
