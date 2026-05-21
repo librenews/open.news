@@ -49,11 +49,13 @@ export interface BlogStats {
 let _cache: StatsCache | null = null;
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
-export async function getBlogStats(): Promise<BlogStats> {
-  if (_cache && Date.now() - _cache.fetchedAt < CACHE_TTL_MS) {
-    return _cache.data;
-  }
+/** Force-refresh the stats cache (ignores TTL). Called at startup and by the background timer. */
+export async function warmStatsCache(): Promise<void> {
+  const data = await _fetchStats();
+  _cache = { data, fetchedAt: Date.now() };
+}
 
+async function _fetchStats(): Promise<BlogStats> {
   const [
     kpiRows,
     waaTrendRows,
@@ -235,6 +237,14 @@ export async function getBlogStats(): Promise<BlogStats> {
     updatedAt: new Date().toISOString(),
   };
 
+  return data;
+}
+
+export async function getBlogStats(): Promise<BlogStats> {
+  if (_cache && Date.now() - _cache.fetchedAt < CACHE_TTL_MS) {
+    return _cache.data;
+  }
+  const data = await _fetchStats();
   _cache = { data, fetchedAt: Date.now() };
   return data;
 }

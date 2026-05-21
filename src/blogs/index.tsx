@@ -9,7 +9,7 @@ import { BlogsLayout } from './views/layout.js';
 import { FeedPage, type FeedItem } from './views/feed.js';
 import { AuthorPage, type AuthorProfile, type AuthorPost } from './views/author.js';
 import { StatsPage } from './views/stats.js';
-import { getBlogStats } from './lib/statsCache.js';
+import { getBlogStats, warmStatsCache } from './lib/statsCache.js';
 import { blogsAuthRouter, getBlogsSession } from './routes/auth.js';
 import { blogsFollowRouter } from './routes/follow.js';
 import { blogsComposeRouter } from './routes/compose.js';
@@ -49,6 +49,10 @@ app.get('/health', async (c) => {
     return c.json({ status: 'error' }, 503);
   }
 });
+
+// ── Pre-warm stats cache at startup, refresh every 5 minutes ─────────────────
+warmStatsCache().catch(() => {});
+setInterval(() => warmStatsCache().catch(() => {}), 5 * 60 * 1000);
 
 // ── Feed (Homepage) ─────────────────────────────────────────────────────────
 app.get('/', async (c) => {
