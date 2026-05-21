@@ -65,6 +65,7 @@ export interface BlogStats {
 
 let _cache: StatsCache | null = null;
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+let _warmingPromise: Promise<void> | null = null;
 
 /** Force-refresh the stats cache (ignores TTL). Called at startup and by the background timer. */
 export async function warmStatsCache(): Promise<void> {
@@ -360,7 +361,13 @@ export async function getBlogStats(): Promise<BlogStats> {
   if (_cache && Date.now() - _cache.fetchedAt < CACHE_TTL_MS) {
     return _cache.data;
   }
-  const data = await _fetchStats();
-  _cache = { data, fetchedAt: Date.now() };
-  return data;
+  // If a warm is already in progress, wait for it instead of spawning another
+  if (_warmingPromise) {
+    await _warmingPromise;
+    if (_cache) return _cache.data;
+  }
+  _warmingPromise = warmStatsCache();
+  await _warmingPromise;
+  _warmingPromise = null;
+  return _cache!.data;
 }

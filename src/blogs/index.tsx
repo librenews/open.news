@@ -80,12 +80,9 @@ app.get('/.well-known/site.standard.publication', async (c) => {
   return c.text('', 404);
 });
 
-// ── Pre-warm stats cache after a delay, refresh every 5 minutes ──────────────
-// Delayed so startup doesn't compete with first user requests for DB connections
-setTimeout(() => {
-  warmStatsCache().catch(() => {});
-  setInterval(() => warmStatsCache().catch(() => {}), 5 * 60 * 1000);
-}, 15_000);
+// ── Pre-warm stats cache immediately, refresh every 5 minutes ────────────────
+warmStatsCache().catch(() => {});
+setInterval(() => warmStatsCache().catch(() => {}), 5 * 60 * 1000);
 
 // ── Feed helpers ─────────────────────────────────────────────────────────────
 async function buildFeedItems(rows: any[], sessionDid: string | null): Promise<FeedItem[]> {
