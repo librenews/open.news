@@ -139,6 +139,18 @@ app.get('/api/count-since', async (c) => {
   }
 });
 
+// ── Static JS ───────────────────────────────────────────────────────────────
+import { readFileSync } from 'fs';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const blogsJs = readFileSync(join(__dirname, 'public/blogs.js'), 'utf-8');
+app.get('/js/blogs.js', (c) => {
+  c.header('Content-Type', 'application/javascript; charset=utf-8');
+  c.header('Cache-Control', 'public, max-age=3600');
+  return c.body(blogsJs);
+});
+
 // ── Stats page ─────────────────────────────────────────────────────────────
 app.get('/stats', async (c) => {
   const session = await getBlogsSession(c);
