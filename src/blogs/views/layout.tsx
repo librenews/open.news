@@ -724,33 +724,30 @@ export function BlogsLayout({ title, children, session }: { title: string; child
             document.getElementById('charCounter').textContent = text.length.toString();
           }
 
-          // Convert simple contenteditable HTML → markdown
-          function htmlToMarkdown(html) {
-            return html
-              .replace(/<b>(.*?)<\/b>/gi, '**$1**')
-              .replace(/<strong>(.*?)<\/strong>/gi, '**$1**')
-              .replace(/<i>(.*?)<\/i>/gi, '_$1_')
-              .replace(/<em>(.*?)<\/em>/gi, '_$1_')
-              .replace(/<a href="(.*?)"[^>]*>(.*?)<\/a>/gi, '[$2]($1)')
-              .replace(/<br\s*\/?>/gi, '\n')
-              .replace(/<\/p>/gi, '\n\n')
-              .replace(/<p[^>]*>/gi, '')
-              .replace(/<div[^>]*>/gi, '\n')
-              .replace(/<\/div>/gi, '')
-              .replace(/<[^>]+>/g, '')
-              .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&nbsp;/g, ' ')
-              .trim();
+          // DOM walker: converts contenteditable content to markdown (avoids TSX JSX-escaping)
+          function nodeToMd(node) {
+            if (node.nodeType === 3) return node.textContent;
+            if (node.nodeType !== 1) return '';
+            var ch = Array.from(node.childNodes).map(nodeToMd).join('');
+            var t = node.tagName.toLowerCase();
+            if (t === 'b' || t === 'strong') return '**' + ch + '**';
+            if (t === 'i' || t === 'em') return '_' + ch + '_';
+            if (t === 'a') { var h = node.getAttribute('href'); return h ? '[' + ch + '](' + h + ')' : ch; }
+            if (t === 'br') return '\n';
+            if (t === 'div' || t === 'p') return ch + '\n';
+            return ch;
           }
 
           function submitCompose(e) {
-            const editor = document.getElementById('composeEditor');
-            const content = htmlToMarkdown(editor.innerHTML);
+            var editor = document.getElementById('composeEditor');
+            var content = Array.from(editor.childNodes).map(nodeToMd).join('').trim();
             document.getElementById('composeContent').value = content;
-            if (!content && !document.querySelector('.bl-compose-title-input')?.value) {
+            var titleEl = document.querySelector('.bl-compose-title-input');
+            if (!content && !(titleEl && titleEl.value)) {
               e.preventDefault();
               return;
             }
-            document.getElementById('composeSubmit').textContent = 'Publishing…';
+            document.getElementById('composeSubmit').textContent = 'Publishing...';
             document.getElementById('composeSubmit').disabled = true;
           }
 
