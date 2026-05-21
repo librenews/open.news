@@ -38,7 +38,7 @@ async function sleep(ms: number) {
 }
 
 async function main() {
-  console.log('=== Backfill Embeddings (verified docs only) ===\n');
+  console.log('=== Backfill Embeddings (verified docs only) === [v3-nan-check]\n');
   console.log(`  Options: days=${days ?? 'all'}, limit=${limit}, batch=${batchSize}, min-words=${minWords}\n`);
 
   // 1. Check embed service health
