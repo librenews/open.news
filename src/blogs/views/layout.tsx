@@ -656,7 +656,39 @@ export function BlogsLayout({ title, children, session, navPage = '' }: { title:
           .bl-chart-sub {
             font-size: 0.7rem;
             color: var(--text-muted);
+            margin-bottom: 0;
+          }
+          .bl-chart-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 0.75rem;
             margin-bottom: 1rem;
+          }
+          .bl-toggle {
+            display: flex;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            overflow: hidden;
+            flex-shrink: 0;
+          }
+          .bl-toggle-btn {
+            background: none;
+            border: none;
+            padding: 0.25rem 0.55rem;
+            font-size: 0.65rem;
+            font-family: var(--font);
+            font-weight: 500;
+            color: var(--text-muted);
+            cursor: pointer;
+            transition: all 0.15s;
+            white-space: nowrap;
+          }
+          .bl-toggle-btn:not(:last-child) { border-right: 1px solid var(--border); }
+          .bl-toggle-btn:hover { color: var(--text-primary); }
+          .bl-toggle-btn.active {
+            background: var(--accent);
+            color: #fff;
           }
           .bl-heatmap { overflow-x: auto; }
           .bl-heatmap-inner { display: flex; flex-direction: column; gap: 3px; min-width: 600px; }
