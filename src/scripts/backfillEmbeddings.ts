@@ -159,6 +159,12 @@ async function main() {
         const res = await os.bulk({ body: bulkBody });
         if (res.body.errors) {
           errors++;
+          // Log first failing item for diagnosis
+          const failedItems = (res.body.items || []).filter((item: any) => item.index?.error);
+          if (failedItems.length > 0) {
+            const first = failedItems[0].index;
+            console.error(`  ⚠️  Bulk error (${failedItems.length}/${res.body.items.length} items): ${first.error?.type}: ${first.error?.reason} [id: ${first._id}]`);
+          }
         }
       }
 
