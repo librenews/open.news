@@ -23,15 +23,21 @@ export function StatsPage({ stats }: { stats: BlogStats }) {
         : Math.round(stats.totalVerified / checkedTotal * 100) + '%')
     : '—';
 
-  // Average retention across 14-day window (native-only — bridgyfed aggregators post daily and inflate to 100%)
-  const retDaysNative = stats.retention.filter(d => d.retained_native + d.churned_native > 0);
-  const avgRetentionNative = retDaysNative.length > 0
-    ? Math.round(retDaysNative.reduce((sum, d) => sum + d.retained_native / (d.retained_native + d.churned_native), 0) / retDaysNative.length * 100) + '%'
-    : '—';
-  const retDaysBridgy = stats.retention.filter(d => d.retained_bridgyfed + d.churned_bridgyfed > 0);
-  const avgRetentionBridgy = retDaysBridgy.length > 0
-    ? Math.round(retDaysBridgy.reduce((sum, d) => sum + d.retained_bridgyfed / (d.retained_bridgyfed + d.churned_bridgyfed), 0) / retDaysBridgy.length * 100) + '%'
-    : '—';
+  // Week-over-week author retention from WAA trend
+  // (current week WAA / previous week WAA) — more meaningful for a blogging platform
+  const waaLen = stats.waaTrend.length;
+  const currWaa = waaLen >= 1 ? stats.waaTrend[waaLen - 1].waa : 0;
+  const prevWaa = waaLen >= 8 ? stats.waaTrend[waaLen - 8].waa : 0;
+  const wowRetention = prevWaa > 0 ? Math.round(currWaa / prevWaa * 100) + '%' : '—';
+  const currWaaNative = waaLen >= 1 ? stats.waaTrend[waaLen - 1].waa_native : 0;
+  const prevWaaNative = waaLen >= 8 ? stats.waaTrend[waaLen - 8].waa_native : 0;
+  const wowRetentionNative = prevWaaNative > 0 ? Math.round(currWaaNative / prevWaaNative * 100) + '%' : '—';
+  const currWaaBridgy = waaLen >= 1 ? stats.waaTrend[waaLen - 1].waa_bridgyfed : 0;
+  const prevWaaBridgy = waaLen >= 8 ? stats.waaTrend[waaLen - 8].waa_bridgyfed : 0;
+  const wowRetentionBridgy = prevWaaBridgy > 0 ? Math.round(currWaaBridgy / prevWaaBridgy * 100) + '%' : '—';
+  const currWaaVerified = waaLen >= 1 ? stats.waaTrend[waaLen - 1].waa_verified : 0;
+  const prevWaaVerified = waaLen >= 8 ? stats.waaTrend[waaLen - 8].waa_verified : 0;
+  const wowRetentionVerified = prevWaaVerified > 0 ? Math.round(currWaaVerified / prevWaaVerified * 100) + '%' : '—';
 
   // Serialize data for Chart.js
   const waaJson = JSON.stringify(stats.waaTrend);
@@ -109,11 +115,13 @@ export function StatsPage({ stats }: { stats: BlogStats }) {
           </div>
         </div>
         <div class="bl-kpi-card">
-          <div class="bl-kpi-value">${avgRetentionNative}</div>
-          <div class="bl-kpi-label">Day-over-Day Retention</div>
-          <div class="bl-kpi-sub">14-day avg · native only</div>
-          <div class="bl-kpi-split">
-            <span class="bl-kpi-bridgy">🌉 ${avgRetentionBridgy} bridgyfed</span>
+          <div class="bl-kpi-value">${wowRetention}</div>
+          <div class="bl-kpi-label">Week-over-Week Retention</div>
+          <div class="bl-kpi-sub">WAA this week vs last week</div>
+          <div class="bl-kpi-split bl-kpi-split-wrap">
+            <span class="bl-kpi-native">🌐 ${wowRetentionNative} native</span>
+            <span class="bl-kpi-bridgy">🌉 ${wowRetentionBridgy} bridgyfed</span>
+            <span class="bl-kpi-verified">✅ ${wowRetentionVerified} verified</span>
           </div>
         </div>
         <div class="bl-kpi-card">
