@@ -136,9 +136,10 @@ async function main() {
         allEmbeddings.push(...embeddings);
       }
 
-      // Build OpenSearch bulk body
+      // Build OpenSearch bulk body (skip chunks with null embeddings)
       const bulkBody: any[] = [];
       for (let j = 0; j < chunkMap.length; j++) {
+        if (!allEmbeddings[j] || !Array.isArray(allEmbeddings[j])) continue;
         const { articleIdx, chunkIdx } = chunkMap[j];
         const article = articleChunks[articleIdx].article;
 
