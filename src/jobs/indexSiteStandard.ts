@@ -7,6 +7,7 @@ import { BskyAgent } from '@atproto/api';
 import { resolvePds } from '../lib/pds.js';
 import { getCachedProfile } from '../lib/pdsCache.js';
 import { upsertSiteStandardArticle } from '../db/queries/siteStandard.js';
+import { verifyDocument, verifyPublication } from '../lib/verification.js';
 
 interface IndexSiteStandardData {
   postUri: string;
@@ -247,6 +248,23 @@ export async function indexSiteStandardJob(job: Job<IndexSiteStandardData>) {
     });
     
     logger.info({ uri: postUri, did }, 'Successfully indexed site.standard.document');
+
+    // 7. Async verification — never blocks indexing
+    setImmediate(async () => {
+      try {
+        const publicationUri = (record.site && typeof record.site === 'string' && record.site.startsWith('at://')) ? record.site : null;
+        const verified = await verifyDocument(postUri, site, path, publicationUri);
+        await db.query(
+          'UPDATE site_standard_articles SET verified = $1, verified_at = NOW() WHERE uri = $2',
+          [verified, postUri]
+        );
+        if (verified) {
+          logger.info({ uri: postUri }, 'Document verified via standard.site');
+        }
+      } catch (err) {
+        logger.debug({ err, uri: postUri }, 'Verification step failed (non-fatal)');
+      }
+    });
   } catch (err) {
     logger.error({ err, uri: postUri }, 'Failed to index site.standard.document');
     throw err;

@@ -1,6 +1,6 @@
 import { html } from 'hono/html';
 
-export function Layout({ title, children, profile, headerAction, og }: { title: string; children: any; profile?: { displayName: string, avatar: string, handle: string }; headerAction?: any; og?: { title: string; description: string; url: string; image?: string } }) {
+export function Layout({ title, children, profile, headerAction, og, headExtra }: { title: string; children: any; profile?: { displayName: string, avatar: string, handle: string }; headerAction?: any; og?: { title: string; description: string; url: string; image?: string }; headExtra?: any }) {
   return html`
     <!DOCTYPE html>
     <html lang="en">
@@ -21,6 +21,7 @@ export function Layout({ title, children, profile, headerAction, og }: { title: 
         <link rel="preconnect" href="https://fonts.googleapis.com">
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
         <link href="https://fonts.googleapis.com/css2?family=Merriweather:ital,wght@0,300;0,400;0,700;1,300;1,400&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+        ${headExtra || ''}
         <style>
           :root {
             --bg: #ffffff;

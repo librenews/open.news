@@ -557,6 +557,19 @@ app.get('/feed/tag/:tag.xml', async (c) => {
   return c.body(xml, 200, { 'Content-Type': 'application/rss+xml; charset=utf-8', 'Cache-Control': 'public, max-age=300' });
 });
 
+// ── Publication verification (.well-known) ──────────────────────────────────
+app.get('/.well-known/site.standard.publication', async (c) => {
+  try {
+    const { rows } = await db.query(
+      "SELECT uri FROM site_publications WHERE url LIKE '%longform.social%' ORDER BY created_at LIMIT 1"
+    );
+    if (rows.length > 0) {
+      return c.text(rows[0].uri);
+    }
+  } catch {}
+  return c.text('', 404);
+});
+
 // --- RSS Feeds ---
 
 app.get('/feed/latest.xml', async (c) => {
@@ -1374,8 +1387,10 @@ app.get('/post/:did/:rkey', async (c) => {
       logger.warn({ err: e, uri: currentActualUri }, 'Failed to fetch related articles');
     }
 
+    const docLinkTag = html`<link rel="site.standard.document" href="${currentActualUri}" />`;
+
     return c.html((
-      <Layout title={`${doc.title} - ${config.LONGFORM_DOMAIN}`} profile={sessionProfile} og={og}>
+      <Layout title={`${doc.title} - ${config.LONGFORM_DOMAIN}`} profile={sessionProfile} og={og} headExtra={docLinkTag}>
         {ReaderPage(doc, did, authorProfile, relatedArticles, sessionDid)}
       </Layout>
     ) as unknown as string);

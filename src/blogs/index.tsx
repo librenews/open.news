@@ -67,6 +67,19 @@ app.get('/health', async (c) => {
   }
 });
 
+// ── Publication verification (.well-known) ──────────────────────────────────
+app.get('/.well-known/site.standard.publication', async (c) => {
+  try {
+    const { rows } = await db.query(
+      "SELECT uri FROM site_publications WHERE url LIKE '%blogs.social%' ORDER BY created_at LIMIT 1"
+    );
+    if (rows.length > 0) {
+      return c.text(rows[0].uri);
+    }
+  } catch {}
+  return c.text('', 404);
+});
+
 // ── Pre-warm stats cache after a delay, refresh every 5 minutes ──────────────
 // Delayed so startup doesn't compete with first user requests for DB connections
 setTimeout(() => {
@@ -564,8 +577,9 @@ app.get('/read/:did/:rkey', async (c) => {
   const isFollowing = followedDids.has(did);
 
   const { html: h, raw } = await import('hono/html');
+  const docLink = h`<link rel="site.standard.document" href="${uri}" />`;
   return c.html((
-    <BlogsLayout title={`${post.title || 'Post'} — blogs.social`} session={session}>
+    <BlogsLayout title={`${post.title || 'Post'} — blogs.social`} session={session} headExtra={docLink}>
       {h`
         <div class="bl-feed" style="padding-top: 1.5rem; padding-bottom: 3rem;">
           <div class="bl-post-header" style="margin-bottom: 1rem;">

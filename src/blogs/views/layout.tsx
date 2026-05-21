@@ -2,7 +2,7 @@ import { html, raw } from 'hono/html';
 
 export interface BlogsProfile { did: string; handle: string; avatar?: string; displayName?: string }
 
-export function BlogsLayout({ title, children, session, navPage = '' }: { title: string; children: any; session?: BlogsProfile | null; navPage?: string }) {
+export function BlogsLayout({ title, children, session, navPage = '', headExtra = '' }: { title: string; children: any; session?: BlogsProfile | null; navPage?: string; headExtra?: any }) {
   return html`
     <!DOCTYPE html>
     <html lang="en">
@@ -14,6 +14,7 @@ export function BlogsLayout({ title, children, session, navPage = '' }: { title:
         <link rel="preconnect" href="https://fonts.googleapis.com">
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+        ${headExtra}
         <style>
           :root {
             --bg: #0a0a0c;

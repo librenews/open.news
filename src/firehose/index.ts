@@ -12,6 +12,7 @@ import { logModeration } from '../db/queries/moderation.js';
 import { warmRecord, invalidateRecord } from '../lib/pdsCache.js';
 import { refreshGeotaggedDids, geotagFromAccount, getGeoForDid } from '../nearby/geoCache.js';
 import { getNearbyBotDid } from '../nearby/bot.js';
+import { verifyPublication } from '../lib/verification.js';
 
 const CURSOR_PERSIST_INTERVAL_MS = 30_000;
 const DID_REFRESH_INTERVAL_MS = 60_000;
@@ -245,7 +246,10 @@ function handleEvent(event: JetstreamEvent): void {
         db.query(
           'INSERT INTO site_publications (uri, url, raw_record) VALUES ($1, $2, $3) ON CONFLICT (uri) DO NOTHING',
           [pubUri, commit.record.url, commit.record]
-        ).catch(err => logger.error({ err, uri: pubUri }, 'Failed to cache site.standard.publication'));
+        ).then(() => {
+          // Async verification of the publication
+          verifyPublication(pubUri, commit.record!.url as string).catch(() => {});
+        }).catch(err => logger.error({ err, uri: pubUri }, 'Failed to cache site.standard.publication'));
       }
       return;
     }
