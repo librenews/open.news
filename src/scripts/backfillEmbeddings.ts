@@ -136,10 +136,18 @@ async function main() {
         allEmbeddings.push(...embeddings);
       }
 
-      // Build OpenSearch bulk body (skip chunks with null embeddings)
+      // Build OpenSearch bulk body (skip chunks with null/invalid embeddings)
       const bulkBody: any[] = [];
+      let skippedNull = 0;
       for (let j = 0; j < chunkMap.length; j++) {
-        if (!allEmbeddings[j] || !Array.isArray(allEmbeddings[j])) continue;
+        const emb = allEmbeddings[j];
+        if (!emb || !Array.isArray(emb) || emb.length === 0 || emb[0] === null) {
+          skippedNull++;
+          if (skippedNull === 1) {
+            console.log(`  🔍 Debug: skipping null embedding. Type=${typeof emb}, isArray=${Array.isArray(emb)}, value=${JSON.stringify(emb)?.substring(0, 80)}`);
+          }
+          continue;
+        }
         const { articleIdx, chunkIdx } = chunkMap[j];
         const article = articleChunks[articleIdx].article;
 
@@ -152,8 +160,11 @@ async function main() {
           text_content: allChunks[j],
           site: article.site,
           language: article.language,
-          embedding: allEmbeddings[j],
+          embedding: emb,
         });
+      }
+      if (skippedNull > 0) {
+        console.log(`  ⏭️  Skipped ${skippedNull}/${chunkMap.length} chunks with null embeddings`);
       }
 
       if (bulkBody.length > 0) {
