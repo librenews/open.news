@@ -40,53 +40,51 @@ export function StatsPage({ stats }: { stats: BlogStats }) {
           <div class="bl-kpi-value">${fmt(stats.waa)}</div>
           <div class="bl-kpi-label">Weekly Active Authors</div>
           <div class="bl-kpi-sub">rolling 7 days</div>
+          <div class="bl-kpi-split">
+            <span class="bl-kpi-native">🌐 ${fmt(stats.waa_native)} native</span>
+            <span class="bl-kpi-bridgy">🌉 ${fmt(stats.waa_bridgyfed)} bridgyfed</span>
+          </div>
         </div>
         <div class="bl-kpi-card">
           <div class="bl-kpi-value">${fmt(stats.daa)}</div>
           <div class="bl-kpi-label">Daily Active Authors</div>
           <div class="bl-kpi-sub">yesterday</div>
+          <div class="bl-kpi-split">
+            <span class="bl-kpi-native">🌐 ${fmt(stats.daa_native)} native</span>
+            <span class="bl-kpi-bridgy">🌉 ${fmt(stats.daa_bridgyfed)} bridgyfed</span>
+          </div>
         </div>
         <div class="bl-kpi-card">
           <div class="bl-kpi-value">${fmt(stats.postsYesterday)}</div>
           <div class="bl-kpi-label">Posts Yesterday</div>
           <div class="bl-kpi-sub">${(stats.postsYesterday / Math.max(stats.daa, 1)).toFixed(1)} per author</div>
+          <div class="bl-kpi-split">
+            <span class="bl-kpi-native">🌐 ${fmt(stats.posts_native)} native</span>
+            <span class="bl-kpi-bridgy">🌉 ${fmt(stats.posts_bridgyfed)} bridgyfed</span>
+          </div>
         </div>
         <div class="bl-kpi-card">
           <div class="bl-kpi-value">${fmt(stats.totalAuthors)}</div>
           <div class="bl-kpi-label">Total Authors</div>
           <div class="bl-kpi-sub">all time</div>
+          <div class="bl-kpi-split">
+            <span class="bl-kpi-native">🌐 ${fmt(stats.totalAuthors_native)} native</span>
+            <span class="bl-kpi-bridgy">🌉 ${fmt(stats.totalAuthors_bridgyfed)} bridgyfed</span>
+          </div>
         </div>
         <div class="bl-kpi-card">
           <div class="bl-kpi-value">${fmt(stats.totalPosts)}</div>
           <div class="bl-kpi-label">Total Posts</div>
           <div class="bl-kpi-sub">all time</div>
+          <div class="bl-kpi-split">
+            <span class="bl-kpi-native">🌐 ${fmt(stats.totalPosts_native)} native</span>
+            <span class="bl-kpi-bridgy">🌉 ${fmt(stats.totalPosts_bridgyfed)} bridgyfed</span>
+          </div>
         </div>
         <div class="bl-kpi-card">
           <div class="bl-kpi-value">${retentionRate}</div>
           <div class="bl-kpi-label">Day-over-Day Retention</div>
           <div class="bl-kpi-sub">authors returning daily</div>
-        </div>
-      </div>
-
-      <!-- BridgyFed Split -->
-      <div class="bl-bridgyfed-split">
-        <div class="bl-bf-label">Yesterday breakdown</div>
-        <div class="bl-bf-grid">
-          <div class="bl-bf-card bl-bf-native">
-            <div class="bl-bf-title">🌐 Native AT Protocol</div>
-            <div class="bl-bf-row"><span class="bl-bf-num">${fmt(stats.daa_native)}</span><span class="bl-bf-sub">authors</span></div>
-            <div class="bl-bf-row"><span class="bl-bf-num">${fmt(stats.posts_native)}</span><span class="bl-bf-sub">posts</span></div>
-          </div>
-          <div class="bl-bf-card bl-bf-bridgyfed">
-            <div class="bl-bf-title">🌉 BridgyFed (Fediverse)</div>
-            <div class="bl-bf-row"><span class="bl-bf-num">${fmt(stats.daa_bridgyfed)}</span><span class="bl-bf-sub">authors</span></div>
-            <div class="bl-bf-row"><span class="bl-bf-num">${fmt(stats.posts_bridgyfed)}</span><span class="bl-bf-sub">posts</span></div>
-          </div>
-          <div class="bl-bf-card bl-bf-waa">
-            <div class="bl-bf-title">📅 Weekly (7-day)</div>
-            <div class="bl-bf-row"><span class="bl-bf-num">${fmt(stats.waa_native)}</span><span class="bl-bf-sub">native authors</span></div>
-            <div class="bl-bf-row"><span class="bl-bf-num">${fmt(stats.waa_bridgyfed)}</span><span class="bl-bf-sub">bridgyfed authors</span></div>
-          </div>
         </div>
       </div>
 

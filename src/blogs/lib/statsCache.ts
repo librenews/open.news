@@ -21,6 +21,10 @@ export interface BlogStats {
   daa_bridgyfed: number;
   posts_native: number;
   posts_bridgyfed: number;
+  totalAuthors_native: number;
+  totalAuthors_bridgyfed: number;
+  totalPosts_native: number;
+  totalPosts_bridgyfed: number;
 
   // 30-day trend (WAA rolling)
   waaTrend: { day: string; waa: number }[];
@@ -94,7 +98,15 @@ async function _fetchStats(): Promise<BlogStats> {
          WHERE DATE(created_at) = CURRENT_DATE - 1
            AND author_handle LIKE '%.web.brid.gy') AS posts_bridgyfed,
         (SELECT COUNT(DISTINCT author_did) FROM site_standard_articles) AS total_authors,
+        (SELECT COUNT(DISTINCT author_did) FROM site_standard_articles
+         WHERE (author_handle IS NULL OR author_handle NOT LIKE '%.web.brid.gy')) AS total_authors_native,
+        (SELECT COUNT(DISTINCT author_did) FROM site_standard_articles
+         WHERE author_handle LIKE '%.web.brid.gy') AS total_authors_bridgyfed,
         (SELECT COUNT(*) FROM site_standard_articles) AS total_posts,
+        (SELECT COUNT(*) FROM site_standard_articles
+         WHERE (author_handle IS NULL OR author_handle NOT LIKE '%.web.brid.gy')) AS total_posts_native,
+        (SELECT COUNT(*) FROM site_standard_articles
+         WHERE author_handle LIKE '%.web.brid.gy') AS total_posts_bridgyfed,
         (SELECT ROUND(AVG(daily_posts)::numeric, 1)
          FROM (
            SELECT DATE(created_at) AS d, COUNT(*) / NULLIF(COUNT(DISTINCT author_did), 0) AS daily_posts
@@ -227,6 +239,10 @@ async function _fetchStats(): Promise<BlogStats> {
     daa_bridgyfed: Number(kpi.daa_bridgyfed),
     posts_native: Number(kpi.posts_native),
     posts_bridgyfed: Number(kpi.posts_bridgyfed),
+    totalAuthors_native: Number(kpi.total_authors_native),
+    totalAuthors_bridgyfed: Number(kpi.total_authors_bridgyfed),
+    totalPosts_native: Number(kpi.total_posts_native),
+    totalPosts_bridgyfed: Number(kpi.total_posts_bridgyfed),
     waaTrend: waaTrendRows.rows.map((r: any) => ({ day: r.day.toISOString().slice(0, 10), waa: Number(r.waa) })),
     dailyActivity: dailyRows.rows.map((r: any) => ({ day: r.day.toISOString().slice(0, 10), posts: Number(r.posts), authors: Number(r.authors) })),
     retention: retentionRows.rows.map((r: any) => ({ day: r.day.slice(0, 10), retained: Number(r.retained), new_authors: Number(r.new_authors), churned: Number(r.churned) })),

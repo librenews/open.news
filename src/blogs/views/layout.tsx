@@ -624,6 +624,16 @@ export function BlogsLayout({ title, children, session, navPage = '' }: { title:
             color: var(--text-muted);
             margin-top: 0.15rem;
           }
+          .bl-kpi-split {
+            display: flex;
+            gap: 0.75rem;
+            margin-top: 0.4rem;
+            padding-top: 0.4rem;
+            border-top: 1px solid var(--border);
+            font-size: 0.68rem;
+          }
+          .bl-kpi-native { color: var(--accent); }
+          .bl-kpi-bridgy { color: var(--green); }
           .bl-charts-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
