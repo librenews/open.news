@@ -2,10 +2,8 @@
  * Backfill author_handle for all existing site_standard_articles rows.
  * Processes in batches of 100, rate-limited to avoid hammering the profile API.
  *
- * Run once: npx tsx src/scripts/backfillAuthorHandles.ts
+ * Run once: node --env-file=.env --import tsx/esm src/scripts/backfillAuthorHandles.ts
  */
-import { config as dotenv } from 'dotenv';
-dotenv(); // load .env before anything else imports config
 import { db } from '../db/client.js';
 import { getCachedProfile } from '../lib/pdsCache.js';
 import { logger } from '../lib/logger.js';
