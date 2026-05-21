@@ -14,8 +14,12 @@ function pct(a: number, b: number): string {
 
 export function StatsPage({ stats }: { stats: BlogStats }) {
   const updatedAt = new Date(stats.updatedAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZoneName: 'short' });
-  const retTotal = stats.retention.at(-1);
-  const retentionRate = retTotal ? pct(retTotal.retained, retTotal.retained + retTotal.churned) : '—';
+
+  // Average retention across 14-day window (skip days with no data)
+  const retDays = stats.retention.filter(d => d.retained + d.churned > 0);
+  const avgRetention = retDays.length > 0
+    ? Math.round(retDays.reduce((sum, d) => sum + d.retained / (d.retained + d.churned), 0) / retDays.length * 100) + '%'
+    : '—';
 
   // Serialize data for Chart.js
   const waaJson = JSON.stringify(stats.waaTrend);
@@ -82,9 +86,9 @@ export function StatsPage({ stats }: { stats: BlogStats }) {
           </div>
         </div>
         <div class="bl-kpi-card">
-          <div class="bl-kpi-value">${retentionRate}</div>
+          <div class="bl-kpi-value">${avgRetention}</div>
           <div class="bl-kpi-label">Day-over-Day Retention</div>
-          <div class="bl-kpi-sub">authors returning daily</div>
+          <div class="bl-kpi-sub">14-day average</div>
         </div>
       </div>
 
