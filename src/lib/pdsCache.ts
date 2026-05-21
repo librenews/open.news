@@ -263,3 +263,74 @@ export async function getCachedProfile(did: string): Promise<CachedProfile> {
 
   return profile;
 }
+
+/**
+ * Batch-fetch profiles — uses app.bsky.actor.getProfiles (up to 25 per call).
+ * Checks Redis first, only fetches uncached DIDs from the public API,
+ * then warms the cache for all resolved profiles.
+ * Returns a Map<did, CachedProfile>.
+ */
+export async function getCachedProfiles(dids: string[]): Promise<Map<string, CachedProfile>> {
+  if (dids.length === 0) return new Map();
+
+  const unique = [...new Set(dids)];
+  const result = new Map<string, CachedProfile>();
+  const uncached: string[] = [];
+  const redis = getRedis();
+
+  // 1. Check Redis for all DIDs
+  try {
+    const pipeline = redis.pipeline();
+    for (const did of unique) pipeline.get(profileKey(did));
+    const cached = await pipeline.exec();
+    for (let i = 0; i < unique.length; i++) {
+      const [err, val] = (cached?.[i] || [null, null]) as [Error | null, string | null];
+      if (!err && val) {
+        try { result.set(unique[i], JSON.parse(val)); continue; } catch {}
+      }
+      uncached.push(unique[i]);
+    }
+  } catch {
+    uncached.push(...unique.filter(d => !result.has(d)));
+  }
+
+  if (uncached.length === 0) return result;
+
+  // 2. Batch-fetch from public API in chunks of 25
+  const BATCH = 25;
+  for (let i = 0; i < uncached.length; i += BATCH) {
+    const chunk = uncached.slice(i, i + BATCH);
+    try {
+      const params = chunk.map(d => `actors=${encodeURIComponent(d)}`).join('&');
+      const res = await fetch(
+        `https://public.api.bsky.app/xrpc/app.bsky.actor.getProfiles?${params}`
+      );
+      if (res.ok) {
+        const data = await res.json() as any;
+        const warmPipeline = redis.pipeline();
+        for (const p of (data.profiles || [])) {
+          const prof: CachedProfile = {
+            did: p.did,
+            displayName: p.displayName || p.handle || p.did,
+            avatar: p.avatar || '',
+            handle: p.handle || p.did,
+          };
+          result.set(p.did, prof);
+          warmPipeline.set(profileKey(p.did), JSON.stringify(prof), 'EX', TTL_PROFILE);
+        }
+        await warmPipeline.exec();
+      }
+    } catch (err) {
+      logger.debug({ err, chunk: chunk.length }, 'Batch profile fetch failed');
+    }
+
+    // Fill in any DIDs that weren't in the API response (deleted accounts, etc.)
+    for (const did of chunk) {
+      if (!result.has(did)) {
+        result.set(did, { did, displayName: did, avatar: '', handle: did });
+      }
+    }
+  }
+
+  return result;
+}

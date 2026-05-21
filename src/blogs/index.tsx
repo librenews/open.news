@@ -4,7 +4,7 @@ import { config } from '../lib/config.js';
 import { logger } from '../lib/logger.js';
 import { db } from '../db/client.js';
 import { runMigrations } from '../db/migrate.js';
-import { getCachedProfile, getCachedRecordMulti } from '../lib/pdsCache.js';
+import { getCachedProfile, getCachedProfiles, getCachedRecordMulti } from '../lib/pdsCache.js';
 import { BlogsLayout } from './views/layout.js';
 import { FeedPage, type FeedItem } from './views/feed.js';
 import { AuthorPage, type AuthorProfile, type AuthorPost } from './views/author.js';
@@ -73,19 +73,11 @@ setInterval(() => warmStatsCache().catch(() => {}), 5 * 60 * 1000);
 // ── Feed helpers ─────────────────────────────────────────────────────────────
 async function buildFeedItems(rows: any[], sessionDid: string | null): Promise<FeedItem[]> {
   const uniqueDids = [...new Set(rows.map((r: any) => r.author_did))];
-  const profileMap: Record<string, { handle: string; avatar: string; displayName: string }> = {};
-  await Promise.all(uniqueDids.slice(0, 30).map(async (did) => {
-    try {
-      const p = await getCachedProfile(did as string);
-      profileMap[did as string] = { handle: p.handle || did as string, avatar: p.avatar || '', displayName: p.displayName || '' };
-    } catch {
-      profileMap[did as string] = { handle: did as string, avatar: '', displayName: '' };
-    }
-  }));
+  const profileMap = await getCachedProfiles(uniqueDids);
 
   return rows.map((r: any) => {
     const rkey = r.uri.replace('at://', '').split('/').pop();
-    const profile = profileMap[r.author_did] || { handle: r.author_did, avatar: '', displayName: '' };
+    const profile = profileMap.get(r.author_did) || { handle: r.author_did, avatar: '', displayName: '' };
     let tags: string[] = [];
     try { if (r.tags_json && Array.isArray(r.tags_json)) tags = r.tags_json; } catch {}
     return {
@@ -135,18 +127,14 @@ async function fetchSidebarData(): Promise<{ trendingTags: TrendingTag[]; popula
   const trendingTags: TrendingTag[] = tagRows.rows.map((r: any) => ({ tag: r.tag, count: r.cnt }));
 
   const popDids = [...new Set(popRows.rows.map((r: any) => r.author_did))];
-  const popProfiles: Record<string, { handle: string; displayName: string }> = {};
-  await Promise.all(popDids.slice(0, 10).map(async (did) => {
-    try { const p = await getCachedProfile(did as string); popProfiles[did as string] = { handle: p.handle || did as string, displayName: p.displayName || '' }; }
-    catch { popProfiles[did as string] = { handle: did as string, displayName: '' }; }
-  }));
+  const popProfileMap = await getCachedProfiles(popDids);
 
   const popularPosts: PopularPost[] = popRows.rows.map((r: any) => ({
     uri: r.uri,
     rkey: r.uri.split('/').pop(),
     author_did: r.author_did,
-    author_name: popProfiles[r.author_did]?.displayName || r.author_did,
-    author_handle: popProfiles[r.author_did]?.handle || r.author_did,
+    author_name: popProfileMap.get(r.author_did)?.displayName || r.author_did,
+    author_handle: popProfileMap.get(r.author_did)?.handle || r.author_did,
     title: r.title,
     published_at: r.published_at?.toISOString() ?? '',
     like_count: r.like_count,
