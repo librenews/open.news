@@ -167,6 +167,13 @@ app.get('/stats', async (c) => {
   }
 });
 
+// ── Author post redirect: /author/:did/:rkey → /read/:did/:rkey ─────────────
+app.get('/author/:did/:rkey', (c) => {
+  const did = c.req.param('did');
+  const rkey = c.req.param('rkey');
+  return c.redirect(`/read/${did}/${rkey}`, 301);
+});
+
 // ── Author profile ──────────────────────────────────────────────────────────
 app.get('/author/:did', async (c) => {
   const session = await getBlogsSession(c);
