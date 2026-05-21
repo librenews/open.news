@@ -12,6 +12,7 @@ import { StatsPage } from './views/stats.js';
 import { getBlogStats } from './lib/statsCache.js';
 import { blogsAuthRouter, getBlogsSession } from './routes/auth.js';
 import { blogsFollowRouter } from './routes/follow.js';
+import { blogsComposeRouter } from './routes/compose.js';
 import { attachLiveFeed } from './lib/liveFeed.js';
 
 const app = new Hono();
@@ -21,6 +22,9 @@ app.route('/', blogsAuthRouter);
 
 // ── Follow routes ────────────────────────────────────────────────────────────
 app.route('/', blogsFollowRouter);
+
+// ── Compose routes ──────────────────────────────────────────────────────────
+app.route('/', blogsComposeRouter);
 
 // ── Helper: get set of DIDs the current user follows ─────────────────────────
 async function getFollowedDids(followerDid: string | null): Promise<Set<string>> {

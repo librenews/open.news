@@ -102,6 +102,128 @@ export function BlogsLayout({ title, children, session }: { title: string; child
             border: 1px solid var(--border);
           }
           .bl-btn-outline:hover { border-color: var(--border-hover); color: var(--text); }
+
+          /* ── Compose Modal ────────────────────────────────────── */
+          .bl-compose-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.6);
+            backdrop-filter: blur(4px);
+            z-index: 1000;
+            align-items: flex-start;
+            justify-content: center;
+            padding-top: 80px;
+          }
+          .bl-compose-overlay.open { display: flex; }
+          .bl-compose-modal {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            width: 100%;
+            max-width: 560px;
+            box-shadow: 0 24px 64px rgba(0,0,0,0.5);
+            overflow: hidden;
+          }
+          .bl-compose-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 1rem 1.25rem 0.75rem;
+            border-bottom: 1px solid var(--border);
+          }
+          .bl-compose-title { font-size: 0.88rem; font-weight: 700; }
+          .bl-compose-close {
+            background: none; border: none; color: var(--text-muted);
+            font-size: 1rem; cursor: pointer; padding: 0.2rem 0.4rem;
+            border-radius: 4px; line-height: 1;
+          }
+          .bl-compose-close:hover { color: var(--text); background: var(--bg); }
+          .bl-compose-title-input {
+            width: 100%;
+            background: none;
+            border: none;
+            border-bottom: 1px solid var(--border);
+            padding: 0.9rem 1.25rem;
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--text);
+            font-family: var(--font);
+            outline: none;
+            box-sizing: border-box;
+          }
+          .bl-compose-title-input::placeholder { color: var(--text-muted); font-weight: 400; }
+          .bl-compose-editor {
+            min-height: 140px;
+            max-height: 340px;
+            overflow-y: auto;
+            padding: 1rem 1.25rem;
+            font-size: 0.92rem;
+            line-height: 1.6;
+            color: var(--text);
+            outline: none;
+            word-break: break-word;
+          }
+          .bl-compose-editor:empty::before {
+            content: attr(data-placeholder);
+            color: var(--text-muted);
+            pointer-events: none;
+          }
+          .bl-compose-previews {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            padding: 0 1.25rem 0.5rem;
+          }
+          .bl-compose-preview {
+            position: relative;
+            display: inline-flex;
+          }
+          .bl-compose-preview img {
+            width: 72px;
+            height: 72px;
+            object-fit: cover;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+          }
+          .bl-compose-preview button {
+            position: absolute;
+            top: -6px;
+            right: -6px;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            font-size: 0.6rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-muted);
+            padding: 0;
+          }
+          .bl-compose-footer {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.75rem 1.25rem;
+            border-top: 1px solid var(--border);
+          }
+          .bl-compose-tools { display: flex; gap: 0.25rem; }
+          .bl-compose-tool {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            padding: 0.35rem 0.5rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            font-family: var(--font);
+            transition: background 0.1s, color 0.1s;
+          }
+          .bl-compose-tool:hover { background: var(--bg); color: var(--text); }
+          .bl-compose-counter { font-size: 0.72rem; color: var(--text-muted); }
           .bl-btn-follow {
             font-size: 0.72rem;
             font-weight: 600;
@@ -511,7 +633,7 @@ export function BlogsLayout({ title, children, session }: { title: string; child
               <a href="/stats" class="bl-btn bl-btn-outline" style="font-size:0.75rem;padding:0.3rem 0.7rem;">Stats</a>
               ${session
       ? html`
-                  <a href="/compose" class="bl-btn bl-btn-primary">✎ Write</a>
+                  <button onclick="openCompose()" class="bl-btn bl-btn-primary" style="cursor:pointer;">✎ Write</button>
                   <a href="/author/${session.did}" class="bl-btn bl-btn-outline">${session.handle}</a>
                 `
       : html`<a href="/auth/login" class="bl-btn bl-btn-primary">Sign in</a>`
@@ -519,7 +641,164 @@ export function BlogsLayout({ title, children, session }: { title: string; child
             </div>
           </div>
         </header>
+
+        ${session ? html`
+        <!-- Compose Modal -->
+        <div id="composeOverlay" class="bl-compose-overlay" onclick="closeComposeOutside(event)">
+          <div class="bl-compose-modal" role="dialog" aria-modal="true" aria-label="Write a post">
+            <div class="bl-compose-header">
+              <span class="bl-compose-title">Write a post</span>
+              <button class="bl-compose-close" onclick="closeCompose()" aria-label="Close">✕</button>
+            </div>
+            <form id="composeForm" action="/compose" method="POST" enctype="multipart/form-data" onsubmit="submitCompose(event)">
+              <input
+                name="title"
+                type="text"
+                placeholder="Title (optional)"
+                class="bl-compose-title-input"
+                autocomplete="off"
+              />
+              <div
+                id="composeEditor"
+                class="bl-compose-editor"
+                contenteditable="true"
+                data-placeholder="What's on your mind?"
+                oninput="updateCounter()"
+              ></div>
+              <!-- hidden textarea mirrors editor content for form submission -->
+              <textarea name="content" id="composeContent" style="display:none;"></textarea>
+              <!-- Image previews -->
+              <div id="imagePreviews" class="bl-compose-previews"></div>
+              <div class="bl-compose-footer">
+                <div class="bl-compose-tools">
+                  <button type="button" onclick="execFmt('bold')" class="bl-compose-tool" title="Bold"><b>B</b></button>
+                  <button type="button" onclick="execFmt('italic')" class="bl-compose-tool" title="Italic"><i>I</i></button>
+                  <button type="button" onclick="insertLink()" class="bl-compose-tool" title="Link">🔗</button>
+                  <label class="bl-compose-tool" title="Add image" style="cursor:pointer;">
+                    🖼
+                    <input type="file" name="images" id="imageInput" accept="image/*" multiple style="display:none;" onchange="previewImages(event)" />
+                  </label>
+                </div>
+                <div style="display:flex;align-items:center;gap:0.75rem;">
+                  <span id="charCounter" class="bl-compose-counter">0</span>
+                  <button type="submit" class="bl-btn bl-btn-primary" id="composeSubmit">Publish</button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+        ` : ''}
+
         ${children}
+
+        <script>
+          // ── Compose Modal ──────────────────────────────────────────────────
+          function openCompose() {
+            const overlay = document.getElementById('composeOverlay');
+            if (!overlay) return;
+            overlay.classList.add('open');
+            document.getElementById('composeEditor')?.focus();
+          }
+          function closeCompose() {
+            document.getElementById('composeOverlay')?.classList.remove('open');
+          }
+          function closeComposeOutside(e) {
+            if (e.target.id === 'composeOverlay') closeCompose();
+          }
+          document.addEventListener('keydown', e => { if (e.key === 'Escape') closeCompose(); });
+
+          function execFmt(cmd) {
+            document.getElementById('composeEditor')?.focus();
+            document.execCommand(cmd, false, null);
+          }
+
+          function insertLink() {
+            const url = prompt('URL:');
+            if (!url) return;
+            document.getElementById('composeEditor')?.focus();
+            document.execCommand('createLink', false, url);
+          }
+
+          function updateCounter() {
+            const text = document.getElementById('composeEditor')?.innerText || '';
+            document.getElementById('charCounter').textContent = text.length.toString();
+          }
+
+          // Convert simple contenteditable HTML → markdown
+          function htmlToMarkdown(html) {
+            return html
+              .replace(/<b>(.*?)<\/b>/gi, '**$1**')
+              .replace(/<strong>(.*?)<\/strong>/gi, '**$1**')
+              .replace(/<i>(.*?)<\/i>/gi, '_$1_')
+              .replace(/<em>(.*?)<\/em>/gi, '_$1_')
+              .replace(/<a href="(.*?)"[^>]*>(.*?)<\/a>/gi, '[$2]($1)')
+              .replace(/<br\s*\/?>/gi, '\n')
+              .replace(/<\/p>/gi, '\n\n')
+              .replace(/<p[^>]*>/gi, '')
+              .replace(/<div[^>]*>/gi, '\n')
+              .replace(/<\/div>/gi, '')
+              .replace(/<[^>]+>/g, '')
+              .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&nbsp;/g, ' ')
+              .trim();
+          }
+
+          function submitCompose(e) {
+            const editor = document.getElementById('composeEditor');
+            const content = htmlToMarkdown(editor.innerHTML);
+            document.getElementById('composeContent').value = content;
+            if (!content && !document.querySelector('.bl-compose-title-input')?.value) {
+              e.preventDefault();
+              return;
+            }
+            document.getElementById('composeSubmit').textContent = 'Publishing…';
+            document.getElementById('composeSubmit').disabled = true;
+          }
+
+          // Image previews
+          const attachedFiles = new DataTransfer();
+          function previewImages(e) {
+            const files = e.target.files;
+            const container = document.getElementById('imagePreviews');
+            for (const file of files) {
+              attachedFiles.items.add(file);
+              const reader = new FileReader();
+              reader.onload = ev => {
+                const wrap = document.createElement('div');
+                wrap.className = 'bl-compose-preview';
+                wrap.innerHTML = '<img src="' + ev.target.result + '" /><button type="button" onclick="removePreview(this, \'' + file.name + '\')">✕</button>';
+                container.appendChild(wrap);
+              };
+              reader.readAsDataURL(file);
+            }
+            // Keep input's file list in sync
+            document.getElementById('imageInput').files = attachedFiles.files;
+          }
+          function removePreview(btn, name) {
+            btn.parentElement.remove();
+            const dt = new DataTransfer();
+            for (const f of attachedFiles.files) { if (f.name !== name) dt.items.add(f); }
+            attachedFiles.items.clear();
+            for (const f of dt.files) attachedFiles.items.add(f);
+            document.getElementById('imageInput').files = attachedFiles.files;
+          }
+
+          // ── Follow/Unfollow intercept ──────────────────────────────────────
+          document.addEventListener('submit', function(e) {
+            const form = e.target;
+            if (!form || !form.matches('form[action^="/follow/"], form[action^="/unfollow/"]')) return;
+            e.preventDefault();
+            const action = form.getAttribute('action');
+            const isFollow = action.startsWith('/follow/');
+            const did = action.split('/').pop();
+            fetch(action, { method: 'POST', redirect: 'manual' }).catch(() => {});
+            const newAction = isFollow ? '/unfollow/' + did : '/follow/' + did;
+            const newClass = isFollow ? 'bl-btn-following' : 'bl-btn-follow';
+            const newLabel = isFollow ? '<span>Following</span>' : 'Follow';
+            form.setAttribute('action', newAction);
+            const btn = form.querySelector('button');
+            if (btn) { btn.className = newClass; btn.innerHTML = newLabel; }
+          });
+        </script>
       </body>
     </html>
   `;
