@@ -928,7 +928,7 @@ export function BlogsLayout({ title, children, session, navPage = '' }: { title:
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
                 Stats
               </a>
-              ${session ? `
+              ${session ? raw(`
               <a href="/author/${session.did}" class="bl-nav-item ${navPage === 'profile' ? 'bl-nav-active' : ''}">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
                 Profile
@@ -937,16 +937,16 @@ export function BlogsLayout({ title, children, session, navPage = '' }: { title:
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
                 Following
               </a>
-              ` : ''}
+              `) : ''}
             </div>
-            ${session ? `
+            ${session ? raw(`
             <div class="bl-nav-footer">
               <button onclick="openCompose()" class="bl-nav-write-btn">
                 <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                 Write
               </button>
             </div>
-            ` : ''}
+            `) : ''}
           </nav>
           <div class="bl-content">
             ${children}
