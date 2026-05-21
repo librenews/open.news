@@ -12,7 +12,7 @@ async function main() {
 
   // Get all verified URIs from Postgres
   const res = await db.query(
-    `SELECT uri, verified FROM site_standard_articles WHERE verified IS NOT NULL`
+    `SELECT uri FROM site_standard_articles WHERE verified = true`
   );
 
   console.log(`Found ${res.rows.length} articles with verified status`);
@@ -26,7 +26,7 @@ async function main() {
 
     for (const row of batch) {
       bulkBody.push({ update: { _index: SITE_STANDARD_INDEX, _id: row.uri } });
-      bulkBody.push({ doc: { verified: row.verified === true } });
+      bulkBody.push({ doc: { verified: true } });
     }
 
     if (bulkBody.length > 0) {
