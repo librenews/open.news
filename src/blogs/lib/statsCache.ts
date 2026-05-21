@@ -1,4 +1,6 @@
 import { db } from '../../db/client.js';
+import { getRedis } from '../../lib/redis.js';
+import { logger } from '../../lib/logger.js';
 
 interface StatsCache {
   data: BlogStats;
@@ -71,14 +73,67 @@ export interface BlogStats {
   updatedAt: string;
 }
 
+
 let _cache: StatsCache | null = null;
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 let _warmingPromise: Promise<void> | null = null;
+const REDIS_STATS_KEY = 'blogs:stats:cache';
+
+/** Save the current cache to Redis for persistence across restarts. */
+async function _persistToRedis(data: BlogStats): Promise<void> {
+  try {
+    const redis = getRedis();
+    await redis.set(REDIS_STATS_KEY, JSON.stringify(data), 'EX', 86400); // 24h TTL
+  } catch (err) {
+    logger.warn({ err }, 'Failed to persist stats cache to Redis');
+  }
+}
+
+/** Load cached stats from Redis (returns null if missing/corrupt). */
+async function _loadFromRedis(): Promise<BlogStats | null> {
+  try {
+    const redis = getRedis();
+    const raw = await redis.get(REDIS_STATS_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as BlogStats;
+  } catch (err) {
+    logger.warn({ err }, 'Failed to load stats cache from Redis');
+    return null;
+  }
+}
 
 /** Force-refresh the stats cache (ignores TTL). Called at startup and by the background timer. */
 export async function warmStatsCache(): Promise<void> {
   const data = await _fetchStats();
   _cache = { data, fetchedAt: Date.now() };
+  _persistToRedis(data).catch(() => {}); // fire-and-forget
+}
+
+export async function getBlogStats(): Promise<BlogStats> {
+  if (_cache && Date.now() - _cache.fetchedAt < CACHE_TTL_MS) {
+    return _cache.data;
+  }
+  // Try loading from Redis if in-memory cache is empty (post-restart)
+  if (!_cache) {
+    const redisData = await _loadFromRedis();
+    if (redisData) {
+      _cache = { data: redisData, fetchedAt: Date.now() };
+      // Kick off a background refresh so data becomes fresh
+      if (!_warmingPromise) {
+        _warmingPromise = warmStatsCache().finally(() => { _warmingPromise = null; });
+      }
+      return redisData;
+    }
+  }
+  // If a warm is already in progress, wait for it instead of spawning another
+  if (_warmingPromise) {
+    await _warmingPromise;
+    if (_cache) return _cache.data;
+  }
+  _warmingPromise = warmStatsCache();
+  await _warmingPromise;
+  _warmingPromise = null;
+  return _cache!.data;
 }
 
 async function _fetchStats(): Promise<BlogStats> {
@@ -389,19 +444,4 @@ async function _fetchStats(): Promise<BlogStats> {
   };
 
   return data;
-}
-
-export async function getBlogStats(): Promise<BlogStats> {
-  if (_cache && Date.now() - _cache.fetchedAt < CACHE_TTL_MS) {
-    return _cache.data;
-  }
-  // If a warm is already in progress, wait for it instead of spawning another
-  if (_warmingPromise) {
-    await _warmingPromise;
-    if (_cache) return _cache.data;
-  }
-  _warmingPromise = warmStatsCache();
-  await _warmingPromise;
-  _warmingPromise = null;
-  return _cache!.data;
 }
