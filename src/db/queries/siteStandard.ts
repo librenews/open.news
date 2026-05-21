@@ -19,6 +19,7 @@ export async function markSiteStandardDidKnown(did: string): Promise<void> {
 export async function upsertSiteStandardArticle(
   uri: string,
   authorDid: string,
+  authorHandle: string | null,
   title: string | null,
   description: string | null,
   publishedAt: Date | null,
@@ -31,9 +32,10 @@ export async function upsertSiteStandardArticle(
 ): Promise<void> {
   try {
     await db.query(
-      `INSERT INTO site_standard_articles (uri, author_did, title, description, published_at, site, path, raw_record, language, word_count, suppressed)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      `INSERT INTO site_standard_articles (uri, author_did, author_handle, title, description, published_at, site, path, raw_record, language, word_count, suppressed)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
        ON CONFLICT (uri) DO UPDATE SET
+         author_handle = COALESCE(EXCLUDED.author_handle, site_standard_articles.author_handle),
          title = EXCLUDED.title,
          description = EXCLUDED.description,
          published_at = EXCLUDED.published_at,
@@ -43,7 +45,7 @@ export async function upsertSiteStandardArticle(
          language = EXCLUDED.language,
          word_count = EXCLUDED.word_count,
          suppressed = EXCLUDED.suppressed`,
-      [uri, authorDid, title, description, publishedAt, site, path, rawRecord, language, wordCount, suppressed]
+      [uri, authorDid, authorHandle, title, description, publishedAt, site, path, rawRecord, language, wordCount, suppressed]
     );
   } catch (err) {
     logger.error({ err, uri }, 'Failed to upsert site_standard_article');

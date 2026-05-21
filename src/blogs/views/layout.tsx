@@ -454,6 +454,52 @@ export function BlogsLayout({ title, children, session }: { title: string; child
             .bl-charts-grid { grid-template-columns: 1fr; }
             .bl-chart-wide { grid-column: 1; }
             .bl-kpi-grid { grid-template-columns: repeat(2, 1fr); }
+            .bl-bf-grid { grid-template-columns: 1fr; }
+          }
+          .bl-bridgyfed-split {
+            margin-bottom: 2rem;
+          }
+          .bl-bf-label {
+            font-size: 0.72rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.07em;
+            margin-bottom: 0.6rem;
+          }
+          .bl-bf-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1rem;
+          }
+          .bl-bf-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 0.9rem 1.1rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.4rem;
+          }
+          .bl-bf-native { border-left: 3px solid #6366f1; }
+          .bl-bf-bridgyfed { border-left: 3px solid #10b981; }
+          .bl-bf-waa { border-left: 3px solid #f59e0b; }
+          .bl-bf-title {
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: var(--text-secondary);
+            margin-bottom: 0.25rem;
+          }
+          .bl-bf-row { display: flex; align-items: baseline; gap: 0.4rem; }
+          .bl-bf-num {
+            font-size: 1.4rem;
+            font-weight: 700;
+            letter-spacing: -0.03em;
+            color: var(--text);
+          }
+          .bl-bf-sub {
+            font-size: 0.7rem;
+            color: var(--text-muted);
           }
         </style>
       </head>

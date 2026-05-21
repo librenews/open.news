@@ -5,6 +5,7 @@ import { getOsClient, SITE_STANDARD_INDEX } from '../track/opensearch.js';
 import { db } from '../db/client.js';
 import { BskyAgent } from '@atproto/api';
 import { resolvePds } from '../lib/pds.js';
+import { getCachedProfile } from '../lib/pdsCache.js';
 import { upsertSiteStandardArticle } from '../db/queries/siteStandard.js';
 
 interface IndexSiteStandardData {
@@ -216,8 +217,15 @@ export async function indexSiteStandardJob(job: Job<IndexSiteStandardData>) {
       logger.info({ uri: postUri, site: record.site, title: title?.substring(0, 60) }, 'Indexed as suppressed (hidden from Latest)');
     }
     
-    // 5. Save core metadata to Postgres
-    await upsertSiteStandardArticle(postUri, did, title, description, publishedAt, site, path, record, language, wordCount, suppressed);
+    // 5. Resolve author handle (for BridgyFed detection and display)
+    let authorHandle: string | null = null;
+    try {
+      const profile = await getCachedProfile(did);
+      authorHandle = profile.handle || null;
+    } catch { /* non-fatal — handle stays null */ }
+
+    // 6. Save core metadata to Postgres
+    await upsertSiteStandardArticle(postUri, did, authorHandle, title, description, publishedAt, site, path, record, language, wordCount, suppressed);
     
     // 3. Index to OpenSearch
     const os = getOsClient();

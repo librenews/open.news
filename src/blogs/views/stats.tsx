@@ -68,6 +68,28 @@ export function StatsPage({ stats }: { stats: BlogStats }) {
         </div>
       </div>
 
+      <!-- BridgyFed Split -->
+      <div class="bl-bridgyfed-split">
+        <div class="bl-bf-label">Yesterday breakdown</div>
+        <div class="bl-bf-grid">
+          <div class="bl-bf-card bl-bf-native">
+            <div class="bl-bf-title">🌐 Native AT Protocol</div>
+            <div class="bl-bf-row"><span class="bl-bf-num">${fmt(stats.daa_native)}</span><span class="bl-bf-sub">authors</span></div>
+            <div class="bl-bf-row"><span class="bl-bf-num">${fmt(stats.posts_native)}</span><span class="bl-bf-sub">posts</span></div>
+          </div>
+          <div class="bl-bf-card bl-bf-bridgyfed">
+            <div class="bl-bf-title">🌉 BridgyFed (Fediverse)</div>
+            <div class="bl-bf-row"><span class="bl-bf-num">${fmt(stats.daa_bridgyfed)}</span><span class="bl-bf-sub">authors</span></div>
+            <div class="bl-bf-row"><span class="bl-bf-num">${fmt(stats.posts_bridgyfed)}</span><span class="bl-bf-sub">posts</span></div>
+          </div>
+          <div class="bl-bf-card bl-bf-waa">
+            <div class="bl-bf-title">📅 Weekly (7-day)</div>
+            <div class="bl-bf-row"><span class="bl-bf-num">${fmt(stats.waa_native)}</span><span class="bl-bf-sub">native authors</span></div>
+            <div class="bl-bf-row"><span class="bl-bf-num">${fmt(stats.waa_bridgyfed)}</span><span class="bl-bf-sub">bridgyfed authors</span></div>
+          </div>
+        </div>
+      </div>
+
       <!-- Charts grid -->
       <div class="bl-charts-grid">
 

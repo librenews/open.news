@@ -7,12 +7,20 @@ interface StatsCache {
 
 export interface BlogStats {
   // Hero KPIs
-  waa: number;                // rolling 7-day unique authors
-  daa: number;                // yesterday unique authors
+  waa: number;
+  daa: number;
   postsYesterday: number;
   totalAuthors: number;
   totalPosts: number;
-  avgPostsPerAuthor: number;  // weekday avg last 14 days
+  avgPostsPerAuthor: number;
+
+  // BridgyFed split
+  waa_native: number;
+  waa_bridgyfed: number;
+  daa_native: number;
+  daa_bridgyfed: number;
+  posts_native: number;
+  posts_bridgyfed: number;
 
   // 30-day trend (WAA rolling)
   waaTrend: { day: string; waa: number }[];
@@ -62,9 +70,27 @@ export async function getBlogStats(): Promise<BlogStats> {
         (SELECT COUNT(DISTINCT author_did) FROM site_standard_articles
          WHERE created_at >= NOW() - INTERVAL '7 days') AS waa,
         (SELECT COUNT(DISTINCT author_did) FROM site_standard_articles
+         WHERE created_at >= NOW() - INTERVAL '7 days'
+           AND (author_handle IS NULL OR author_handle NOT LIKE '%.web.brid.gy')) AS waa_native,
+        (SELECT COUNT(DISTINCT author_did) FROM site_standard_articles
+         WHERE created_at >= NOW() - INTERVAL '7 days'
+           AND author_handle LIKE '%.web.brid.gy') AS waa_bridgyfed,
+        (SELECT COUNT(DISTINCT author_did) FROM site_standard_articles
          WHERE DATE(created_at) = CURRENT_DATE - 1) AS daa,
+        (SELECT COUNT(DISTINCT author_did) FROM site_standard_articles
+         WHERE DATE(created_at) = CURRENT_DATE - 1
+           AND (author_handle IS NULL OR author_handle NOT LIKE '%.web.brid.gy')) AS daa_native,
+        (SELECT COUNT(DISTINCT author_did) FROM site_standard_articles
+         WHERE DATE(created_at) = CURRENT_DATE - 1
+           AND author_handle LIKE '%.web.brid.gy') AS daa_bridgyfed,
         (SELECT COUNT(*) FROM site_standard_articles
          WHERE DATE(created_at) = CURRENT_DATE - 1) AS posts_yesterday,
+        (SELECT COUNT(*) FROM site_standard_articles
+         WHERE DATE(created_at) = CURRENT_DATE - 1
+           AND (author_handle IS NULL OR author_handle NOT LIKE '%.web.brid.gy')) AS posts_native,
+        (SELECT COUNT(*) FROM site_standard_articles
+         WHERE DATE(created_at) = CURRENT_DATE - 1
+           AND author_handle LIKE '%.web.brid.gy') AS posts_bridgyfed,
         (SELECT COUNT(DISTINCT author_did) FROM site_standard_articles) AS total_authors,
         (SELECT COUNT(*) FROM site_standard_articles) AS total_posts,
         (SELECT ROUND(AVG(daily_posts)::numeric, 1)
@@ -193,6 +219,12 @@ export async function getBlogStats(): Promise<BlogStats> {
     totalAuthors: Number(kpi.total_authors),
     totalPosts: Number(kpi.total_posts),
     avgPostsPerAuthor: Number(kpi.avg_posts_per_author),
+    waa_native: Number(kpi.waa_native),
+    waa_bridgyfed: Number(kpi.waa_bridgyfed),
+    daa_native: Number(kpi.daa_native),
+    daa_bridgyfed: Number(kpi.daa_bridgyfed),
+    posts_native: Number(kpi.posts_native),
+    posts_bridgyfed: Number(kpi.posts_bridgyfed),
     waaTrend: waaTrendRows.rows.map((r: any) => ({ day: r.day.toISOString().slice(0, 10), waa: Number(r.waa) })),
     dailyActivity: dailyRows.rows.map((r: any) => ({ day: r.day.toISOString().slice(0, 10), posts: Number(r.posts), authors: Number(r.authors) })),
     retention: retentionRows.rows.map((r: any) => ({ day: r.day.slice(0, 10), retained: Number(r.retained), new_authors: Number(r.new_authors), churned: Number(r.churned) })),
