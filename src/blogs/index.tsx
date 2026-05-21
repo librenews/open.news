@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { html } from 'hono/html';
 import { serve } from '@hono/node-server';
 import { config } from '../lib/config.js';
 import { logger } from '../lib/logger.js';
