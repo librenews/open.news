@@ -40,6 +40,7 @@ export async function ensureIndex(): Promise<void> {
 
 export const ARTICLE_INDEX = 'article_chunks';
 export const SITE_STANDARD_INDEX = 'site_standard_docs';
+export const SITE_STANDARD_CHUNKS_INDEX = 'site_standard_chunks';
 
 /** Ensure the articles index exists with knn vector mapping. */
 export async function ensureArticleIndex(): Promise<void> {
@@ -75,6 +76,43 @@ export async function ensureArticleIndex(): Promise<void> {
     },
   });
   logger.info('OpenSearch article index created');
+}
+
+/** Ensure the site.standard.document chunks index exists with knn vector mapping. */
+export async function ensureSiteStandardChunksIndex(): Promise<void> {
+  const os = getOsClient();
+  const exists = await os.indices.exists({ index: SITE_STANDARD_CHUNKS_INDEX });
+  if (exists.body) return;
+
+  await os.indices.create({
+    index: SITE_STANDARD_CHUNKS_INDEX,
+    body: {
+      settings: {
+        index: { knn: true }
+      },
+      mappings: {
+        properties: {
+          uri: { type: 'keyword' },
+          did: { type: 'keyword' },
+          chunk_index: { type: 'integer' },
+          published_at: { type: 'date' },
+          text_content: { type: 'text' },
+          site: { type: 'keyword' },
+          language: { type: 'keyword' },
+          embedding: {
+            type: 'knn_vector',
+            dimension: config.EMBED_DIMENSION,
+            method: {
+              name: 'hnsw',
+              space_type: 'cosinesimil',
+              engine: 'nmslib'
+            }
+          },
+        },
+      },
+    },
+  });
+  logger.info('OpenSearch site_standard_chunks index created');
 }
 
 /** Utility to destroy the article chunks index so mappings can be recreated */

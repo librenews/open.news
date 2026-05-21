@@ -1,13 +1,15 @@
 import { Job } from 'pg-boss';
 import { franc } from 'franc';
 import { logger } from '../lib/logger.js';
-import { getOsClient, SITE_STANDARD_INDEX } from '../track/opensearch.js';
+import { getOsClient, SITE_STANDARD_INDEX, SITE_STANDARD_CHUNKS_INDEX } from '../track/opensearch.js';
 import { db } from '../db/client.js';
 import { BskyAgent } from '@atproto/api';
 import { resolvePds } from '../lib/pds.js';
 import { getCachedProfile } from '../lib/pdsCache.js';
 import { upsertSiteStandardArticle } from '../db/queries/siteStandard.js';
-import { verifyDocument, verifyPublication } from '../lib/verification.js';
+import { verifyDocument } from '../lib/verification.js';
+import { chunkText } from '../lib/chunking.js';
+import { embedTexts } from '../track/embedClient.js';
 
 interface IndexSiteStandardData {
   postUri: string;
@@ -248,6 +250,45 @@ export async function indexSiteStandardJob(job: Job<IndexSiteStandardData>) {
     });
     
     logger.info({ uri: postUri, did }, 'Successfully indexed site.standard.document');
+
+    // 4. Chunk + embed for semantic search (skip short posts)
+    if (wordCount >= 50) {
+      setImmediate(async () => {
+        try {
+          const chunks = chunkText(textContent);
+          if (chunks.length === 0) return;
+
+          const { embeddings } = await embedTexts(chunks);
+          if (embeddings.length !== chunks.length) return;
+
+          // Build bulk body
+          const bulkBody: any[] = [];
+          for (let i = 0; i < chunks.length; i++) {
+            bulkBody.push({ index: { _index: SITE_STANDARD_CHUNKS_INDEX, _id: `${postUri}_chunk_${i}` } });
+            bulkBody.push({
+              uri: postUri,
+              did: did,
+              chunk_index: i,
+              published_at: publishedAt.toISOString(),
+              text_content: chunks[i],
+              site: site,
+              language: language,
+              embedding: embeddings[i],
+            });
+          }
+
+          const os = getOsClient();
+          const res = await os.bulk({ body: bulkBody });
+          if (res.body.errors) {
+            logger.warn({ uri: postUri }, 'Some chunks failed to index');
+          } else {
+            logger.debug({ uri: postUri, chunks: chunks.length }, 'Indexed document chunks with embeddings');
+          }
+        } catch (err) {
+          logger.debug({ err, uri: postUri }, 'Chunk+embed failed (non-fatal)');
+        }
+      });
+    }
 
     // 7. Async verification — never blocks indexing
     setImmediate(async () => {

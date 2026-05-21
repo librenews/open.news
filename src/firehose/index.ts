@@ -50,6 +50,34 @@ function isRecentlySeen(url: string): boolean {
   return false;
 }
 
+// ─── Verified site domain cache ─────────────────────────────────────────────
+// Keeps a Set of domain origins (e.g. "https://myblog.com") from verified
+// site_standard_articles. Refreshed every 5 minutes. Cheap O(1) check before
+// doing any DB lookups for share detection.
+let verifiedSiteOrigins: Set<string> = new Set();
+let verifiedOriginsLastRefresh = 0;
+const VERIFIED_ORIGINS_TTL_MS = 5 * 60 * 1000;
+
+async function getVerifiedSiteOrigins(): Promise<Set<string>> {
+  if (Date.now() - verifiedOriginsLastRefresh < VERIFIED_ORIGINS_TTL_MS && verifiedSiteOrigins.size > 0) {
+    return verifiedSiteOrigins;
+  }
+  try {
+    const { rows } = await db.query(
+      `SELECT DISTINCT site FROM site_standard_articles
+       WHERE verified = true AND site LIKE 'http%'`
+    );
+    const origins = new Set<string>();
+    for (const r of rows) {
+      try { origins.add(new URL(r.site).origin); } catch {}
+    }
+    verifiedSiteOrigins = origins;
+    verifiedOriginsLastRefresh = Date.now();
+    logger.debug({ count: origins.size }, 'Refreshed verified site origins cache');
+  } catch {}
+  return verifiedSiteOrigins;
+}
+
 // ─── Cursor persistence ───────────────────────────────────────────────────────
 
 async function loadCursor(): Promise<bigint | null> {
@@ -352,6 +380,18 @@ function handleEvent(event: JetstreamEvent): void {
         continue;
       }
 
+      // Match blogs.social URLs → extract AT URI
+      const blogsMatch = url.match(/blogs\.social\/read\/([^/]+)\/([^/?#]+)/);
+      if (blogsMatch) {
+        const articleUri = `at://${blogsMatch[1]}/site.standard.document/${blogsMatch[2]}`;
+        db.query(
+          `INSERT INTO article_interactions (article_uri, actor_did, interaction_type, record_uri)
+           VALUES ($1, $2, 'share', $3) ON CONFLICT (article_uri, actor_did, interaction_type) DO NOTHING`,
+          [articleUri, did, postUri]
+        ).catch(err => logger.debug({ err }, 'Failed to track blogs share'));
+        continue;
+      }
+
       // Match leaflet.pub URLs → look up by rkey
       const leafletMatch = url.match(/([^.]+)\.leaflet\.pub\/([^/?#]+)/);
       if (leafletMatch) {
@@ -374,6 +414,30 @@ function handleEvent(event: JetstreamEvent): void {
            VALUES ($1, $2, 'share', $3) ON CONFLICT (article_uri, actor_did, interaction_type) DO NOTHING`,
           [url, did, postUri]
         ).catch(err => logger.debug({ err }, 'Failed to track AT URI share'));
+        continue;
+      }
+
+      // Domain-agnostic: match any HTTP URL against verified standard.site docs
+      if (url.startsWith('http')) {
+        try {
+          const urlOrigin = new URL(url).origin;
+          // Use synchronous cache check first, then async refresh if stale
+          if (verifiedSiteOrigins.has(urlOrigin)) {
+            const urlPath = new URL(url).pathname;
+            db.query(
+              `INSERT INTO article_interactions (article_uri, actor_did, interaction_type, record_uri)
+               SELECT uri, $1, 'share', $2 FROM site_standard_articles
+               WHERE verified = true AND site LIKE $3 AND path = $4
+               LIMIT 1
+               ON CONFLICT (article_uri, actor_did, interaction_type) DO NOTHING`,
+              [did, postUri, urlOrigin + '%', urlPath]
+            ).catch(err => logger.debug({ err }, 'Failed to track verified doc share'));
+          }
+          // Trigger async refresh if stale (fire-and-forget)
+          if (Date.now() - verifiedOriginsLastRefresh > VERIFIED_ORIGINS_TTL_MS) {
+            getVerifiedSiteOrigins().catch(() => {});
+          }
+        } catch {}
       }
     }
   }
@@ -409,6 +473,7 @@ async function start() {
 
   // Load geotagged DIDs into memory for nearby auto-tagging
   await refreshGeotaggedDids().catch(err => logger.warn({ err }, 'Failed initial geo cache load'));
+  await getVerifiedSiteOrigins().catch(err => logger.warn({ err }, 'Failed initial verified origins cache load'));
 
   connect();
 
