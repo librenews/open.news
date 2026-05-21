@@ -267,7 +267,7 @@ export async function percolatePost(
 /**
  * Searches the site.standard.document index using multi-language fields and highlighting.
  */
-export async function searchSiteStandardArticles(query: string, len: 'all' | 'long' = 'all', sortBy: 'relevant' | 'recent' = 'relevant', limit: number = 20, verifiedOnly: boolean = false) {
+export async function searchSiteStandardArticles(query: string, len: 'all' | 'long' = 'all', sortBy: 'relevant' | 'recent' = 'relevant', limit: number = 20, verifiedOnly: boolean = false, from: number = 0) {
   const os = getOsClient();
   
   const must: any[] = [
@@ -294,7 +294,9 @@ export async function searchSiteStandardArticles(query: string, len: 'all' | 'lo
   }
 
   const body: any = {
+    from,
     size: limit,
+    track_total_hits: true,
     query: {
       bool: {
         must: must,

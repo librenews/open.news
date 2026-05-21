@@ -362,16 +362,22 @@ app.get('/stats', async (c) => {
 app.get('/search', async (c) => {
   const q = (c.req.query('q') || '').trim();
   const sort = (c.req.query('sort') || 'relevant') as 'relevant' | 'latest';
-  const filter = (c.req.query('filter') || 'verified') as 'verified' | 'all';
+  const filter = (c.req.query('filter') || 'all') as 'verified' | 'all';
+  const page = Math.max(1, parseInt(c.req.query('page') || '1'));
+  const perPage = 20;
   const session = await enrichSession(await getBlogsSession(c));
 
   let results: BlogSearchResult[] = [];
+  let total = 0;
 
   if (q) {
     try {
       const osSort = sort === 'latest' ? 'recent' : 'relevant';
-      const hits = await searchSiteStandardArticles(q, 'all', osSort, 50);
+      const verifiedOnly = filter === 'verified';
+      const from = (page - 1) * perPage;
+      const hits = await searchSiteStandardArticles(q, 'all', osSort, perPage, verifiedOnly, from);
 
+      total = typeof hits.total === 'object' ? hits.total.value : (hits.total || 0);
       const hitList = hits.hits || [];
       if (hitList.length > 0) {
         // Get author profiles
@@ -407,7 +413,7 @@ app.get('/search', async (c) => {
     }
   }
 
-  return c.html(BlogSearchPage({ query: q, results, sort, filter, session }) as unknown as string);
+  return c.html(BlogSearchPage({ query: q, results, sort, filter, page, perPage, total, session }) as unknown as string);
 });
 
 // ── Subscriptions page ──────────────────────────────────────────────────────

@@ -34,27 +34,27 @@ function escapeHtml(s: string): string {
 }
 
 function sanitizeHighlight(s: string): string {
-  // Allow only <em> tags for highlights, strip everything else
   return s.replace(/<(?!\/?em\b)[^>]*>/g, '');
 }
 
-export function BlogSearchPage({ query, results, sort, filter, session }: {
+export function BlogSearchPage({ query, results, sort, filter, page, perPage, total, session }: {
   query: string;
   results: BlogSearchResult[];
   sort: 'relevant' | 'latest';
   filter: 'verified' | 'all';
+  page: number;
+  perPage: number;
+  total: number;
   session?: BlogsProfile | null;
 }) {
-  const totalAll = results.length;
-  const totalVerified = results.filter(r => r.verified).length;
-  const displayed = filter === 'verified' ? results.filter(r => r.verified) : results;
-
   const fmt = (n: number) => n.toLocaleString('en-US');
+  const totalPages = Math.ceil(total / perPage);
 
-  function buildUrl(overrides: { sort?: string; filter?: string }) {
+  function buildUrl(overrides: { sort?: string; filter?: string; page?: number }) {
     const s = overrides.sort || sort;
     const f = overrides.filter || filter;
-    return `/search?q=${encodeURIComponent(query)}&sort=${s}&filter=${f}`;
+    const p = overrides.page || 1;
+    return `/search?q=${encodeURIComponent(query)}&sort=${s}&filter=${f}${p > 1 ? `&page=${p}` : ''}`;
   }
 
   return html`
@@ -89,108 +89,26 @@ export function BlogSearchPage({ query, results, sort, filter, session }: {
             --font: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             --radius: 12px;
           }
-
           * { box-sizing: border-box; margin: 0; padding: 0; }
           html { overflow-y: scroll; }
-          body {
-            background: var(--bg);
-            color: var(--text);
-            font-family: var(--font);
-            -webkit-font-smoothing: antialiased;
-            line-height: 1.55;
-          }
+          body { background: var(--bg); color: var(--text); font-family: var(--font); -webkit-font-smoothing: antialiased; line-height: 1.55; }
           a { color: var(--accent); text-decoration: none; }
           a:hover { color: var(--accent-hover); }
 
-          /* ── Header ───────────────────────────────────────── */
-          .bl-header {
-            position: sticky;
-            top: 0;
-            z-index: 100;
-            background: rgba(10,10,12,0.8);
-            backdrop-filter: blur(16px) saturate(1.5);
-            border-bottom: 1px solid var(--border);
-          }
-          .bl-header-inner {
-            max-width: 1240px;
-            margin: 0 auto;
-            padding: 0 0.75rem;
-            height: 52px;
-            display: flex;
-            align-items: center;
-            gap: 1rem;
-          }
-          .bl-logo {
-            flex-shrink: 0;
-            font-size: 1.15rem;
-            font-weight: 700;
-            color: var(--text);
-            text-decoration: none;
-            letter-spacing: -0.04em;
-            padding-left: 0.75rem;
-          }
+          .bl-header { position: sticky; top: 0; z-index: 100; background: rgba(10,10,12,0.8); backdrop-filter: blur(16px) saturate(1.5); border-bottom: 1px solid var(--border); }
+          .bl-header-inner { max-width: 1240px; margin: 0 auto; padding: 0 0.75rem; height: 52px; display: flex; align-items: center; gap: 1rem; }
+          .bl-logo { flex-shrink: 0; font-size: 1.15rem; font-weight: 700; color: var(--text); text-decoration: none; letter-spacing: -0.04em; padding-left: 0.75rem; }
           .bl-logo span { color: var(--accent); }
-          .bl-header-spacer { flex: 1; }
-          .bl-header-search {
-            flex: 1;
-            max-width: 480px;
-            position: relative;
-          }
-          .bl-header-search input {
-            width: 100%;
-            background: var(--bg-card);
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            padding: 0.45rem 0.75rem 0.45rem 2.25rem;
-            font-size: 0.85rem;
-            color: var(--text);
-            font-family: var(--font);
-            outline: none;
-            transition: border-color 0.15s;
-          }
-          .bl-header-search input:focus {
-            border-color: var(--accent);
-          }
-          .bl-header-search input::placeholder {
-            color: var(--text-muted);
-          }
-          .bl-header-search svg {
-            position: absolute;
-            left: 0.65rem;
-            top: 50%;
-            transform: translateY(-50%);
-            width: 15px;
-            height: 15px;
-            color: var(--text-muted);
-            pointer-events: none;
-          }
-          .bl-header-actions {
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-            flex-shrink: 0;
-          }
-          .bl-btn {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.35rem;
-            font-size: 0.78rem;
-            font-weight: 600;
-            padding: 0.4rem 0.85rem;
-            border-radius: 99px;
-            border: none;
-            cursor: pointer;
-            transition: all 0.15s;
-            text-decoration: none;
-            font-family: var(--font);
-          }
-          .bl-btn-primary {
-            background: var(--accent);
-            color: white;
-          }
+          .bl-header-search { flex: 1; max-width: 480px; position: relative; }
+          .bl-header-search input { width: 100%; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 0.45rem 0.75rem 0.45rem 2.25rem; font-size: 0.85rem; color: var(--text); font-family: var(--font); outline: none; transition: border-color 0.15s; }
+          .bl-header-search input:focus { border-color: var(--accent); }
+          .bl-header-search input::placeholder { color: var(--text-muted); }
+          .bl-header-search svg { position: absolute; left: 0.65rem; top: 50%; transform: translateY(-50%); width: 15px; height: 15px; color: var(--text-muted); pointer-events: none; }
+          .bl-header-actions { display: flex; align-items: center; gap: 0.75rem; flex-shrink: 0; }
+          .bl-btn { display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.78rem; font-weight: 600; padding: 0.4rem 0.85rem; border-radius: 99px; border: none; cursor: pointer; transition: all 0.15s; text-decoration: none; font-family: var(--font); }
+          .bl-btn-primary { background: var(--accent); color: white; }
           .bl-btn-primary:hover { background: var(--accent-hover); color: white; }
 
-          /* ── User menu ──────────────────────────────────── */
           .bl-user-menu { position: relative; cursor: pointer; }
           .bl-user-menu img { width: 30px; height: 30px; border-radius: 50%; object-fit: cover; display: block; }
           .bl-user-placeholder { width: 30px; height: 30px; border-radius: 50%; background: var(--accent-dim); display: flex; align-items: center; justify-content: center; color: var(--accent); font-size: 0.75rem; font-weight: 700; }
@@ -204,224 +122,51 @@ export function BlogSearchPage({ query, results, sort, filter, session }: {
           .bl-user-dropdown a:hover { background: var(--bg-hover); color: var(--text); }
           .bl-user-dropdown .bl-signout-link { color: var(--red); border-top: 1px solid var(--border); }
 
-          /* ── Search page ────────────────────────────────── */
-          .search-container {
-            max-width: 760px;
-            margin: 0 auto;
-            padding: 0 1rem;
-          }
-          .search-header {
-            padding: 1.5rem 0 0;
-          }
-          .search-heading {
-            font-size: 1.1rem;
-            font-weight: 700;
-            color: var(--text);
-            margin-bottom: 0.25rem;
-          }
-          .search-heading span {
-            font-weight: 400;
-            color: var(--text-secondary);
-          }
-          .search-meta {
-            font-size: 0.8rem;
-            color: var(--text-muted);
-            margin-bottom: 1rem;
-          }
-          .search-tabs {
-            display: flex;
-            gap: 0;
-            border-bottom: 1px solid var(--border);
-          }
-          .search-tab {
-            padding: 0.6rem 1.25rem;
-            font-size: 0.85rem;
-            font-weight: 600;
-            color: var(--text-muted);
-            text-decoration: none;
-            border-bottom: 2px solid transparent;
-            transition: all 0.15s;
-            margin-bottom: -1px;
-          }
+          .search-container { max-width: 760px; margin: 0 auto; padding: 0 1rem; }
+          .search-header { padding: 1.5rem 0 0; }
+          .search-heading { font-size: 1.1rem; font-weight: 700; color: var(--text); margin-bottom: 0.25rem; }
+          .search-heading span { font-weight: 400; color: var(--text-secondary); }
+          .search-meta { font-size: 0.8rem; color: var(--text-muted); margin-bottom: 1rem; }
+          .search-tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border); }
+          .search-tab { padding: 0.6rem 1.25rem; font-size: 0.85rem; font-weight: 600; color: var(--text-muted); text-decoration: none; border-bottom: 2px solid transparent; transition: all 0.15s; margin-bottom: -1px; }
           .search-tab:hover { color: var(--text-secondary); }
-          .search-tab.active {
-            color: var(--text);
-            border-bottom-color: var(--accent);
-          }
-          .search-tab .tab-count {
-            font-size: 0.72rem;
-            font-weight: 400;
-            color: var(--text-muted);
-            margin-left: 0.35rem;
-          }
-
-          /* Sort pills */
-          .search-sort {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            padding: 0.75rem 0;
-          }
-          .search-sort-label {
-            font-size: 0.75rem;
-            color: var(--text-muted);
-            font-weight: 500;
-          }
-          .sort-pill {
-            font-size: 0.75rem;
-            font-weight: 600;
-            padding: 0.3rem 0.7rem;
-            border-radius: 99px;
-            color: var(--text-muted);
-            text-decoration: none;
-            background: transparent;
-            border: 1px solid transparent;
-            transition: all 0.15s;
-          }
+          .search-tab.active { color: var(--text); border-bottom-color: var(--accent); }
+          .search-sort { display: flex; align-items: center; gap: 0.5rem; padding: 0.75rem 0; }
+          .search-sort-label { font-size: 0.75rem; color: var(--text-muted); font-weight: 500; }
+          .sort-pill { font-size: 0.75rem; font-weight: 600; padding: 0.3rem 0.7rem; border-radius: 99px; color: var(--text-muted); text-decoration: none; background: transparent; border: 1px solid transparent; transition: all 0.15s; }
           .sort-pill:hover { color: var(--text-secondary); border-color: var(--border); }
-          .sort-pill.active {
-            color: var(--text);
-            background: var(--accent-dim);
-            border-color: var(--accent);
-          }
+          .sort-pill.active { color: var(--text); background: var(--accent-dim); border-color: var(--accent); }
 
-          /* Result cards */
-          .result-card {
-            padding: 1rem 0;
-            border-bottom: 1px solid var(--border);
-          }
-          .result-link {
-            text-decoration: none;
-            color: inherit;
-            display: block;
-          }
-          .result-title {
-            font-size: 0.95rem;
-            font-weight: 700;
-            line-height: 1.4;
-            margin-bottom: 0.3rem;
-            color: var(--text);
-          }
+          .result-card { padding: 1rem 0; border-bottom: 1px solid var(--border); }
+          .result-link { text-decoration: none; color: inherit; display: block; }
+          .result-title { font-size: 0.95rem; font-weight: 700; line-height: 1.4; margin-bottom: 0.3rem; color: var(--text); }
           .result-title:hover { color: var(--accent-hover); }
-          .result-highlight {
-            font-size: 0.82rem;
-            font-weight: 400;
-            line-height: 1.6;
-            color: var(--text-secondary);
-            margin-bottom: 0.4rem;
-          }
-          .result-highlight em {
-            font-style: normal;
-            font-weight: 600;
-            color: var(--text);
-            background: var(--accent-dim);
-            padding: 0.05rem 0.2rem;
-            border-radius: 3px;
-          }
-          .result-meta {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            font-size: 0.75rem;
-            color: var(--text-muted);
-            flex-wrap: wrap;
-          }
-          .result-author {
-            display: flex;
-            align-items: center;
-            gap: 0.3rem;
-            text-decoration: none;
-            color: var(--text-secondary);
-            font-weight: 500;
-          }
+          .result-highlight { font-size: 0.82rem; font-weight: 400; line-height: 1.6; color: var(--text-secondary); margin-bottom: 0.4rem; }
+          .result-highlight em { font-style: normal; font-weight: 600; color: var(--text); background: var(--accent-dim); padding: 0.05rem 0.2rem; border-radius: 3px; }
+          .result-meta { display: flex; align-items: center; gap: 0.5rem; font-size: 0.75rem; color: var(--text-muted); flex-wrap: wrap; }
+          .result-author { display: flex; align-items: center; gap: 0.3rem; text-decoration: none; color: var(--text-secondary); font-weight: 500; }
           .result-author:hover { color: var(--text); }
-          .result-author img {
-            width: 18px;
-            height: 18px;
-            border-radius: 50%;
-            object-fit: cover;
-          }
-          .result-author-placeholder {
-            width: 18px;
-            height: 18px;
-            border-radius: 50%;
-            background: var(--text-muted);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: var(--bg);
-            font-size: 0.5rem;
-            font-weight: 700;
-          }
-          .result-verified-badge {
-            font-size: 0.65rem;
-            font-weight: 700;
-            color: var(--verified-color);
-            background: rgba(34,211,238,0.08);
-            padding: 0.15rem 0.4rem;
-            border-radius: 99px;
-            letter-spacing: 0.02em;
-          }
-          .result-site {
-            color: var(--text-muted);
-            font-size: 0.72rem;
-          }
+          .result-author img { width: 18px; height: 18px; border-radius: 50%; object-fit: cover; }
+          .result-author-placeholder { width: 18px; height: 18px; border-radius: 50%; background: var(--text-muted); display: flex; align-items: center; justify-content: center; color: var(--bg); font-size: 0.5rem; font-weight: 700; }
+          .result-verified-badge { font-size: 0.65rem; font-weight: 700; color: var(--verified-color); background: rgba(34,211,238,0.08); padding: 0.15rem 0.4rem; border-radius: 99px; letter-spacing: 0.02em; }
+          .result-site { color: var(--text-muted); font-size: 0.72rem; }
 
-          .empty-results {
-            text-align: center;
-            padding: 4rem 2rem;
-            color: var(--text-muted);
-          }
-          .empty-results h3 {
-            font-size: 1rem;
-            color: var(--text-secondary);
-            margin-bottom: 0.5rem;
-          }
+          .empty-results { text-align: center; padding: 4rem 2rem; color: var(--text-muted); }
+          .empty-results h3 { font-size: 1rem; color: var(--text-secondary); margin-bottom: 0.5rem; }
 
-          .search-hero {
-            text-align: center;
-            padding: 6rem 2rem 4rem;
-          }
-          .search-hero h1 {
-            font-size: 1.5rem;
-            font-weight: 700;
-            margin-bottom: 0.75rem;
-            color: var(--text);
-          }
-          .search-hero p {
-            color: var(--text-secondary);
-            font-size: 0.9rem;
-            margin-bottom: 1.5rem;
-          }
-          .search-hero-form {
-            max-width: 520px;
-            margin: 0 auto;
-            position: relative;
-          }
-          .search-hero-form input {
-            width: 100%;
-            background: var(--bg-card);
-            border: 1px solid var(--border-hover);
-            border-radius: 12px;
-            padding: 0.85rem 1rem 0.85rem 2.75rem;
-            font-size: 1rem;
-            color: var(--text);
-            font-family: var(--font);
-            outline: none;
-            transition: border-color 0.15s;
-          }
+          .search-hero { text-align: center; padding: 6rem 2rem 4rem; }
+          .search-hero h1 { font-size: 1.5rem; font-weight: 700; margin-bottom: 0.75rem; color: var(--text); }
+          .search-hero p { color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 1.5rem; }
+          .search-hero-form { max-width: 520px; margin: 0 auto; position: relative; }
+          .search-hero-form input { width: 100%; background: var(--bg-card); border: 1px solid var(--border-hover); border-radius: 12px; padding: 0.85rem 1rem 0.85rem 2.75rem; font-size: 1rem; color: var(--text); font-family: var(--font); outline: none; transition: border-color 0.15s; }
           .search-hero-form input:focus { border-color: var(--accent); }
           .search-hero-form input::placeholder { color: var(--text-muted); }
-          .search-hero-form svg {
-            position: absolute;
-            left: 0.9rem;
-            top: 50%;
-            transform: translateY(-50%);
-            width: 18px;
-            height: 18px;
-            color: var(--text-muted);
-            pointer-events: none;
-          }
+          .search-hero-form svg { position: absolute; left: 0.9rem; top: 50%; transform: translateY(-50%); width: 18px; height: 18px; color: var(--text-muted); pointer-events: none; }
+
+          .search-pagination { display: flex; align-items: center; justify-content: center; gap: 1rem; padding: 1.5rem 0 2rem; }
+          .search-pagination a { font-size: 0.82rem; font-weight: 600; color: var(--accent); text-decoration: none; padding: 0.4rem 1rem; border: 1px solid var(--border); border-radius: 8px; transition: all 0.15s; }
+          .search-pagination a:hover { border-color: var(--accent); background: var(--accent-dim); }
+          .search-pagination .page-info { font-size: 0.78rem; color: var(--text-muted); }
 
           @media (max-width: 640px) {
             .bl-header-search { display: none; }
@@ -477,14 +222,10 @@ export function BlogSearchPage({ query, results, sort, filter, session }: {
           ` : html`
             <div class="search-header">
               <h1 class="search-heading">Results for <span>"${escapeHtml(query)}"</span></h1>
-              <div class="search-meta">${fmt(displayed.length)} result${displayed.length !== 1 ? 's' : ''}</div>
+              <div class="search-meta">${fmt(total)} result${total !== 1 ? 's' : ''}${totalPages > 1 ? ` · page ${page} of ${fmt(totalPages)}` : ''}</div>
               <div class="search-tabs">
-                <a href="${buildUrl({ filter: 'verified' })}" class="search-tab ${filter === 'verified' ? 'active' : ''}">
-                  ✅ Verified<span class="tab-count">${fmt(totalVerified)}</span>
-                </a>
-                <a href="${buildUrl({ filter: 'all' })}" class="search-tab ${filter === 'all' ? 'active' : ''}">
-                  All<span class="tab-count">${fmt(totalAll)}</span>
-                </a>
+                <a href="${buildUrl({ filter: 'all' })}" class="search-tab ${filter === 'all' ? 'active' : ''}">All</a>
+                <a href="${buildUrl({ filter: 'verified' })}" class="search-tab ${filter === 'verified' ? 'active' : ''}">✅ Verified</a>
               </div>
               <div class="search-sort">
                 <span class="search-sort-label">Sort:</span>
@@ -494,14 +235,14 @@ export function BlogSearchPage({ query, results, sort, filter, session }: {
             </div>
 
             <div>
-              ${displayed.length === 0
+              ${results.length === 0
                 ? html`
                   <div class="empty-results">
                     <h3>No results found</h3>
                     <p>Try a different search term${filter === 'verified' ? ' or switch to "All" results.' : '.'}</p>
                   </div>
                 `
-                : displayed.map(r => {
+                : results.map(r => {
                     const rkey = r.uri.split('/').pop();
                     const readUrl = `/post/${r.did}/${rkey}`;
                     const minRead = Math.max(1, Math.ceil(r.wordCount / 200));
@@ -532,6 +273,14 @@ export function BlogSearchPage({ query, results, sort, filter, session }: {
                   })
               }
             </div>
+
+            ${totalPages > 1 ? html`
+              <div class="search-pagination">
+                ${page > 1 ? html`<a href="${buildUrl({ page: page - 1 })}">← Previous</a>` : ''}
+                <span class="page-info">Page ${page} of ${fmt(totalPages)}</span>
+                ${page < totalPages ? html`<a href="${buildUrl({ page: page + 1 })}">Next →</a>` : ''}
+              </div>
+            ` : ''}
           `}
         </div>
       </body>
