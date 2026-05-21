@@ -45,6 +45,17 @@ async function getFollowedDids(followerDid: string | null): Promise<Set<string>>
   }
 }
 
+// ── Helper: enrich session with avatar & displayName from PDS ────────────────
+async function enrichSession(session: { did: string; handle: string } | null) {
+  if (!session) return null;
+  try {
+    const p = await getCachedProfile(session.did);
+    return { ...session, avatar: p.avatar || '', displayName: p.displayName || '' };
+  } catch {
+    return { ...session, avatar: '', displayName: '' };
+  }
+}
+
 // ── Health ──────────────────────────────────────────────────────────────────
 app.get('/health', async (c) => {
   try {
@@ -147,7 +158,7 @@ async function fetchSidebarData(): Promise<{ trendingTags: TrendingTag[]; popula
 
 // ── Feed (Homepage) ─────────────────────────────────────────────────────────
 app.get('/', async (c) => {
-  const session = await getBlogsSession(c);
+  const session = await enrichSession(await getBlogsSession(c));
   const page = Math.max(1, parseInt(c.req.query('page') || '1'));
   const view = (c.req.query('view') === 'following' && session) ? 'following' : 'latest';
   const perPage = 30;
@@ -244,7 +255,7 @@ app.get('/', async (c) => {
 
 // ── Tag page ─────────────────────────────────────────────────────────────────
 app.get('/tag/:tag', async (c) => {
-  const session = await getBlogsSession(c);
+  const session = await enrichSession(await getBlogsSession(c));
   const tag = decodeURIComponent(c.req.param('tag'));
   const page = Math.max(1, parseInt(c.req.query('page') || '1'));
   const perPage = 30;
@@ -329,7 +340,7 @@ app.get('/js/blogs.js', (c) => {
 
 // ── Stats page ─────────────────────────────────────────────────────────────
 app.get('/stats', async (c) => {
-  const session = await getBlogsSession(c);
+  const session = await enrichSession(await getBlogsSession(c));
   try {
     const stats = await getBlogStats();
     return c.html((
@@ -352,7 +363,7 @@ app.get('/author/:did/:rkey', (c) => {
 
 // ── Author profile ──────────────────────────────────────────────────────────
 app.get('/author/:did', async (c) => {
-  const session = await getBlogsSession(c);
+  const session = await enrichSession(await getBlogsSession(c));
   const did = c.req.param('did');
   const page = Math.max(1, parseInt(c.req.query('page') || '1'));
   const perPage = 30;
@@ -440,7 +451,7 @@ app.get('/author/:did', async (c) => {
 
 // ── Single post reader ──────────────────────────────────────────────────────
 app.get('/read/:did/:rkey', async (c) => {
-  const session = await getBlogsSession(c);
+  const session = await enrichSession(await getBlogsSession(c));
   const did = c.req.param('did');
   const rkey = c.req.param('rkey');
   const uri = `at://${did}/site.standard.document/${rkey}`;

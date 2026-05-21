@@ -1,6 +1,8 @@
 import { html, raw } from 'hono/html';
 
-export function BlogsLayout({ title, children, session, navPage = '' }: { title: string; children: any; session?: { did: string; handle: string } | null; navPage?: string }) {
+export interface BlogsProfile { did: string; handle: string; avatar?: string; displayName?: string }
+
+export function BlogsLayout({ title, children, session, navPage = '' }: { title: string; children: any; session?: BlogsProfile | null; navPage?: string }) {
   return html`
     <!DOCTYPE html>
     <html lang="en">
@@ -56,26 +58,107 @@ export function BlogsLayout({ title, children, session, navPage = '' }: { title:
             border-bottom: 1px solid var(--border);
           }
           .bl-header-inner {
-            max-width: var(--column-width);
+            max-width: 1240px;
             margin: 0 auto;
-            padding: 0 1rem;
+            padding: 0 0.75rem;
             height: 52px;
             display: flex;
             align-items: center;
             justify-content: space-between;
           }
           .bl-logo {
+            width: 196px;
+            flex-shrink: 0;
             font-size: 1.15rem;
             font-weight: 700;
             color: var(--text);
             text-decoration: none;
             letter-spacing: -0.04em;
+            padding-left: 0.75rem;
           }
           .bl-logo span { color: var(--accent); }
+          .bl-header-spacer { flex: 1; }
           .bl-header-actions {
             display: flex;
             align-items: center;
             gap: 0.75rem;
+          }
+          /* Avatar user dropdown */
+          .bl-user-menu {
+            position: relative;
+            cursor: pointer;
+          }
+          .bl-user-menu img {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            object-fit: cover;
+            display: block;
+          }
+          .bl-user-placeholder {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            background: var(--accent-dim);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--accent);
+            font-size: 0.75rem;
+            font-weight: 700;
+          }
+          .bl-user-dropdown {
+            display: none;
+            position: absolute;
+            top: 100%;
+            right: 0;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.45);
+            min-width: 190px;
+            z-index: 50;
+          }
+          .bl-user-dropdown::before {
+            content: '';
+            position: absolute;
+            top: -8px;
+            left: 0;
+            right: 0;
+            height: 8px;
+          }
+          .bl-user-menu:hover .bl-user-dropdown {
+            display: block;
+          }
+          .bl-user-dropdown-header {
+            padding: 0.65rem 1rem;
+            border-bottom: 1px solid var(--border);
+          }
+          .bl-user-dropdown-name {
+            font-weight: 600;
+            font-size: 0.85rem;
+            color: var(--text);
+          }
+          .bl-user-dropdown-handle {
+            font-size: 0.72rem;
+            color: var(--text-muted);
+          }
+          .bl-user-dropdown a {
+            display: block;
+            padding: 0.55rem 1rem;
+            font-size: 0.82rem;
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-weight: 500;
+            transition: background 0.1s;
+          }
+          .bl-user-dropdown a:hover {
+            background: var(--bg-hover);
+            color: var(--text);
+          }
+          .bl-user-dropdown .bl-signout-link {
+            color: var(--red);
+            border-top: 1px solid var(--border);
           }
           .bl-btn {
             display: inline-flex;
@@ -861,9 +944,26 @@ export function BlogsLayout({ title, children, session, navPage = '' }: { title:
         <header class="bl-header">
           <div class="bl-header-inner">
             <a href="/" class="bl-logo">blogs<span>.social</span></a>
+            <div class="bl-header-spacer"></div>
             <div class="bl-header-actions">
               ${session
-      ? html`<a href="/author/${session.did}" class="bl-btn bl-btn-outline" style="font-size:0.8rem;">${session.handle}</a>`
+      ? html`
+              <div class="bl-user-menu">
+                ${session.avatar
+                  ? html`<img src="${session.avatar}" alt="" />`
+                  : html`<div class="bl-user-placeholder">${(session.displayName || session.handle || '?')[0].toUpperCase()}</div>`
+                }
+                <div class="bl-user-dropdown">
+                  <div class="bl-user-dropdown-header">
+                    <div class="bl-user-dropdown-name">${session.displayName || session.handle}</div>
+                    <div class="bl-user-dropdown-handle">@${session.handle}</div>
+                  </div>
+                  <a href="/author/${session.did}">Profile</a>
+                  <a href="/stats">Stats</a>
+                  <a href="/auth/logout" class="bl-signout-link">Sign out</a>
+                </div>
+              </div>
+              `
       : html`<a href="/auth/login" class="bl-btn bl-btn-primary">Sign in</a>`
     }
             </div>
