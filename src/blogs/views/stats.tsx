@@ -175,20 +175,46 @@ export function StatsPage({ stats }: { stats: BlogStats }) {
         type: 'line',
         data: {
           labels: WAA_DATA.map(d => d.day.slice(5)),
-          datasets: [{
-            label: 'Weekly Active Authors',
-            data: WAA_DATA.map(d => d.waa),
-            borderColor: ACCENT,
-            backgroundColor: 'rgba(99,102,241,0.08)',
-            fill: true,
-            tension: 0.4,
-            pointRadius: 2,
-            pointHoverRadius: 5,
-          }]
+          datasets: [
+            {
+              label: 'Total',
+              data: WAA_DATA.map(d => d.waa),
+              borderColor: ACCENT,
+              backgroundColor: 'rgba(99,102,241,0.08)',
+              fill: true,
+              tension: 0.4,
+              pointRadius: 2,
+              pointHoverRadius: 5,
+              borderWidth: 2,
+            },
+            {
+              label: 'Native',
+              data: WAA_DATA.map(d => d.waa_native),
+              borderColor: AMBER,
+              backgroundColor: 'transparent',
+              tension: 0.4,
+              pointRadius: 1,
+              pointHoverRadius: 4,
+              borderWidth: 1.5,
+              borderDash: [4, 2],
+            },
+            {
+              label: 'BridgyFed',
+              data: WAA_DATA.map(d => d.waa_bridgyfed),
+              borderColor: GREEN,
+              backgroundColor: 'transparent',
+              tension: 0.4,
+              pointRadius: 1,
+              pointHoverRadius: 4,
+              borderWidth: 1.5,
+              borderDash: [4, 2],
+            }
+          ]
         },
         options: {
           responsive: true,
-          plugins: { legend: { display: false } },
+          interaction: { mode: 'index' },
+          plugins: { legend: { labels: { boxWidth: 12 } } },
           scales: {
             x: { grid: { color: GRID } },
             y: { grid: { color: GRID }, beginAtZero: false }
@@ -203,20 +229,43 @@ export function StatsPage({ stats }: { stats: BlogStats }) {
           labels: DAILY_DATA.map(d => d.day.slice(5)),
           datasets: [
             {
-              label: 'Posts',
-              data: DAILY_DATA.map(d => d.posts),
+              label: 'Posts (Native)',
+              data: DAILY_DATA.map(d => d.posts_native),
               backgroundColor: 'rgba(99,102,241,0.55)',
+              stack: 'posts',
               yAxisID: 'y',
-              order: 2,
+              order: 3,
             },
             {
-              label: 'Authors',
-              data: DAILY_DATA.map(d => d.authors),
+              label: 'Posts (BridgyFed)',
+              data: DAILY_DATA.map(d => d.posts_bridgyfed),
+              backgroundColor: 'rgba(16,185,129,0.45)',
+              stack: 'posts',
+              yAxisID: 'y',
+              order: 3,
+            },
+            {
+              label: 'Authors (Native)',
+              data: DAILY_DATA.map(d => d.authors_native),
+              type: 'line',
+              borderColor: AMBER,
+              backgroundColor: 'transparent',
+              tension: 0.3,
+              pointRadius: 1,
+              borderWidth: 1.5,
+              yAxisID: 'y1',
+              order: 1,
+            },
+            {
+              label: 'Authors (BridgyFed)',
+              data: DAILY_DATA.map(d => d.authors_bridgyfed),
               type: 'line',
               borderColor: GREEN,
               backgroundColor: 'transparent',
               tension: 0.3,
-              pointRadius: 2,
+              pointRadius: 1,
+              borderWidth: 1.5,
+              borderDash: [4, 2],
               yAxisID: 'y1',
               order: 1,
             }
@@ -227,8 +276,8 @@ export function StatsPage({ stats }: { stats: BlogStats }) {
           interaction: { mode: 'index' },
           plugins: { legend: { labels: { boxWidth: 12 } } },
           scales: {
-            x: { grid: { color: GRID } },
-            y: { grid: { color: GRID }, position: 'left', title: { display: true, text: 'Posts' } },
+            x: { grid: { color: GRID }, stacked: true },
+            y: { grid: { color: GRID }, position: 'left', stacked: true, title: { display: true, text: 'Posts' } },
             y1: { grid: { display: false }, position: 'right', title: { display: true, text: 'Authors' } }
           }
         }
@@ -261,18 +310,27 @@ export function StatsPage({ stats }: { stats: BlogStats }) {
         type: 'bar',
         data: {
           labels: NEWAUTH_DATA.map(d => d.day.slice(5)),
-          datasets: [{
-            label: 'New Authors',
-            data: NEWAUTH_DATA.map(d => d.new_authors),
-            backgroundColor: 'rgba(16,185,129,0.6)',
-          }]
+          datasets: [
+            {
+              label: 'Native',
+              data: NEWAUTH_DATA.map(d => d.new_native),
+              backgroundColor: 'rgba(245,158,11,0.6)',
+              stack: 'a',
+            },
+            {
+              label: 'BridgyFed',
+              data: NEWAUTH_DATA.map(d => d.new_bridgyfed),
+              backgroundColor: 'rgba(16,185,129,0.6)',
+              stack: 'a',
+            }
+          ]
         },
         options: {
           responsive: true,
-          plugins: { legend: { display: false } },
+          plugins: { legend: { labels: { boxWidth: 12 } } },
           scales: {
-            x: { grid: { color: GRID } },
-            y: { grid: { color: GRID }, beginAtZero: true }
+            x: { grid: { color: GRID }, stacked: true },
+            y: { grid: { color: GRID }, beginAtZero: true, stacked: true }
           }
         }
       });

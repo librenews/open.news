@@ -27,10 +27,10 @@ export interface BlogStats {
   totalPosts_bridgyfed: number;
 
   // 30-day trend (WAA rolling)
-  waaTrend: { day: string; waa: number }[];
+  waaTrend: { day: string; waa: number; waa_native: number; waa_bridgyfed: number }[];
 
   // 30-day daily posts + authors
-  dailyActivity: { day: string; posts: number; authors: number }[];
+  dailyActivity: { day: string; posts: number; authors: number; posts_native: number; posts_bridgyfed: number; authors_native: number; authors_bridgyfed: number }[];
 
   // 14-day retention
   retention: { day: string; retained: number; new_authors: number; churned: number }[];
@@ -45,7 +45,7 @@ export interface BlogStats {
   languages: { language: string; count: number }[];
 
   // New authors per day (30 days)
-  newAuthors: { day: string; new_authors: number }[];
+  newAuthors: { day: string; new_authors: number; new_native: number; new_bridgyfed: number }[];
 
   updatedAt: string;
 }
@@ -121,7 +121,9 @@ async function _fetchStats(): Promise<BlogStats> {
     db.query(`
       SELECT
         DATE(gs.day) AS day,
-        COUNT(DISTINCT a.author_did) AS waa
+        COUNT(DISTINCT a.author_did) AS waa,
+        COUNT(DISTINCT a.author_did) FILTER (WHERE a.author_handle IS NULL OR a.author_handle NOT LIKE '%.web.brid.gy') AS waa_native,
+        COUNT(DISTINCT a.author_did) FILTER (WHERE a.author_handle LIKE '%.web.brid.gy') AS waa_bridgyfed
       FROM generate_series(NOW() - INTERVAL '30 days', NOW(), INTERVAL '1 day') AS gs(day)
       JOIN site_standard_articles a
         ON a.created_at >= gs.day - INTERVAL '7 days'
@@ -135,7 +137,11 @@ async function _fetchStats(): Promise<BlogStats> {
       SELECT
         DATE(created_at) AS day,
         COUNT(*) AS posts,
-        COUNT(DISTINCT author_did) AS authors
+        COUNT(DISTINCT author_did) AS authors,
+        COUNT(*) FILTER (WHERE author_handle IS NULL OR author_handle NOT LIKE '%.web.brid.gy') AS posts_native,
+        COUNT(*) FILTER (WHERE author_handle LIKE '%.web.brid.gy') AS posts_bridgyfed,
+        COUNT(DISTINCT author_did) FILTER (WHERE author_handle IS NULL OR author_handle NOT LIKE '%.web.brid.gy') AS authors_native,
+        COUNT(DISTINCT author_did) FILTER (WHERE author_handle LIKE '%.web.brid.gy') AS authors_bridgyfed
       FROM site_standard_articles
       WHERE created_at >= NOW() - INTERVAL '30 days'
         AND created_at < DATE_TRUNC('day', NOW())
@@ -211,16 +217,18 @@ async function _fetchStats(): Promise<BlogStats> {
     // New authors per day 30 days (first-time publishers)
     db.query(`
       SELECT
-        DATE(first_seen) AS day,
-        COUNT(*) AS new_authors
+        DATE(sub.first_seen) AS day,
+        COUNT(*) AS new_authors,
+        COUNT(*) FILTER (WHERE sub.handle IS NULL OR sub.handle NOT LIKE '%.web.brid.gy') AS new_native,
+        COUNT(*) FILTER (WHERE sub.handle LIKE '%.web.brid.gy') AS new_bridgyfed
       FROM (
-        SELECT author_did, MIN(created_at) AS first_seen
+        SELECT author_did, MIN(created_at) AS first_seen, MAX(author_handle) AS handle
         FROM site_standard_articles
         GROUP BY author_did
       ) sub
-      WHERE first_seen >= NOW() - INTERVAL '30 days'
-      GROUP BY DATE(first_seen)
-      ORDER BY DATE(first_seen)
+      WHERE sub.first_seen >= NOW() - INTERVAL '30 days'
+      GROUP BY DATE(sub.first_seen)
+      ORDER BY DATE(sub.first_seen)
     `),
   ]);
 
@@ -243,13 +251,13 @@ async function _fetchStats(): Promise<BlogStats> {
     totalAuthors_bridgyfed: Number(kpi.total_authors_bridgyfed),
     totalPosts_native: Number(kpi.total_posts_native),
     totalPosts_bridgyfed: Number(kpi.total_posts_bridgyfed),
-    waaTrend: waaTrendRows.rows.map((r: any) => ({ day: r.day.toISOString().slice(0, 10), waa: Number(r.waa) })),
-    dailyActivity: dailyRows.rows.map((r: any) => ({ day: r.day.toISOString().slice(0, 10), posts: Number(r.posts), authors: Number(r.authors) })),
+    waaTrend: waaTrendRows.rows.map((r: any) => ({ day: r.day.toISOString().slice(0, 10), waa: Number(r.waa), waa_native: Number(r.waa_native), waa_bridgyfed: Number(r.waa_bridgyfed) })),
+    dailyActivity: dailyRows.rows.map((r: any) => ({ day: r.day.toISOString().slice(0, 10), posts: Number(r.posts), authors: Number(r.authors), posts_native: Number(r.posts_native), posts_bridgyfed: Number(r.posts_bridgyfed), authors_native: Number(r.authors_native), authors_bridgyfed: Number(r.authors_bridgyfed) })),
     retention: retentionRows.rows.map((r: any) => ({ day: r.day.slice(0, 10), retained: Number(r.retained), new_authors: Number(r.new_authors), churned: Number(r.churned) })),
     hourlyHeatmap: heatmapRows.rows.map((r: any) => ({ dow: Number(r.dow), hour: Number(r.hour), posts: Number(r.posts) })),
     topSites: topSiteRows.rows.map((r: any) => ({ site: r.site, posts: Number(r.posts) })),
     languages: languageRows.rows.map((r: any) => ({ language: r.language, count: Number(r.count) })),
-    newAuthors: newAuthorRows.rows.map((r: any) => ({ day: r.day.toISOString().slice(0, 10), new_authors: Number(r.new_authors) })),
+    newAuthors: newAuthorRows.rows.map((r: any) => ({ day: r.day.toISOString().slice(0, 10), new_authors: Number(r.new_authors), new_native: Number(r.new_native), new_bridgyfed: Number(r.new_bridgyfed) })),
     updatedAt: new Date().toISOString(),
   };
 
