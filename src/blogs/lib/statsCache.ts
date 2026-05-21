@@ -102,11 +102,19 @@ async function _loadFromRedis(): Promise<BlogStats | null> {
   }
 }
 
-/** Force-refresh the stats cache (ignores TTL). Called at startup and by the background timer. */
-export async function warmStatsCache(): Promise<void> {
+/** Force-refresh the stats cache (ignores TTL). */
+async function warmStatsCache(): Promise<void> {
   const data = await _fetchStats();
   _cache = { data, fetchedAt: Date.now() };
   _persistToRedis(data).catch(() => {}); // fire-and-forget
+}
+
+/** Start a tracked warm — so getBlogStats can join it instead of spawning another. */
+export function startStatsWarm(): void {
+  if (_warmingPromise) return; // already warming
+  _warmingPromise = warmStatsCache()
+    .catch((err) => logger.error({ err }, 'Stats warm failed'))
+    .finally(() => { _warmingPromise = null; });
 }
 
 export async function getBlogStats(): Promise<BlogStats> {

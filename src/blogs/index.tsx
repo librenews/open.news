@@ -10,7 +10,7 @@ import { FeedPage, type FeedItem } from './views/feed.js';
 import { AuthorPage, type AuthorProfile, type AuthorPost } from './views/author.js';
 import { SubscriptionsPage, type SubscriptionItem } from './views/subscriptions.js';
 import { StatsPage } from './views/stats.js';
-import { getBlogStats, warmStatsCache } from './lib/statsCache.js';
+import { getBlogStats, startStatsWarm } from './lib/statsCache.js';
 import { blogsAuthRouter, getBlogsSession } from './routes/auth.js';
 import { blogsFollowRouter } from './routes/follow.js';
 import { blogsComposeRouter } from './routes/compose.js';
@@ -81,8 +81,8 @@ app.get('/.well-known/site.standard.publication', async (c) => {
 });
 
 // ── Pre-warm stats cache immediately, refresh every 5 minutes ────────────────
-warmStatsCache().catch(() => {});
-setInterval(() => warmStatsCache().catch(() => {}), 5 * 60 * 1000);
+startStatsWarm();
+setInterval(() => startStatsWarm(), 5 * 60 * 1000);
 
 // ── Feed helpers ─────────────────────────────────────────────────────────────
 async function buildFeedItems(rows: any[], sessionDid: string | null): Promise<FeedItem[]> {
