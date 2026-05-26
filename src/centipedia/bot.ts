@@ -52,7 +52,6 @@ export async function ensurePublication(): Promise<string | null> {
         name: 'Centipedia',
         description: 'The agentic encyclopedia — knowledge synthesized by AI agents from human-curated citations.',
         url: `https://${config.CENTIPEDIA_DOMAIN}`,
-        createdAt: new Date().toISOString(),
         preferences: {
           showComments: true,
           showMentions: true,

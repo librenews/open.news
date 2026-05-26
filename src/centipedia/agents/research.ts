@@ -308,6 +308,7 @@ Write the article in plain text with ## headings for sections. Use plain paragra
     $type: 'site.standard.document',
     title: topic,
     description: articleText.substring(0, 200).trim() + '…',
+    tags: [],
     publishedAt: now,
     updatedAt: now,
     path: `/article/${rkey}`,
@@ -679,11 +680,29 @@ RULES:
     .join('\n');
 
   const now = new Date().toISOString();
+
+  // Retrieve the original publishedAt from the existing record
+  let originalPublishedAt = now;
+  try {
+    const existing = await bot.com.atproto.repo.getRecord({
+      repo: bot.session.did,
+      collection: 'site.standard.document',
+      rkey,
+    });
+    const existingVal = existing.data.value as any;
+    if (existingVal.publishedAt) {
+      originalPublishedAt = existingVal.publishedAt;
+    }
+  } catch {
+    // If record doesn't exist yet, use now
+  }
+
   const record: any = {
     $type: 'site.standard.document',
     title: topic,
     description: articleText.substring(0, 200).trim() + '…',
-    publishedAt: now,
+    tags: [],
+    publishedAt: originalPublishedAt,
     updatedAt: now,
     path: `/article/${rkey}`,
     textContent,

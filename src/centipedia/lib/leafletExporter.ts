@@ -1,7 +1,5 @@
 import { LeafletDocument, LeafletBlock } from '../../weblog/lexicons.js';
 import { BlobRef } from '@atproto/api';
-import crypto from 'crypto';
-import { config } from '../../lib/config.js';
 
 // Exported from Tiptap AST format into Leaflet Linear Document structure natively
 export async function serializeTiptapToLeaflet(tiptapJson: any, title: string, did: string, agent: any, rkey: string): Promise<LeafletDocument> {
@@ -9,18 +7,18 @@ export async function serializeTiptapToLeaflet(tiptapJson: any, title: string, d
   const encoder = new TextEncoder();
 
   if (!tiptapJson || !tiptapJson.content) {
+    const now = new Date().toISOString();
     return {
       $type: 'site.standard.document',
       title,
       description: '',
       tags: [],
-      site: `https://${config.CENTIPEDIA_DOMAIN || 'centipedia.org'}`,
+      site: `at://${did}/site.standard.publication/self`,
       path: `/${rkey}`,
-      author: did,
-      publishedAt: new Date().toISOString(),
+      publishedAt: now,
+      updatedAt: now,
       content: {
-        $type: 'pub.leaflet.content',
-        pages: [{ id: crypto.randomUUID(), $type: 'pub.leaflet.pages.linearDocument', blocks: [] }]
+        pages: [{ $type: 'pub.leaflet.pages.linearDocument', blocks: [] }]
       }
     };
   }
@@ -195,20 +193,19 @@ export async function serializeTiptapToLeaflet(tiptapJson: any, title: string, d
     }
   }
 
+  const now = new Date().toISOString();
   return {
     $type: 'site.standard.document',
     title,
     description: '',
     tags: [],
-    site: `https://${config.CENTIPEDIA_DOMAIN || 'centipedia.org'}`,
+    site: `at://${did}/site.standard.publication/self`,
     path: `/${rkey}`,
-    author: did,
-    publishedAt: new Date().toISOString(),
+    publishedAt: now,
+    updatedAt: now,
     content: {
-      $type: 'pub.leaflet.content',
       pages: [
         {
-          id: crypto.randomUUID(),
           $type: 'pub.leaflet.pages.linearDocument',
           blocks: leafletBlocks
         }
