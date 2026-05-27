@@ -47,6 +47,92 @@ async function fetchUserProfile(did: string) {
   return { displayName: p.displayName, avatar: p.avatar, handle: p.handle };
 }
 
+// ── Sidebar cache (tags + popular posts are identical for all users) ─────────
+const LF_SIDEBAR_TTL_MS = 5 * 60 * 1000; // 5 minutes
+let lfSidebarCache: { data: { popularPosts: any[]; trendingTags: { tag: string; count: number }[] }; ts: number } | null = null;
+let lfSidebarPromise: Promise<{ popularPosts: any[]; trendingTags: { tag: string; count: number }[] }> | null = null;
+
+async function fetchLongformSidebar(): Promise<{ popularPosts: any[]; trendingTags: { tag: string; count: number }[] }> {
+  if (lfSidebarCache && Date.now() - lfSidebarCache.ts < LF_SIDEBAR_TTL_MS) {
+    return lfSidebarCache.data;
+  }
+  if (lfSidebarPromise) return lfSidebarPromise;
+
+  lfSidebarPromise = (async () => {
+    try {
+      let popularPosts: any[] = [];
+      try {
+        const { rows: popRows } = await db.query(`
+          SELECT
+            s.uri, s.author_did, s.title, s.published_at,
+            COUNT(CASE WHEN ai.interaction_type = 'like' THEN 1 END) AS like_count,
+            COUNT(CASE WHEN ai.interaction_type IN ('repost', 'share') THEN 1 END) AS repost_count,
+            COUNT(*) * EXP(-EXTRACT(EPOCH FROM (NOW() - s.published_at)) / (7 * 86400)) AS decay_score
+          FROM article_interactions ai
+          JOIN site_standard_articles s ON s.uri = ai.article_uri
+          WHERE s.published_at > NOW() - INTERVAL '30 days'
+            AND s.word_count > 100
+            AND s.language = 'eng'
+          GROUP BY s.uri, s.author_did, s.title, s.published_at
+          HAVING COUNT(*) >= 1
+          ORDER BY decay_score DESC
+          LIMIT 5
+        `);
+
+        const popDids = [...new Set(popRows.map((r: any) => r.author_did))];
+        const popProfileMap = new Map<string, any>();
+        await Promise.all(popDids.map(async (did) => {
+          const p = await fetchUserProfile(did as string);
+          popProfileMap.set(did as string, p);
+        }));
+
+        popularPosts = popRows.map((r: any) => {
+          const p = popProfileMap.get(r.author_did) || { displayName: r.author_did, avatar: '', handle: r.author_did };
+          return {
+            uri: r.uri,
+            authorDid: r.author_did,
+            authorName: p.displayName,
+            authorHandle: p.handle,
+            authorAvatar: p.avatar,
+            title: r.title,
+            publishedAt: r.published_at?.toISOString() ?? null,
+            likeCount: parseInt(r.like_count) || 0,
+            repostCount: parseInt(r.repost_count) || 0,
+          };
+        });
+      } catch (err) {
+        logger.warn({ err }, 'Failed to fetch popular posts');
+      }
+
+      let trendingTags: { tag: string; count: number }[] = [];
+      try {
+        const { rows: tagRows } = await db.query(`
+          SELECT tag, COUNT(*) AS cnt
+          FROM site_standard_articles s,
+               jsonb_array_elements_text(s.raw_record->'tags') AS tag
+          WHERE s.word_count > 100 AND s.language = 'eng'
+            AND s.suppressed = false
+            AND s.published_at > NOW() - INTERVAL '7 days'
+          GROUP BY tag
+          ORDER BY cnt DESC
+          LIMIT 20
+        `);
+        trendingTags = tagRows.map((r: any) => ({ tag: r.tag, count: parseInt(r.cnt) }));
+      } catch (err) {
+        logger.warn({ err }, 'Failed to fetch trending tags');
+      }
+
+      const data = { popularPosts, trendingTags };
+      lfSidebarCache = { data, ts: Date.now() };
+      return data;
+    } finally {
+      lfSidebarPromise = null;
+    }
+  })();
+
+  return lfSidebarPromise;
+}
+
 /**
  * Safely restore an OAuth session. Returns the Agent session or null if the
  * session was deleted/expired (clears the cookie so the user is prompted to re-login).
@@ -369,72 +455,10 @@ app.get('/', async (c) => {
   // Track whether the user has any subscriptions (for empty state on Following tab)
   const hasSubscriptions = followedPubUris.length > 0;
 
-  // Fetch popular posts using engagement counts with time decay
-  let popularPosts: any[] = [];
-  try {
-    const { rows: popRows } = await db.query(`
-      SELECT
-        s.uri, s.author_did, s.title, s.published_at,
-        COUNT(CASE WHEN ai.interaction_type = 'like' THEN 1 END) AS like_count,
-        COUNT(CASE WHEN ai.interaction_type IN ('repost', 'share') THEN 1 END) AS repost_count,
-        COUNT(*) AS total_interactions,
-        -- Time decay: score = interactions * exp(-age_in_days / 7)
-        COUNT(*) * EXP(-EXTRACT(EPOCH FROM (NOW() - s.published_at)) / (7 * 86400)) AS decay_score
-      FROM article_interactions ai
-      JOIN site_standard_articles s ON s.uri = ai.article_uri
-      WHERE s.published_at > NOW() - INTERVAL '30 days'
-        AND s.word_count > 100
-        AND s.language = 'eng'
-      GROUP BY s.uri, s.author_did, s.title, s.published_at
-      HAVING COUNT(*) >= 1
-      ORDER BY decay_score DESC
-      LIMIT 5
-    `);
+  // ── Cached sidebar data (identical for all users, refresh every 5 min) ──────
+  const sidebarData = await fetchLongformSidebar();
 
-    const popDids = [...new Set(popRows.map((r: any) => r.author_did))];
-    const popProfileMap = new Map<string, any>();
-    await Promise.all(popDids.map(async (did) => {
-      const p = await fetchUserProfile(did as string);
-      popProfileMap.set(did as string, p);
-    }));
-
-    popularPosts = popRows.map((r: any) => {
-      const p = popProfileMap.get(r.author_did) || { displayName: r.author_did, avatar: '', handle: r.author_did };
-      return {
-        uri: r.uri,
-        authorDid: r.author_did,
-        authorName: p.displayName,
-        authorHandle: p.handle,
-        authorAvatar: p.avatar,
-        title: r.title,
-        publishedAt: r.published_at?.toISOString() ?? null,
-        likeCount: parseInt(r.like_count) || 0,
-        repostCount: parseInt(r.repost_count) || 0,
-      };
-    });
-  } catch (err) {
-    logger.warn({ err }, 'Failed to fetch popular posts');
-  }
-
-  // Fetch trending tags (last 7 days)
-  let trendingTags: { tag: string; count: number }[] = [];
-  try {
-    const { rows: tagRows } = await db.query(`
-      SELECT tag, COUNT(*) AS cnt
-      FROM site_standard_articles s,
-           jsonb_array_elements_text(s.raw_record->'tags') AS tag
-      WHERE s.word_count > 100 AND s.language = 'eng'
-        AND s.suppressed = false
-        AND s.published_at > NOW() - INTERVAL '7 days'
-      GROUP BY tag
-      ORDER BY cnt DESC
-      LIMIT 20
-    `);
-    trendingTags = tagRows.map((r: any) => ({ tag: r.tag, count: parseInt(r.cnt) }));
-  } catch (err) {
-    logger.warn({ err }, 'Failed to fetch trending tags');
-  }
-
+  const { popularPosts, trendingTags } = sidebarData;
   const feedToken = sessionDid ? await getOrCreateFeedToken(sessionDid) : null;
   return c.html((<HomePage stories={stories} topics={topics} view={view} profile={profile} domain={config.LONGFORM_DOMAIN} hasSubscriptions={hasSubscriptions} popularPosts={popularPosts} feedToken={feedToken} trendingTags={trendingTags} />) as unknown as string);
 });

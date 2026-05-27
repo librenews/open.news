@@ -117,48 +117,70 @@ async function buildFeedItems(rows: any[], sessionDid: string | null): Promise<F
     };
   });
 }
+// ── Sidebar cache (tags + popular posts are identical for all users) ─────────
+const SIDEBAR_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+let sidebarCache: { data: { trendingTags: TrendingTag[]; popularPosts: PopularPost[] }; ts: number } | null = null;
+let sidebarFetchPromise: Promise<{ trendingTags: TrendingTag[]; popularPosts: PopularPost[] }> | null = null;
 
 async function fetchSidebarData(): Promise<{ trendingTags: TrendingTag[]; popularPosts: PopularPost[] }> {
-  const [tagRows, popRows] = await Promise.all([
-    db.query(`
-      SELECT tag, COUNT(*)::int AS cnt
-      FROM site_standard_articles s,
-           jsonb_array_elements_text(s.raw_record->'tags') AS tag
-      WHERE s.published_at > NOW() - INTERVAL '7 days'
-      GROUP BY tag ORDER BY cnt DESC LIMIT 20
-    `),
-    db.query(`
-      SELECT s.uri, s.author_did, s.title, s.published_at,
-        COUNT(CASE WHEN ai.interaction_type = 'like' THEN 1 END)::int AS like_count,
-        COUNT(CASE WHEN ai.interaction_type IN ('share','repost') THEN 1 END)::int AS share_count,
-        COUNT(*) * EXP(-EXTRACT(EPOCH FROM (NOW() - s.published_at)) / (7 * 86400)) AS decay_score
-      FROM article_interactions ai
-      JOIN site_standard_articles s ON s.uri = ai.article_uri
-      WHERE s.published_at > NOW() - INTERVAL '30 days'
-      GROUP BY s.uri, s.author_did, s.title, s.published_at
-      HAVING COUNT(*) >= 1
-      ORDER BY decay_score DESC LIMIT 6
-    `),
-  ]);
+  // Return cached data if fresh
+  if (sidebarCache && Date.now() - sidebarCache.ts < SIDEBAR_CACHE_TTL_MS) {
+    return sidebarCache.data;
+  }
 
-  const trendingTags: TrendingTag[] = tagRows.rows.map((r: any) => ({ tag: r.tag, count: r.cnt }));
+  // Deduplicate concurrent requests (thundering herd protection)
+  if (sidebarFetchPromise) return sidebarFetchPromise;
 
-  const popDids = [...new Set(popRows.rows.map((r: any) => r.author_did))];
-  const popProfileMap = await getCachedProfiles(popDids);
+  sidebarFetchPromise = (async () => {
+    try {
+      const [tagRows, popRows] = await Promise.all([
+        db.query(`
+          SELECT tag, COUNT(*)::int AS cnt
+          FROM site_standard_articles s,
+               jsonb_array_elements_text(s.raw_record->'tags') AS tag
+          WHERE s.published_at > NOW() - INTERVAL '7 days'
+          GROUP BY tag ORDER BY cnt DESC LIMIT 20
+        `),
+        db.query(`
+          SELECT s.uri, s.author_did, s.title, s.published_at,
+            COUNT(CASE WHEN ai.interaction_type = 'like' THEN 1 END)::int AS like_count,
+            COUNT(CASE WHEN ai.interaction_type IN ('share','repost') THEN 1 END)::int AS share_count,
+            COUNT(*) * EXP(-EXTRACT(EPOCH FROM (NOW() - s.published_at)) / (7 * 86400)) AS decay_score
+          FROM article_interactions ai
+          JOIN site_standard_articles s ON s.uri = ai.article_uri
+          WHERE s.published_at > NOW() - INTERVAL '30 days'
+          GROUP BY s.uri, s.author_did, s.title, s.published_at
+          HAVING COUNT(*) >= 1
+          ORDER BY decay_score DESC LIMIT 6
+        `),
+      ]);
 
-  const popularPosts: PopularPost[] = popRows.rows.map((r: any) => ({
-    uri: r.uri,
-    rkey: r.uri.split('/').pop(),
-    author_did: r.author_did,
-    author_name: popProfileMap.get(r.author_did)?.displayName || r.author_did,
-    author_handle: popProfileMap.get(r.author_did)?.handle || r.author_did,
-    title: r.title,
-    published_at: r.published_at?.toISOString() ?? '',
-    like_count: r.like_count,
-    share_count: r.share_count,
-  }));
+      const trendingTags: TrendingTag[] = tagRows.rows.map((r: any) => ({ tag: r.tag, count: r.cnt }));
 
-  return { trendingTags, popularPosts };
+      const popDids = [...new Set(popRows.rows.map((r: any) => r.author_did))];
+      const popProfileMap = await getCachedProfiles(popDids);
+
+      const popularPosts: PopularPost[] = popRows.rows.map((r: any) => ({
+        uri: r.uri,
+        rkey: r.uri.split('/').pop(),
+        author_did: r.author_did,
+        author_name: popProfileMap.get(r.author_did)?.displayName || r.author_did,
+        author_handle: popProfileMap.get(r.author_did)?.handle || r.author_did,
+        title: r.title,
+        published_at: r.published_at?.toISOString() ?? '',
+        like_count: r.like_count,
+        share_count: r.share_count,
+      }));
+
+      const data = { trendingTags, popularPosts };
+      sidebarCache = { data, ts: Date.now() };
+      return data;
+    } finally {
+      sidebarFetchPromise = null;
+    }
+  })();
+
+  return sidebarFetchPromise;
 }
 
 // ── Feed (Homepage) ─────────────────────────────────────────────────────────
