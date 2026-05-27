@@ -85,7 +85,7 @@ export async function matchPost(
   try {
     const keywordMatches = await percolatePost(text, did, uri);
     if (keywordMatches.length > 0) {
-      logger.info({ keywordMatches, activeCount: activeIds.size, uri }, 'Percolate matches found');
+      logger.debug({ keywordMatches, activeCount: activeIds.size, uri }, 'Percolate matches found');
     }
     for (const id of keywordMatches) {
       if (!activeIds.has(id)) {
