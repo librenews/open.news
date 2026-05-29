@@ -10,6 +10,7 @@ import { upsertSiteStandardArticle } from '../db/queries/siteStandard.js';
 import { verifyDocument } from '../lib/verification.js';
 import { chunkText } from '../lib/chunking.js';
 import { embedTexts, getEmbedDimension } from '../track/embedClient.js';
+import { enqueueJob } from '../web/jobEnqueue.js';
 
 interface IndexSiteStandardData {
   postUri: string;
@@ -272,6 +273,32 @@ export async function indexSiteStandardJob(job: Job<IndexSiteStandardData>) {
         } catch { /* non-fatal */ }
         if (verified) {
           logger.info({ uri: postUri }, 'Document verified via standard.site');
+
+          // Record doc→post bridge for custom feed inclusion
+          const bskyPostUri = record.bskyPostRef?.uri;
+          if (bskyPostUri) {
+            try {
+              await db.query(
+                `INSERT INTO doc_feed_bridge (doc_uri, post_uri, source)
+                 VALUES ($1, $2, 'organic')
+                 ON CONFLICT (doc_uri) DO NOTHING`,
+                [postUri, bskyPostUri]
+              );
+            } catch { /* non-fatal */ }
+          } else {
+            // No organic bsky post — schedule bot bridge in 15 min
+            try {
+              await enqueueJob('bridgeVerifiedDoc', {
+                docUri: postUri,
+                docCid: '', // CID not available here, bot will look it up
+                publicationUri: publicationUri || undefined,
+                site: site || '',
+                path: path || '',
+                title: title || 'Untitled',
+                authorDid: did,
+              }, { startAfter: 15 * 60 });
+            } catch { /* non-fatal */ }
+          }
 
           // Chunk + embed verified documents for semantic search
           if (wordCount >= 50) {

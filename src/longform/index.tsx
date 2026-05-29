@@ -30,6 +30,7 @@ import { hocuspocusDb } from './lib/hocuspocusDb.js';
 import { WebSocketServer } from 'ws';
 import { db } from '../db/client.js';
 import { searchSiteStandardArticles, getRelatedArticles } from '../track/opensearch.js';
+import { getSubscribedPublications } from './lib/subscriptionCache.js';
 
 process.on('unhandledRejection', (err) => {
   logger.warn({ err }, 'Caught unhandled promise rejection in Longform (likely a background OAuth token getter)');
@@ -39,6 +40,85 @@ const app = new Hono();
 
 app.use('/logo.png', serveStatic({ root: './src/longform/public', path: 'logo.png' }));
 app.use('/favicon.png', serveStatic({ root: './src/longform/public', path: 'favicon.png' }));
+app.use('/.well-known/did.json', serveStatic({ root: './src/longform/public', path: '.well-known/did.json' }));
+
+// ─── Bluesky Feed Generator XRPC ───────────────────────────────────────────
+
+const LONGFORM_FEED_DID = `did:web:${config.LONGFORM_DOMAIN}`;
+
+app.get('/xrpc/app.bsky.feed.describeFeedGenerator', (c) => {
+  return c.json({
+    did: LONGFORM_FEED_DID,
+    feeds: [
+      { uri: `at://${LONGFORM_FEED_DID}/app.bsky.feed.generator/subscriptions` },
+    ],
+  });
+});
+
+app.get('/xrpc/app.bsky.feed.getFeedSkeleton', async (c) => {
+  const feedParam = c.req.query('feed') ?? '';
+  const limit = Math.min(parseInt(c.req.query('limit') ?? '30', 10), 100);
+  const cursor = c.req.query('cursor') ?? undefined;
+
+  // Only serve the subscriptions feed
+  if (!feedParam.endsWith('/subscriptions')) {
+    return c.json({ error: 'UnknownFeed', message: 'Unknown feed' }, 400);
+  }
+
+  // Extract viewer DID from JWT bearer token
+  const authHeader = c.req.header('Authorization');
+  let viewerDid: string | undefined;
+  if (authHeader?.startsWith('Bearer ')) {
+    try {
+      const payloadB64 = authHeader.slice(7).split('.')[1];
+      const payload = JSON.parse(Buffer.from(payloadB64, 'base64url').toString());
+      viewerDid = payload.iss;
+    } catch {}
+  }
+
+  if (!viewerDid) {
+    return c.json({ feed: [] });
+  }
+
+  try {
+    // 1. Get viewer's subscribed publications (cached ~30min)
+    const pubUris = await getSubscribedPublications(viewerDid);
+    if (pubUris.length === 0) {
+      return c.json({ feed: [] });
+    }
+
+    // 2. Query bridge for posts from those publications, ordered by publish date
+    const params: any[] = [pubUris, limit];
+    let cursorClause = '';
+    if (cursor) {
+      cursorClause = `AND a.published_at < $3`;
+      params.push(new Date(cursor));
+    }
+
+    const { rows } = await db.query(`
+      SELECT b.post_uri, a.published_at
+      FROM doc_feed_bridge b
+      JOIN site_standard_articles a ON a.uri = b.doc_uri
+      WHERE a.raw_record->>'site' = ANY($1)
+        AND a.verified = true
+        ${cursorClause}
+      ORDER BY a.published_at DESC
+      LIMIT $2
+    `, params);
+
+    if (rows.length === 0) {
+      return c.json({ feed: [] });
+    }
+
+    return c.json({
+      cursor: rows[rows.length - 1].published_at.toISOString(),
+      feed: rows.map((r: any) => ({ post: r.post_uri })),
+    });
+  } catch (err) {
+    logger.error({ err, viewerDid }, 'Feed skeleton query failed');
+    return c.json({ feed: [] });
+  }
+});
 
 app.route('/', authRouter);
 

@@ -13,6 +13,7 @@ import { backfillRecommendsJob } from '../jobs/backfillRecommends.js';
 import { refreshTopicClusters } from '../jobs/refreshTopicClusters.js';
 import { seedGeoFromDomainsJob } from '../jobs/seedGeoFromDomains.js';
 import { backfillNearbyPostsJob } from '../jobs/backfillNearbyPosts.js';
+import { bridgeVerifiedDocJob } from '../jobs/bridgeVerifiedDoc.js';
 
 async function start() {
   await ensureArticleIndex().catch(err => logger.error({ err }, 'Failed to ensure OpenSearch article index'));
@@ -33,7 +34,7 @@ async function start() {
 
   // pg-boss v10 requires explicit queue creation before send/work.
   // Must be sequential — parallel ALTER TABLE calls deadlock on the FK constraint.
-  const queues = ['fetchArticle', 'syncFollows', 'botReply', 'botPost', 'followSignup', 'deliverWebhook', 'indexSiteStandard', 'backfillSiteStandard', 'backfillRecommends', 'refreshTopicClusters', 'seedGeoFromDomains', 'backfillNearbyPosts'];
+  const queues = ['fetchArticle', 'syncFollows', 'botReply', 'botPost', 'followSignup', 'deliverWebhook', 'indexSiteStandard', 'backfillSiteStandard', 'backfillRecommends', 'refreshTopicClusters', 'seedGeoFromDomains', 'backfillNearbyPosts', 'bridgeVerifiedDoc'];
   for (const q of queues) await boss.createQueue(q);
   logger.info({ queues }, 'Queues created');
 
@@ -122,6 +123,12 @@ async function start() {
 
   await boss.schedule('backfillNearbyPosts', '*/5 * * * *', {});
   logger.info('Nearby post backfill scheduled (every 5 min)');
+
+  await boss.work('bridgeVerifiedDoc', { batchSize: 5 }, async (jobs) => {
+    for (const job of jobs) {
+      await bridgeVerifiedDocJob(job as Parameters<typeof bridgeVerifiedDocJob>[0]);
+    }
+  });
 
   // Graceful shutdown
   process.on('SIGTERM', async () => {
