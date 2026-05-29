@@ -2,6 +2,13 @@ import { db } from '../../db/client.js';
 import { getRedis } from '../../lib/redis.js';
 import { logger } from '../../lib/logger.js';
 
+/**
+ * Safe publication-date expression: uses published_at when available and not
+ * in the future, otherwise falls back to created_at (ingestion time).
+ * This prevents archive backfills from inflating weekly activity stats.
+ */
+const PUB_DATE = `COALESCE(CASE WHEN published_at > NOW() THEN created_at ELSE published_at END, created_at)`;
+
 interface StatsCache {
   data: BlogStats;
   fetchedAt: number;
@@ -161,32 +168,32 @@ async function _fetchStats(): Promise<BlogStats> {
     languageVerifiedRows,
     newAuthorRows,
   ] = await Promise.all([
-    // Hero KPIs
+    // Hero KPIs — uses published_at (with fallback) for activity windows
     db.query(`
       SELECT
         (SELECT COUNT(DISTINCT author_did) FROM site_standard_articles
-         WHERE created_at >= NOW() - INTERVAL '7 days') AS waa,
+         WHERE ${PUB_DATE} >= NOW() - INTERVAL '7 days') AS waa,
         (SELECT COUNT(DISTINCT author_did) FROM site_standard_articles
-         WHERE created_at >= NOW() - INTERVAL '7 days'
+         WHERE ${PUB_DATE} >= NOW() - INTERVAL '7 days'
            AND (author_handle IS NULL OR author_handle NOT LIKE '%.web.brid.gy')) AS waa_native,
         (SELECT COUNT(DISTINCT author_did) FROM site_standard_articles
-         WHERE created_at >= NOW() - INTERVAL '7 days'
+         WHERE ${PUB_DATE} >= NOW() - INTERVAL '7 days'
            AND author_handle LIKE '%.web.brid.gy') AS waa_bridgyfed,
         (SELECT COUNT(DISTINCT author_did) FROM site_standard_articles
-         WHERE DATE(created_at) = CURRENT_DATE - 1) AS daa,
+         WHERE DATE(${PUB_DATE}) = CURRENT_DATE - 1) AS daa,
         (SELECT COUNT(DISTINCT author_did) FROM site_standard_articles
-         WHERE DATE(created_at) = CURRENT_DATE - 1
+         WHERE DATE(${PUB_DATE}) = CURRENT_DATE - 1
            AND (author_handle IS NULL OR author_handle NOT LIKE '%.web.brid.gy')) AS daa_native,
         (SELECT COUNT(DISTINCT author_did) FROM site_standard_articles
-         WHERE DATE(created_at) = CURRENT_DATE - 1
+         WHERE DATE(${PUB_DATE}) = CURRENT_DATE - 1
            AND author_handle LIKE '%.web.brid.gy') AS daa_bridgyfed,
         (SELECT COUNT(*) FROM site_standard_articles
-         WHERE DATE(created_at) = CURRENT_DATE - 1) AS posts_yesterday,
+         WHERE DATE(${PUB_DATE}) = CURRENT_DATE - 1) AS posts_yesterday,
         (SELECT COUNT(*) FROM site_standard_articles
-         WHERE DATE(created_at) = CURRENT_DATE - 1
+         WHERE DATE(${PUB_DATE}) = CURRENT_DATE - 1
            AND (author_handle IS NULL OR author_handle NOT LIKE '%.web.brid.gy')) AS posts_native,
         (SELECT COUNT(*) FROM site_standard_articles
-         WHERE DATE(created_at) = CURRENT_DATE - 1
+         WHERE DATE(${PUB_DATE}) = CURRENT_DATE - 1
            AND author_handle LIKE '%.web.brid.gy') AS posts_bridgyfed,
         (SELECT COUNT(DISTINCT author_did) FROM site_standard_articles) AS total_authors,
         (SELECT COUNT(DISTINCT author_did) FROM site_standard_articles
@@ -200,28 +207,28 @@ async function _fetchStats(): Promise<BlogStats> {
          WHERE author_handle LIKE '%.web.brid.gy') AS total_posts_bridgyfed,
         (SELECT ROUND(AVG(daily_posts)::numeric, 1)
          FROM (
-           SELECT DATE(created_at) AS d, COUNT(*) / NULLIF(COUNT(DISTINCT author_did), 0) AS daily_posts
+           SELECT DATE(${PUB_DATE}) AS d, COUNT(*) / NULLIF(COUNT(DISTINCT author_did), 0) AS daily_posts
            FROM site_standard_articles
-           WHERE created_at >= NOW() - INTERVAL '14 days'
-             AND EXTRACT(DOW FROM created_at) BETWEEN 1 AND 5
-           GROUP BY DATE(created_at)
+           WHERE ${PUB_DATE} >= NOW() - INTERVAL '14 days'
+             AND EXTRACT(DOW FROM ${PUB_DATE}) BETWEEN 1 AND 5
+           GROUP BY DATE(${PUB_DATE})
          ) sub) AS avg_posts_per_author,
          (SELECT COUNT(*) FROM site_standard_articles WHERE verified = true) AS total_verified,
          (SELECT COUNT(*) FROM site_standard_articles WHERE verified = false) AS total_unverified,
          (SELECT COUNT(*) FROM site_standard_articles WHERE verified IS NULL) AS total_unchecked,
          (SELECT COUNT(DISTINCT author_did) FROM site_standard_articles
-          WHERE created_at >= NOW() - INTERVAL '7 days' AND verified = true) AS waa_verified,
+          WHERE ${PUB_DATE} >= NOW() - INTERVAL '7 days' AND verified = true) AS waa_verified,
          (SELECT COUNT(DISTINCT author_did) FROM site_standard_articles
-          WHERE DATE(created_at) = CURRENT_DATE - 1 AND verified = true) AS daa_verified,
+          WHERE DATE(${PUB_DATE}) = CURRENT_DATE - 1 AND verified = true) AS daa_verified,
          (SELECT COUNT(*) FROM site_standard_articles
-          WHERE DATE(created_at) = CURRENT_DATE - 1 AND verified = true) AS posts_yesterday_verified,
+          WHERE DATE(${PUB_DATE}) = CURRENT_DATE - 1 AND verified = true) AS posts_yesterday_verified,
          (SELECT COUNT(DISTINCT author_did) FROM site_standard_articles
           WHERE verified = true) AS total_authors_verified,
          (SELECT COUNT(*) FROM site_standard_articles
           WHERE verified = true) AS total_posts_verified
     `),
 
-    // WAA 30-day rolling trend
+    // WAA 30-day rolling trend — uses published_at
     db.query(`
       SELECT
         DATE(gs.day) AS day,
@@ -231,16 +238,16 @@ async function _fetchStats(): Promise<BlogStats> {
         COUNT(DISTINCT a.author_did) FILTER (WHERE a.verified = true) AS waa_verified
       FROM generate_series(NOW() - INTERVAL '30 days', NOW(), INTERVAL '1 day') AS gs(day)
       JOIN site_standard_articles a
-        ON a.created_at >= gs.day - INTERVAL '7 days'
-        AND a.created_at < gs.day
+        ON ${PUB_DATE} >= gs.day - INTERVAL '7 days'
+        AND ${PUB_DATE} < gs.day
       GROUP BY DATE(gs.day)
       ORDER BY DATE(gs.day)
     `),
 
-    // Daily activity 30 days
+    // Daily activity 30 days — uses published_at
     db.query(`
       SELECT
-        DATE(created_at) AS day,
+        DATE(${PUB_DATE}) AS day,
         COUNT(*) AS posts,
         COUNT(DISTINCT author_did) AS authors,
         COUNT(*) FILTER (WHERE author_handle IS NULL OR author_handle NOT LIKE '%.web.brid.gy') AS posts_native,
@@ -250,10 +257,10 @@ async function _fetchStats(): Promise<BlogStats> {
         COUNT(*) FILTER (WHERE verified = true) AS posts_verified,
         COUNT(DISTINCT author_did) FILTER (WHERE verified = true) AS authors_verified
       FROM site_standard_articles
-      WHERE created_at >= NOW() - INTERVAL '30 days'
-        AND created_at < DATE_TRUNC('day', NOW())
-      GROUP BY DATE(created_at)
-      ORDER BY DATE(created_at)
+      WHERE ${PUB_DATE} >= NOW() - INTERVAL '30 days'
+        AND ${PUB_DATE} < DATE_TRUNC('day', NOW())
+      GROUP BY DATE(${PUB_DATE})
+      ORDER BY DATE(${PUB_DATE})
     `),
 
     // 14-day retention with native/bridgyfed/verified split
@@ -304,86 +311,86 @@ async function _fetchStats(): Promise<BlogStats> {
       ORDER BY c.d
     `),
 
-    // Hourly heatmap last 7 days
+    // Hourly heatmap last 7 days — uses published_at
     db.query(`
       SELECT
-        EXTRACT(DOW FROM created_at)::int AS dow,
-        EXTRACT(HOUR FROM created_at)::int AS hour,
+        EXTRACT(DOW FROM ${PUB_DATE})::int AS dow,
+        EXTRACT(HOUR FROM ${PUB_DATE})::int AS hour,
         COUNT(*) AS posts,
         COUNT(*) FILTER (WHERE author_handle IS NULL OR author_handle NOT LIKE '%.web.brid.gy') AS posts_native,
         COUNT(*) FILTER (WHERE author_handle LIKE '%.web.brid.gy') AS posts_bridgyfed,
         COUNT(*) FILTER (WHERE verified = true) AS posts_verified
       FROM site_standard_articles
-      WHERE created_at >= NOW() - INTERVAL '7 days'
+      WHERE ${PUB_DATE} >= NOW() - INTERVAL '7 days'
       GROUP BY dow, hour
       ORDER BY dow, hour
     `),
 
-    // Top 20 sites this week (all)
+    // Top 20 sites this week (all) — uses published_at
     db.query(`
       SELECT REGEXP_REPLACE(site, '^https?://(www\\.)?', '') AS site, COUNT(*) AS posts
       FROM site_standard_articles
-      WHERE created_at >= NOW() - INTERVAL '7 days' AND site IS NOT NULL AND site != ''
+      WHERE ${PUB_DATE} >= NOW() - INTERVAL '7 days' AND site IS NOT NULL AND site != ''
       GROUP BY REGEXP_REPLACE(site, '^https?://(www\\.)?', '')
       ORDER BY posts DESC LIMIT 20
     `),
-    // Top 20 sites (native only)
+    // Top 20 sites (native only) — uses published_at
     db.query(`
       SELECT REGEXP_REPLACE(site, '^https?://(www\\.)?', '') AS site, COUNT(*) AS posts
       FROM site_standard_articles
-      WHERE created_at >= NOW() - INTERVAL '7 days' AND site IS NOT NULL AND site != ''
+      WHERE ${PUB_DATE} >= NOW() - INTERVAL '7 days' AND site IS NOT NULL AND site != ''
         AND (author_handle IS NULL OR author_handle NOT LIKE '%.web.brid.gy')
       GROUP BY REGEXP_REPLACE(site, '^https?://(www\\.)?', '')
       ORDER BY posts DESC LIMIT 20
     `),
-    // Top 20 sites (bridgyfed only)
+    // Top 20 sites (bridgyfed only) — uses published_at
     db.query(`
       SELECT REGEXP_REPLACE(site, '^https?://(www\\.)?', '') AS site, COUNT(*) AS posts
       FROM site_standard_articles
-      WHERE created_at >= NOW() - INTERVAL '7 days' AND site IS NOT NULL AND site != ''
+      WHERE ${PUB_DATE} >= NOW() - INTERVAL '7 days' AND site IS NOT NULL AND site != ''
         AND author_handle LIKE '%.web.brid.gy'
       GROUP BY REGEXP_REPLACE(site, '^https?://(www\\.)?', '')
       ORDER BY posts DESC LIMIT 20
     `),
 
-    // Language distribution (all)
+    // Language distribution (all) — uses published_at
     db.query(`
       SELECT COALESCE(language, 'unknown') AS language, COUNT(*) AS count
-      FROM site_standard_articles WHERE created_at >= NOW() - INTERVAL '30 days'
+      FROM site_standard_articles WHERE ${PUB_DATE} >= NOW() - INTERVAL '30 days'
       GROUP BY language ORDER BY count DESC LIMIT 12
     `),
-    // Language distribution (native only)
+    // Language distribution (native only) — uses published_at
     db.query(`
       SELECT COALESCE(language, 'unknown') AS language, COUNT(*) AS count
       FROM site_standard_articles
-      WHERE created_at >= NOW() - INTERVAL '30 days'
+      WHERE ${PUB_DATE} >= NOW() - INTERVAL '30 days'
         AND (author_handle IS NULL OR author_handle NOT LIKE '%.web.brid.gy')
       GROUP BY language ORDER BY count DESC LIMIT 12
     `),
-    // Language distribution (bridgyfed only)
+    // Language distribution (bridgyfed only) — uses published_at
     db.query(`
       SELECT COALESCE(language, 'unknown') AS language, COUNT(*) AS count
       FROM site_standard_articles
-      WHERE created_at >= NOW() - INTERVAL '30 days'
+      WHERE ${PUB_DATE} >= NOW() - INTERVAL '30 days'
         AND author_handle LIKE '%.web.brid.gy'
       GROUP BY language ORDER BY count DESC LIMIT 12
     `),
 
-    // Top 20 sites (verified only)
+    // Top 20 sites (verified only) — uses published_at
     db.query(`
       SELECT REGEXP_REPLACE(site, '^https?://(www\\.)?', '') AS site, COUNT(*) AS posts
       FROM site_standard_articles
-      WHERE created_at >= NOW() - INTERVAL '7 days' AND site IS NOT NULL AND site != ''
+      WHERE ${PUB_DATE} >= NOW() - INTERVAL '7 days' AND site IS NOT NULL AND site != ''
         AND verified = true
       GROUP BY REGEXP_REPLACE(site, '^https?://(www\\.)?', '')
       ORDER BY posts DESC LIMIT 20
     `),
 
-    // Language distribution (verified only)
+    // Language distribution (verified only) — uses published_at
     db.query(`
       SELECT COALESCE(language, 'unknown') AS language, COUNT(*) AS count
       FROM site_standard_articles
-      WHERE created_at >= NOW() - INTERVAL '30 days'
+      WHERE ${PUB_DATE} >= NOW() - INTERVAL '30 days'
         AND verified = true
       GROUP BY language ORDER BY count DESC LIMIT 12
     `),
