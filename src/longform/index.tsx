@@ -2098,10 +2098,11 @@ app.post('/api/repost', async (c) => {
       // Get publication CID
       if (publicationUri) {
         const pubParts = publicationUri.replace('at://', '').split('/');
+        // pubParts: [did, collection, rkey] e.g. [did:plc:xxx, site.standard.publication, 3lppk75kw7k26]
         const pubRes = await agent.com.atproto.repo.getRecord({
           repo: pubParts[0],
-          collection: pubParts[1] + '/' + pubParts[2]?.split('/')[0],
-          rkey: pubParts[pubParts.length - 1],
+          collection: 'site.standard.publication',
+          rkey: pubParts[2],
         }).catch(() => null);
         if (pubRes?.data?.cid) {
           publicationCid = pubRes.data.cid;
