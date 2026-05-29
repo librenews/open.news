@@ -60,8 +60,11 @@ app.get('/xrpc/app.bsky.feed.getFeedSkeleton', async (c) => {
   const limit = Math.min(parseInt(c.req.query('limit') ?? '30', 10), 100);
   const cursor = c.req.query('cursor') ?? undefined;
 
+  logger.info({ feedParam, limit, cursor: !!cursor }, 'getFeedSkeleton called');
+
   // Only serve the subscriptions feed
   if (!feedParam.endsWith('/subscriptions')) {
+    logger.warn({ feedParam }, 'Unknown feed requested');
     return c.json({ error: 'UnknownFeed', message: 'Unknown feed' }, 400);
   }
 
@@ -73,16 +76,23 @@ app.get('/xrpc/app.bsky.feed.getFeedSkeleton', async (c) => {
       const payloadB64 = authHeader.slice(7).split('.')[1];
       const payload = JSON.parse(Buffer.from(payloadB64, 'base64url').toString());
       viewerDid = payload.iss;
-    } catch {}
+      logger.info({ viewerDid, aud: payload.aud }, 'JWT parsed');
+    } catch (err) {
+      logger.warn({ err }, 'JWT parse failed');
+    }
+  } else {
+    logger.info({ hasAuth: !!authHeader }, 'No Bearer auth header');
   }
 
   if (!viewerDid) {
+    logger.info('No viewer DID, returning empty feed');
     return c.json({ feed: [] });
   }
 
   try {
     // 1. Get viewer's subscribed publications (cached ~30min)
     const pubUris = await getSubscribedPublications(viewerDid);
+    logger.info({ viewerDid, subscriptionCount: pubUris.length, pubUris: pubUris.slice(0, 3) }, 'Subscriptions resolved');
     if (pubUris.length === 0) {
       return c.json({ feed: [] });
     }
@@ -105,6 +115,8 @@ app.get('/xrpc/app.bsky.feed.getFeedSkeleton', async (c) => {
       ORDER BY a.published_at DESC
       LIMIT $2
     `, params);
+
+    logger.info({ viewerDid, resultCount: rows.length, firstPost: rows[0]?.post_uri }, 'Feed query completed');
 
     if (rows.length === 0) {
       return c.json({ feed: [] });
