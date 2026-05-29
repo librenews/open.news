@@ -1838,7 +1838,6 @@ app.post('/api/publish', async (c) => {
              $type: 'site.standard.publication',
              name: pubTitle,
              description: '',
-             url: `https://${config.LONGFORM_DOMAIN || 'longform.social'}`,
              createdAt: new Date().toISOString(),
              preferences: {
                showComments: true,
