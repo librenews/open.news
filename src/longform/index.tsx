@@ -1044,8 +1044,10 @@ app.get('/publication/:did/:rkey', async (c) => {
     rkey,
   };
 
+  const pubLinkTag = html`<link rel="site.standard.publication" href="${pubUri}" />`;
+
   return c.html((
-    <Layout title={`${publication.title} - ${config.LONGFORM_DOMAIN}`} profile={sessionProfile}>
+    <Layout title={`${publication.title} - ${config.LONGFORM_DOMAIN}`} profile={sessionProfile} headExtra={pubLinkTag}>
       {PublicationPage({ publication, articles, domain: config.LONGFORM_DOMAIN })}
     </Layout>
   ) as unknown as string);
@@ -1411,7 +1413,8 @@ app.get('/post/:did/:rkey', async (c) => {
       logger.warn({ err: e, uri: currentActualUri }, 'Failed to fetch related articles');
     }
 
-    const docLinkTag = html`<link rel="site.standard.document" href="${currentActualUri}" />`;
+    const pubUri = doc.site?.startsWith('at://') ? doc.site : null;
+    const docLinkTag = html`<link rel="site.standard.document" href="${currentActualUri}" />${pubUri ? html`<link rel="site.standard.publication" href="${pubUri}" />` : ''}`;
 
     return c.html((
       <Layout title={`${doc.title} - ${config.LONGFORM_DOMAIN}`} profile={sessionProfile} og={og} headExtra={docLinkTag}>
@@ -1711,6 +1714,7 @@ app.post('/api/publish', async (c) => {
 
      // Ensure the user has a default publication record on their PDS
      let publicationUri: string | undefined;
+     let publicationCid: string | undefined;
      try {
        // Try to fetch existing default publication
        const pubRes = await agent.com.atproto.repo.getRecord({
@@ -1721,6 +1725,7 @@ app.post('/api/publish', async (c) => {
 
        if (pubRes?.data?.uri) {
          publicationUri = pubRes.data.uri;
+         publicationCid = pubRes.data.cid;
        } else {
          // Fetch profile for display name
          let pubTitle = 'My Blog';
@@ -1753,6 +1758,7 @@ app.post('/api/publish', async (c) => {
            },
          });
          publicationUri = createRes.data.uri;
+         publicationCid = createRes.data.cid;
          logger.info({ did: sessionDid, uri: publicationUri }, 'Auto-created default publication record');
        }
      } catch (err: any) {
@@ -1821,8 +1827,18 @@ app.post('/api/publish', async (c) => {
      const wordCount = textContent.trim().split(/\s+/).length;
 
      if (wordCount >= 100 && !isRepublish) {
+       // Build excerpt from first ~160 chars of content for embed description
+       const excerpt = textContent.trim().substring(0, 160).trim();
        // Announce the publication via Bot asynchronously (don't await)
-       announcePublication(authorHandle, title, res.data.uri).catch(e => {
+       announcePublication({
+         authorHandle,
+         title,
+         uri: res.data.uri,
+         docCid: res.data.cid,
+         publicationUri,
+         publicationCid,
+         excerpt: excerpt || undefined,
+       }).catch(e => {
          logger.error({ err: e }, 'Failed asynchronous bot publication announcement');
        });
      } else if (isRepublish) {
