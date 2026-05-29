@@ -2041,19 +2041,25 @@ app.post('/api/repost', async (c) => {
     }
     
     // Build the article URL — prefer the author's own site if they have one
-    let articleUrl = `https://longform.social/post/${authorDid}/${rkey}`;
+    let articleUrl = `https://${config.LONGFORM_DOMAIN}/post/${authorDid}/${rkey}`;
     
-    // Fetch article title and check for a publication domain
-    let title = 'Check out this article';
+    // Fetch article metadata for the post text and embed
+    let title = '';
+    let description = '';
+    let publicationUri: string | null = null;
+    let publicationCid: string | null = null;
+    let authorHandle = authorDid;
     try {
       const { rows } = await db.query(
-        `SELECT s.title, p.url AS pub_url, s.path
+        `SELECT s.title, s.description, s.raw_record->>'site' AS pub_at_uri, p.url AS pub_url, s.path
          FROM site_standard_articles s
          LEFT JOIN site_publications p ON p.uri = s.raw_record->>'site'
          WHERE s.uri = $1 LIMIT 1`,
         [uri]
       );
       if (rows[0]?.title) title = rows[0].title;
+      if (rows[0]?.description) description = rows[0].description;
+      if (rows[0]?.pub_at_uri) publicationUri = rows[0].pub_at_uri;
       if (rows[0]?.pub_url && rows[0]?.path) {
         // Author has a standard.site domain — link to their site
         const pubBase = rows[0].pub_url.replace(/\/+$/, '');
@@ -2061,29 +2067,67 @@ app.post('/api/repost', async (c) => {
         articleUrl = `${pubBase}${path}`;
       }
     } catch {}
+
+    // Resolve author handle for display
+    try {
+      const profile = await getCachedProfile(authorDid);
+      if (profile.handle) authorHandle = profile.handle;
+    } catch {}
     
-    const postText = `${title}\n\n${articleUrl}`;
+    // Build post text
+    const postText = title
+      ? `${title}\n\nby @${authorHandle}\n\n${articleUrl}`
+      : articleUrl;
     
-    // Build facets for the link
-    const encoder = new TextEncoder();
-    const textBytes = encoder.encode(postText);
-    const urlBytes = encoder.encode(articleUrl);
-    const byteStart = textBytes.length - urlBytes.length;
-    const byteEnd = textBytes.length;
+    // Build facets for mentions and links
+    const rt = new (await import('@atproto/api')).RichText({ text: postText });
+    await rt.detectFacets(agent);
+
+    // Build associatedRefs for enhanced embed
+    const associatedRefs: { uri: string; cid: string }[] = [];
+    try {
+      // Get document CID
+      const docRes = await agent.com.atproto.repo.getRecord({
+        repo: authorDid,
+        collection: 'site.standard.document',
+        rkey: rkey,
+      }).catch(() => null);
+      if (docRes?.data?.cid) {
+        associatedRefs.push({ uri, cid: docRes.data.cid });
+      }
+      // Get publication CID
+      if (publicationUri) {
+        const pubParts = publicationUri.replace('at://', '').split('/');
+        const pubRes = await agent.com.atproto.repo.getRecord({
+          repo: pubParts[0],
+          collection: pubParts[1] + '/' + pubParts[2]?.split('/')[0],
+          rkey: pubParts[pubParts.length - 1],
+        }).catch(() => null);
+        if (pubRes?.data?.cid) {
+          publicationCid = pubRes.data.cid;
+          associatedRefs.push({ uri: publicationUri, cid: pubRes.data.cid });
+        }
+      }
+    } catch {}
     
+    const embed: any = {
+      $type: 'app.bsky.embed.external',
+      external: {
+        uri: articleUrl,
+        title: title || 'Article',
+        description: description?.substring(0, 300) || `Read on ${config.LONGFORM_DOMAIN}`,
+        ...(associatedRefs.length > 0 ? { associatedRefs } : {}),
+      },
+    };
+
     const res = await agent.com.atproto.repo.createRecord({
       repo: sessionDid,
       collection: 'app.bsky.feed.post',
       record: {
         $type: 'app.bsky.feed.post',
-        text: postText,
-        facets: [{
-          index: { byteStart, byteEnd },
-          features: [{
-            $type: 'app.bsky.richtext.facet#link',
-            uri: articleUrl
-          }]
-        }],
+        text: rt.text,
+        facets: rt.facets,
+        embed,
         createdAt: new Date().toISOString()
       }
     });
@@ -2094,6 +2138,16 @@ app.post('/api/repost', async (c) => {
        VALUES ($1, $2, 'share', $3) ON CONFLICT (article_uri, actor_did, interaction_type) DO NOTHING`,
       [uri, sessionDid, res.data.uri]
     );
+
+    // Record bridge for feed inclusion
+    try {
+      await db.query(
+        `INSERT INTO doc_feed_bridge (doc_uri, post_uri, source)
+         VALUES ($1, $2, 'organic')
+         ON CONFLICT (doc_uri) DO NOTHING`,
+        [uri, res.data.uri]
+      );
+    } catch {}
     
     return c.json({ success: true });
   } catch (err: any) {
