@@ -69,6 +69,8 @@ export function EditorPage() {
       <button data-command="italic"><i>i</i></button>
       <button data-command="strike"><s>S</s></button>
       <span class="divider">|</span>
+      <button data-command="link" title="Add link"><svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg></button>
+      <span class="divider">|</span>
       <button data-command="h2" style="font-weight:700">T</button>
       <button data-command="h3" style="font-weight:600">t</button>
       <span class="divider">|</span>
@@ -82,6 +84,7 @@ export function EditorPage() {
       import { BubbleMenu } from 'https://esm.sh/@tiptap/extension-bubble-menu@2.2.4?deps=yjs@13.6.8';
       import { FloatingMenu } from 'https://esm.sh/@tiptap/extension-floating-menu@2.2.4?deps=yjs@13.6.8';
       import Image from 'https://esm.sh/@tiptap/extension-image@2.2.4?deps=yjs@13.6.8';
+      import Link from 'https://esm.sh/@tiptap/extension-link@2.2.4?deps=yjs@13.6.8';
       import Collaboration from 'https://esm.sh/@tiptap/extension-collaboration@2.2.4?deps=yjs@13.6.8';
       import CollaborationCursor from 'https://esm.sh/@tiptap/extension-collaboration-cursor@2.2.4?deps=yjs@13.6.8';
       import { HocuspocusProvider } from 'https://esm.sh/@hocuspocus/provider@2?deps=yjs@13.6.8';
@@ -342,6 +345,7 @@ export function EditorPage() {
           var editorExtensions = [
             StarterKit.configure({ heading: { levels: [1, 2, 3] }, history: isEditMode }),
             Image,
+            Link.configure({ openOnClick: false, HTMLAttributes: { class: 'editor-link' } }),
             EmbedNode,
             Placeholder.configure({
               showOnlyCurrent: false,
@@ -417,6 +421,8 @@ export function EditorPage() {
                 let isActive = false;
                 if (['bold', 'italic', 'strike', 'blockquote'].includes(cmd)) {
                    isActive = editor.isActive(cmd);
+                } else if (cmd === 'link') {
+                   isActive = editor.isActive('link');
                 } else if (cmd === 'h2') {
                    isActive = editor.isActive('heading', { level: 2 });
                 } else if (cmd === 'h3') {
@@ -443,6 +449,16 @@ export function EditorPage() {
             case 'bold': chain.toggleBold().run(); break;
             case 'italic': chain.toggleItalic().run(); break;
             case 'strike': chain.toggleStrike().run(); break;
+            case 'link':
+              if (window.editor.isActive('link')) {
+                chain.unsetLink().run();
+              } else {
+                const href = window.prompt('Enter URL:');
+                if (href) {
+                  chain.setLink({ href }).run();
+                }
+              }
+              break;
             case 'h2': chain.toggleHeading({ level: 2 }).run(); break;
             case 'h3': chain.toggleHeading({ level: 3 }).run(); break;
             case 'blockquote': chain.toggleBlockquote().run(); break;
@@ -765,6 +781,8 @@ export function EditorPage() {
        }
        .prose .embed-label { font-weight: 600; font-family: var(--font-sans); font-size: 14px; color: var(--text-muted); }
        .prose .embed-placeholder a { color: #118156; text-decoration: none; word-break: break-all; }
+       .prose a.editor-link, .prose .editor-link { color: #118156; text-decoration: underline; text-underline-offset: 2px; cursor: text; }
+       .bubble-menu button[data-command="link"] { display: flex; align-items: center; }
        @media (prefers-color-scheme: dark) { 
          .prose blockquote { border-left-color: rgba(255,255,255,0.8); } 
          .prose .embed-placeholder { background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.2); }
