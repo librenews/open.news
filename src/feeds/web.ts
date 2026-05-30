@@ -260,8 +260,8 @@ app.post('/api/feeds/create', async (c) => {
     // 1. Run the search to get seed URIs
     const hits = await searchSiteStandardArticles(query, 'all', 'relevant', 30);
     const seedUris = (hits?.hits ?? [])
-      .map((h: any) => h._source?.bsky_post_uri || h._source?.uri)
-      .filter(Boolean);
+      .map((h: any) => h._source?.bsky_post_uri)
+      .filter((uri: string | undefined): uri is string => Boolean(uri && uri.startsWith('at://')));
 
     // 2. Create custom_feeds row
     const feed = await createCustomFeed({
@@ -344,8 +344,9 @@ app.post('/api/feeds/create', async (c) => {
     }
 
     // 6. Build the bsky.app URL for the feed
+    const feedsHandle = process.env.FEEDS_BSKY_HANDLE ?? 'feeds.social';
     const bskyAppUrl = bskyUri
-      ? `https://bsky.app/profile/${bskyUri.split('/')[2]}/feed/${feed.uuid}`
+      ? `https://bsky.app/profile/${feedsHandle}/feed/${feed.uuid}`
       : null;
 
     logger.info({ feedId: feed.id, uuid: feed.uuid, name, seedCount: seedUris.length, bskyUri }, 'Custom feed created');
@@ -385,8 +386,9 @@ app.get('/my-feeds', async (c) => {
   const feeds = await getCustomFeedsByOwner(user.id);
 
   const feedCards = feeds.length > 0 ? feeds.map(f => {
+    const feedsHandle = process.env.FEEDS_BSKY_HANDLE ?? 'feeds.social';
     const bskyAppUrl = f.bsky_uri
-      ? `https://bsky.app/profile/${f.bsky_uri.split('/')[2]}/feed/${f.uuid}`
+      ? `https://bsky.app/profile/${feedsHandle}/feed/${f.uuid}`
       : null;
 
     return `
