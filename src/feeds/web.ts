@@ -123,7 +123,8 @@ app.get('/', async (c) => {
   const q = c.req.query('q') || '';
 
   const content = `
-    <div class="max-w-4xl mx-auto px-6 pt-16 pb-12">
+    <div class="max-w-4xl mx-auto px-6 ${q ? 'pt-8' : 'pt-16'} pb-12">
+      ${!q ? `
       <!-- Hero -->
       <div class="text-center mb-12">
         <h1 class="text-4xl md:text-5xl font-extrabold text-slate-900 mb-4 leading-tight">
@@ -133,6 +134,7 @@ app.get('/', async (c) => {
           Search for any subject and instantly generate a personalized Bluesky feed. No setup required.
         </p>
       </div>
+      ` : ''}
 
       <!-- Search bar -->
       <form action="/" method="GET" class="max-w-2xl mx-auto mb-12" id="search-form">
