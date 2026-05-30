@@ -418,8 +418,6 @@ app.post('/api/feeds/create', async (c) => {
       }
     } catch (err) {
       logger.error({ err, uuid: feed.uuid }, 'Failed to publish feed to Bluesky');
-      bskyUri = ''; // ensure fallback message shows
-      publishedHandle = `ERROR: ${(err as Error).message}`;
     }
 
     // 6. Build the bsky.app URL for the feed
@@ -437,13 +435,13 @@ app.post('/api/feeds/create', async (c) => {
           </div>
           <div>
             <p class="text-sm font-bold text-emerald-800 mb-1">Feed created: ${escapeHtml(name)}</p>
-            <p class="text-xs text-emerald-600 mb-3">Seeded with ${seedUris.length} articles. New matches will be added automatically.</p>
+            <p class="text-xs text-emerald-600 mb-3">Seeded with ${seedUris.length} posts. New matches will be added automatically.</p>
             ${bskyAppUrl ? `
               <a href="${bskyAppUrl}" target="_blank" rel="noopener" class="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold px-5 py-2.5 rounded-xl transition-all no-underline shadow-sm hover:shadow-md">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
                 Open in Bluesky
               </a>
-            ` : `<p class="text-xs text-amber-600">${publishedHandle.startsWith('ERROR:') ? escapeHtml(publishedHandle) : 'Feed created locally but Bluesky publishing is not configured.'}</p>`}
+            ` : '<p class="text-xs text-amber-600">Feed created locally but Bluesky publishing failed. Try signing in first.</p>'}
           </div>
         </div>
       </div>
