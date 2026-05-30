@@ -107,6 +107,9 @@ function renderLayout(user: FeedUser, content: string, title = 'feeds.social'): 
         <a href="/articles" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-600 text-xs font-semibold px-2.5 py-1 rounded-md transition-colors cursor-pointer no-underline">
           Articles
         </a>
+        <a href="/network" class="bg-emerald-50 hover:bg-emerald-100 text-emerald-600 text-xs font-semibold px-2.5 py-1 rounded-md transition-colors cursor-pointer no-underline">
+          Network
+        </a>
         <button @click="rssOpen = true" class="text-slate-400 hover:text-orange-500 transition-colors focus:outline-none cursor-pointer" title="RSS Config">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 11a9 9 0 019 9M4 4a16 16 0 0116 16M4 20h.01M4 20a1 1 0 110-2 1 1 0 010 2z"></path></svg>
         </button>
@@ -1160,6 +1163,323 @@ app.get('/rss/:token/:colId', async (c) => {
       await removeAppPassword(user.id);
     }
     return c.text('Failed to authenticate or fetch feed.', 500);
+  }
+});
+
+// ─── Network Dashboard (Shadow Feed Viability) ─────────────────────────────
+
+const ADMIN_HANDLES_FEEDS = (process.env.ADMIN_HANDLES ?? '').split(',').map(h => h.trim().toLowerCase()).filter(Boolean);
+
+function isAdminUser(handle: string): boolean {
+  return ADMIN_HANDLES_FEEDS.length === 0 || ADMIN_HANDLES_FEEDS.includes(handle.toLowerCase());
+}
+
+app.get('/network', async (c) => {
+  const userId = c.get('userId');
+  const user = await getFeedUserById(userId);
+  if (!user) return c.redirect('/login');
+  if (!isAdminUser(user.handle)) return c.text('Forbidden', 403);
+
+  const days = parseInt(c.req.query('days') || '7', 10);
+  const category = c.req.query('cat') || 'all';
+
+  const { rows: feeds } = await db.query<{
+    id: string; name: string; category: string; uuid: string;
+    shadow: boolean; feed_published: boolean; is_active: boolean;
+    total_matches: string; unique_authors: string; avg_per_day: string;
+    last_match: Date | null;
+  }>(`
+    SELECT
+      t.id, t.name, COALESCE(t.category, 'uncategorized') as category,
+      t.uuid, t.shadow, t.feed_published, t.is_active,
+      COUNT(tm.id) AS total_matches,
+      COUNT(DISTINCT tm.post_did) AS unique_authors,
+      ROUND(COUNT(tm.id)::numeric / GREATEST(${days}, 1), 1) AS avg_per_day,
+      MAX(tm.matched_at) AS last_match
+    FROM tracks t
+    LEFT JOIN track_matches tm ON tm.track_id = t.id
+      AND tm.matched_at > NOW() - INTERVAL '${days} days'
+    WHERE t.shadow = true OR (t.is_active = true AND NOT t.feed_published)
+    GROUP BY t.id
+    ORDER BY COUNT(tm.id) DESC
+  `);
+
+  // Category filter
+  const filteredFeeds = category === 'all' ? feeds : feeds.filter(f => f.category === category);
+
+  // Category stats
+  const catStats = new Map<string, { count: number; green: number; total: number }>();
+  for (const f of feeds) {
+    const s = catStats.get(f.category) || { count: 0, green: 0, total: 0 };
+    s.count++;
+    s.total += parseInt(f.total_matches);
+    if (parseFloat(f.avg_per_day) >= 10) s.green++;
+    catStats.set(f.category, s);
+  }
+
+  const greenCount = feeds.filter(f => parseFloat(f.avg_per_day) >= 10).length;
+  const yellowCount = feeds.filter(f => { const a = parseFloat(f.avg_per_day); return a >= 3 && a < 10; }).length;
+  const redCount = feeds.filter(f => { const a = parseFloat(f.avg_per_day); return a > 0 && a < 3; }).length;
+  const deadCount = feeds.filter(f => parseFloat(f.avg_per_day) === 0).length;
+
+  // Feed request stats for published feeds
+  const { rows: requestStats } = await db.query<{ feed_name: string; requests: string; viewers: string }>(`
+    SELECT fr.feed_name, COUNT(*) as requests, COUNT(DISTINCT fr.requester_did) as viewers
+    FROM feed_requests fr
+    JOIN tracks t ON t.uuid::text = fr.feed_name
+    WHERE fr.created_at > NOW() - INTERVAL '${days} days'
+    GROUP BY fr.feed_name
+  `);
+  const reqMap = new Map(requestStats.map(r => [r.feed_name, { requests: r.requests, viewers: r.viewers }]));
+
+  function tier(avg: number): string {
+    if (avg >= 10) return '<span class="inline-block w-3 h-3 rounded-full bg-emerald-500" title="Publish-ready (≥10/day)"></span>';
+    if (avg >= 3) return '<span class="inline-block w-3 h-3 rounded-full bg-amber-400" title="Monitor (3-9/day)"></span>';
+    if (avg > 0) return '<span class="inline-block w-3 h-3 rounded-full bg-red-400" title="Low (<3/day)"></span>';
+    return '<span class="inline-block w-3 h-3 rounded-full bg-slate-300" title="No matches"></span>';
+  }
+
+  const feedRows = filteredFeeds.map(f => {
+    const avg = parseFloat(f.avg_per_day);
+    const req = reqMap.get(f.uuid);
+    const statusBadge = f.feed_published
+      ? '<span class="bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded-full">LIVE</span>'
+      : f.shadow
+      ? '<span class="bg-slate-100 text-slate-500 text-[10px] font-bold px-2 py-0.5 rounded-full">SHADOW</span>'
+      : '<span class="bg-amber-100 text-amber-600 text-[10px] font-bold px-2 py-0.5 rounded-full">INACTIVE</span>';
+
+    const publishBtn = !f.feed_published && avg >= 3
+      ? `<button hx-post="/api/network/publish" hx-vals='${JSON.stringify({ uuid: f.uuid })}' hx-target="#feed-row-${f.id}" hx-swap="outerHTML" class="bg-emerald-500 hover:bg-emerald-600 text-white text-[10px] font-bold px-2.5 py-1 rounded-md transition-colors cursor-pointer shadow-sm">Publish</button>`
+      : '';
+
+    return `
+      <tr id="feed-row-${f.id}" class="border-b border-slate-100 hover:bg-slate-50 transition-colors">
+        <td class="px-4 py-3 text-center">${tier(avg)}</td>
+        <td class="px-4 py-3">
+          <div class="text-sm font-semibold text-slate-800">${escapeHtml(f.name)}</div>
+          <div class="text-[10px] text-slate-400 font-mono">${escapeHtml(f.category)}</div>
+        </td>
+        <td class="px-4 py-3 text-center text-sm font-mono text-slate-700">${f.total_matches}</td>
+        <td class="px-4 py-3 text-center text-sm font-mono text-slate-700">${f.unique_authors}</td>
+        <td class="px-4 py-3 text-center text-sm font-mono font-bold ${avg >= 10 ? 'text-emerald-600' : avg >= 3 ? 'text-amber-600' : 'text-slate-400'}">${f.avg_per_day}</td>
+        <td class="px-4 py-3 text-center text-sm text-slate-500">${req ? req.viewers : '—'}</td>
+        <td class="px-4 py-3 text-center">${statusBadge}</td>
+        <td class="px-4 py-3 text-center">${publishBtn}</td>
+      </tr>
+    `;
+  }).join('');
+
+  const catPills = [
+    `<a href="/network?days=${days}&cat=all" class="px-3 py-1.5 rounded-full text-xs font-semibold transition-colors no-underline ${category === 'all' ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}">All (${feeds.length})</a>`,
+    ...[...catStats.entries()].sort((a, b) => b[1].count - a[1].count).map(([cat, s]) =>
+      `<a href="/network?days=${days}&cat=${encodeURIComponent(cat)}" class="px-3 py-1.5 rounded-full text-xs font-semibold transition-colors no-underline ${category === cat ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}">${escapeHtml(cat)} (${s.count})</a>`
+    )
+  ].join('');
+
+  const dayTabs = [3, 7, 14, 30].map(d =>
+    `<a href="/network?days=${d}&cat=${encodeURIComponent(category)}" class="px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors no-underline ${days === d ? 'bg-indigo-500 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}">${d}d</a>`
+  ).join('');
+
+  const content = `
+    <div class="max-w-6xl mx-auto w-full p-6 pt-8 overflow-y-auto pb-20">
+      <div class="mb-4">
+        <a href="/" class="text-sm text-indigo-500 hover:text-indigo-700 transition-colors no-underline font-semibold">&larr; Dashboard</a>
+      </div>
+
+      <div class="flex items-center justify-between mb-6">
+        <div>
+          <h1 class="text-2xl font-bold text-slate-800">Feed Network</h1>
+          <p class="text-sm text-slate-500 mt-1">${feeds.length} shadow feeds · Viability analysis</p>
+        </div>
+        <div class="flex items-center gap-2">${dayTabs}</div>
+      </div>
+
+      <!-- Summary Cards -->
+      <div class="grid grid-cols-4 gap-4 mb-6">
+        <div class="bg-white rounded-xl border border-slate-200 p-4 text-center shadow-sm">
+          <div class="text-2xl font-bold text-emerald-600">${greenCount}</div>
+          <div class="text-xs font-semibold text-slate-500 mt-1">🟢 Publish-Ready</div>
+        </div>
+        <div class="bg-white rounded-xl border border-slate-200 p-4 text-center shadow-sm">
+          <div class="text-2xl font-bold text-amber-500">${yellowCount}</div>
+          <div class="text-xs font-semibold text-slate-500 mt-1">🟡 Monitor</div>
+        </div>
+        <div class="bg-white rounded-xl border border-slate-200 p-4 text-center shadow-sm">
+          <div class="text-2xl font-bold text-red-400">${redCount}</div>
+          <div class="text-xs font-semibold text-slate-500 mt-1">🔴 Low Activity</div>
+        </div>
+        <div class="bg-white rounded-xl border border-slate-200 p-4 text-center shadow-sm">
+          <div class="text-2xl font-bold text-slate-400">${deadCount}</div>
+          <div class="text-xs font-semibold text-slate-500 mt-1">⚫ No Matches</div>
+        </div>
+      </div>
+
+      <!-- Category Filter -->
+      <div class="flex flex-wrap gap-2 mb-6">${catPills}</div>
+
+      <!-- Batch Publish -->
+      ${greenCount > 0 ? `
+      <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-4 mb-6 flex items-center justify-between">
+        <div>
+          <p class="text-sm font-semibold text-emerald-800">${greenCount} feeds are ready to publish</p>
+          <p class="text-xs text-emerald-600 mt-0.5">These feeds average ≥10 matches/day and have enough content to be useful.</p>
+        </div>
+        <button hx-post="/api/network/publish-batch" hx-confirm="Publish all ${greenCount} green-tier feeds as Bluesky custom feeds?" hx-target="#batch-result" hx-swap="innerHTML" class="bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold px-5 py-2.5 rounded-lg transition-colors cursor-pointer shadow-sm">
+          Publish All Green ↗
+        </button>
+      </div>
+      <div id="batch-result"></div>
+      ` : ''}
+
+      <!-- Feed Table -->
+      <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+        <table class="w-full">
+          <thead>
+            <tr class="bg-slate-50 border-b border-slate-200">
+              <th class="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider w-12">Tier</th>
+              <th class="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider text-left">Feed</th>
+              <th class="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider text-center">Matches</th>
+              <th class="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider text-center">Authors</th>
+              <th class="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider text-center">Avg/Day</th>
+              <th class="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider text-center">Viewers</th>
+              <th class="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider text-center">Status</th>
+              <th class="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider text-center w-24">Action</th>
+            </tr>
+          </thead>
+          <tbody>${feedRows || '<tr><td colspan="8" class="px-4 py-8 text-center text-sm text-slate-400">No shadow feeds found. Run createResearchFeeds.ts first.</td></tr>'}</tbody>
+        </table>
+      </div>
+    </div>
+  `;
+
+  return c.html(renderLayout(user, content, 'Feed Network - feeds.social'));
+});
+
+// Single feed publish
+app.post('/api/network/publish', async (c) => {
+  const userId = c.get('userId');
+  const user = await getFeedUserById(userId);
+  if (!user || !isAdminUser(user.handle)) return c.text('Forbidden', 403);
+
+  const body = await c.req.parseBody();
+  const uuid = String(body.uuid || '');
+  if (!uuid) return c.text('Missing uuid', 400);
+
+  const track = await getTrackByUuid(uuid);
+  if (!track) return c.text('Not found', 404);
+
+  try {
+    const { AtpAgent } = await import('@atproto/api');
+    const handle = process.env.TRACK_BSKY_HANDLE;
+    const password = process.env.TRACK_BSKY_PASSWORD;
+    if (!handle || !password) return c.text('TRACK_BSKY_HANDLE/PASSWORD not configured', 500);
+
+    const agent = new AtpAgent({ service: 'https://bsky.social' });
+    await agent.login({ identifier: handle, password });
+
+    await agent.com.atproto.repo.putRecord({
+      repo: agent.session!.did,
+      collection: 'app.bsky.feed.generator',
+      rkey: track.uuid,
+      record: {
+        did: 'did:web:track.social',
+        displayName: track.name,
+        description: track.query || `Custom feed: ${track.name}`,
+        createdAt: new Date().toISOString(),
+      }
+    });
+
+    await updateTrack(track.id, { feed_published: true });
+    await db.query('UPDATE tracks SET shadow = false WHERE id = $1', [track.id]);
+
+    logger.info({ uuid: track.uuid, name: track.name }, 'Published shadow feed to Bluesky');
+
+    return c.html(`
+      <tr class="border-b border-slate-100 bg-emerald-50">
+        <td colspan="8" class="px-4 py-3 text-center text-sm text-emerald-700 font-semibold">
+          ✅ ${escapeHtml(track.name)} published to Bluesky
+        </td>
+      </tr>
+    `);
+  } catch (err) {
+    logger.error({ err, uuid }, 'Failed to publish shadow feed');
+    return c.html(`
+      <tr class="border-b border-slate-100 bg-red-50">
+        <td colspan="8" class="px-4 py-3 text-center text-sm text-red-600 font-semibold">
+          ❌ Failed to publish ${escapeHtml(track.name)}: ${escapeHtml((err as Error).message)}
+        </td>
+      </tr>
+    `);
+  }
+});
+
+// Batch publish all green-tier feeds
+app.post('/api/network/publish-batch', async (c) => {
+  const userId = c.get('userId');
+  const user = await getFeedUserById(userId);
+  if (!user || !isAdminUser(user.handle)) return c.text('Forbidden', 403);
+
+  const days = 7;
+  const { rows: greenFeeds } = await db.query<{ id: string; name: string; uuid: string }>(`
+    SELECT t.id, t.name, t.uuid
+    FROM tracks t
+    LEFT JOIN track_matches tm ON tm.track_id = t.id
+      AND tm.matched_at > NOW() - INTERVAL '${days} days'
+    WHERE (t.shadow = true OR (t.is_active = true AND NOT t.feed_published))
+    GROUP BY t.id
+    HAVING ROUND(COUNT(tm.id)::numeric / ${days}, 1) >= 10
+  `);
+
+  if (greenFeeds.length === 0) {
+    return c.html('<div class="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm text-amber-700">No feeds meet the green threshold.</div>');
+  }
+
+  try {
+    const { AtpAgent } = await import('@atproto/api');
+    const handle = process.env.TRACK_BSKY_HANDLE;
+    const password = process.env.TRACK_BSKY_PASSWORD;
+    if (!handle || !password) return c.text('TRACK_BSKY_HANDLE/PASSWORD not configured', 500);
+
+    const agent = new AtpAgent({ service: 'https://bsky.social' });
+    await agent.login({ identifier: handle, password });
+
+    let published = 0;
+    let failed = 0;
+
+    for (const feed of greenFeeds) {
+      try {
+        await agent.com.atproto.repo.putRecord({
+          repo: agent.session!.did,
+          collection: 'app.bsky.feed.generator',
+          rkey: feed.uuid,
+          record: {
+            did: 'did:web:track.social',
+            displayName: feed.name,
+            description: `Curated feed: ${feed.name}`,
+            createdAt: new Date().toISOString(),
+          }
+        });
+
+        await updateTrack(BigInt(feed.id), { feed_published: true });
+        await db.query('UPDATE tracks SET shadow = false WHERE id = $1', [feed.id]);
+        published++;
+        await new Promise(r => setTimeout(r, 200));
+      } catch (err) {
+        logger.error({ err, name: feed.name }, 'Batch publish failed for feed');
+        failed++;
+      }
+    }
+
+    logger.info({ published, failed, total: greenFeeds.length }, 'Batch publish complete');
+
+    return c.html(`
+      <div class="bg-emerald-50 border border-emerald-200 rounded-lg p-4 text-sm text-emerald-700 mb-4">
+        ✅ Published <strong>${published}</strong> feeds to Bluesky. ${failed > 0 ? `<span class="text-red-600">${failed} failed.</span>` : ''} Reload to see updated statuses.
+      </div>
+    `);
+  } catch (err) {
+    logger.error({ err }, 'Batch publish error');
+    return c.html('<div class="bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-700">Batch publish failed. Check logs.</div>');
   }
 });
 
