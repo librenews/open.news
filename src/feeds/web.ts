@@ -226,15 +226,31 @@ interface BskyPost {
   replyCount?: number;
 }
 
+let _searchAgent: any = null;
+let _searchAgentExpiry = 0;
+
+async function getSearchAgent() {
+  if (_searchAgent && Date.now() < _searchAgentExpiry) return _searchAgent;
+  const { AtpAgent } = await import('@atproto/api');
+  const handle = process.env.FEEDS_BSKY_HANDLE;
+  const password = process.env.FEEDS_BSKY_PASSWORD;
+  if (!handle || !password) throw new Error('FEEDS_BSKY_HANDLE/PASSWORD not configured');
+  const agent = new AtpAgent({ service: 'https://bsky.social' });
+  await agent.login({ identifier: handle, password });
+  _searchAgent = agent;
+  _searchAgentExpiry = Date.now() + 1000 * 60 * 30; // 30 min
+  return agent;
+}
+
 async function searchBskyPosts(query: string, limit = 25): Promise<BskyPost[]> {
-  const url = `https://public.api.bsky.app/xrpc/app.bsky.feed.searchPosts?q=${encodeURIComponent(query)}&limit=${limit}&sort=top`;
-  const res = await fetch(url);
-  if (!res.ok) {
-    logger.error({ status: res.status, query }, 'Bluesky search API failed');
+  try {
+    const agent = await getSearchAgent();
+    const res = await agent.app.bsky.feed.searchPosts({ q: query, limit, sort: 'top' });
+    return (res.data.posts ?? []) as BskyPost[];
+  } catch (err) {
+    logger.error({ err, query }, 'Bluesky search failed');
     return [];
   }
-  const data = await res.json() as { posts: BskyPost[] };
-  return data.posts ?? [];
 }
 
 function renderPostCard(post: BskyPost): string {
