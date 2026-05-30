@@ -113,7 +113,7 @@ feedsAuthRouter.get('/login', async (c) => {
       });
     }
   </script>
-  <title>feeds.social — Minimalist Bluesky Client</title>
+  <title>feeds.social — Custom Bluesky Feeds</title>
   <link rel="icon" type="image/png" href="/favicon.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -122,7 +122,7 @@ feedsAuthRouter.get('/login', async (c) => {
 <body class="bg-white font-[Inter] text-slate-800 min-h-screen flex flex-col items-center justify-center px-4">
   <div class="w-full max-w-sm flex flex-col items-center">
     <h1 class="text-3xl font-bold mb-2">feeds.social</h1>
-    <p class="text-slate-500 text-sm mb-8 text-center">A multi-column feed reader for Bluesky.</p>
+    <p class="text-slate-500 text-sm mb-8 text-center">Create custom Bluesky feeds from any search query.</p>
     <form action="/oauth/login" method="GET" class="w-full space-y-4">
       <div>
         <label class="block text-xs font-medium text-slate-500 mb-1">Bluesky Handle</label>
