@@ -369,16 +369,13 @@ app.post('/api/feeds/create', async (c) => {
 
     // 5. Publish to Bluesky PDS
     let bskyUri = '';
+    let publishedHandle = process.env.FEEDS_BSKY_HANDLE ?? 'feeds.social';
     try {
-      const { AtpAgent } = await import('@atproto/api');
-      const handle = process.env.FEEDS_BSKY_HANDLE;
-      const password = process.env.FEEDS_BSKY_PASSWORD;
-      if (handle && password) {
-        const agent = new AtpAgent({ service: 'https://bsky.social' });
-        await agent.login({ identifier: handle, password });
-
-        const res = await agent.com.atproto.repo.putRecord({
-          repo: agent.session!.did,
+      if (user) {
+        // Signed-in user: publish to THEIR PDS so the feed shows "By @theirhandle"
+        const userAgent = await getAgent(user.did);
+        const res = await userAgent.com.atproto.repo.putRecord({
+          repo: user.did,
           collection: 'app.bsky.feed.generator',
           rkey: feed.uuid,
           record: {
@@ -389,9 +386,32 @@ app.post('/api/feeds/create', async (c) => {
           },
         });
         bskyUri = res.data.uri;
-        await updateCustomFeedBskyUri(feed.id, bskyUri);
+        publishedHandle = user.handle;
+      } else {
+        // Anonymous: publish under the feeds.social account
+        const { AtpAgent } = await import('@atproto/api');
+        const handle = process.env.FEEDS_BSKY_HANDLE;
+        const password = process.env.FEEDS_BSKY_PASSWORD;
+        if (handle && password) {
+          const agent = new AtpAgent({ service: 'https://bsky.social' });
+          await agent.login({ identifier: handle, password });
+          const res = await agent.com.atproto.repo.putRecord({
+            repo: agent.session!.did,
+            collection: 'app.bsky.feed.generator',
+            rkey: feed.uuid,
+            record: {
+              did: FEEDS_DID,
+              displayName: name.length > 24 ? name.slice(0, 24) : name,
+              description: `Custom feed: ${name}`,
+              createdAt: new Date().toISOString(),
+            },
+          });
+          bskyUri = res.data.uri;
+        }
+      }
 
-        // Also mark the linked track as published
+      if (bskyUri) {
+        await updateCustomFeedBskyUri(feed.id, bskyUri);
         if (trackRows[0]) {
           await db.query('UPDATE tracks SET feed_published = true WHERE id = $1', [trackRows[0].id]);
         }
@@ -401,9 +421,8 @@ app.post('/api/feeds/create', async (c) => {
     }
 
     // 6. Build the bsky.app URL for the feed
-    const feedsHandle = process.env.FEEDS_BSKY_HANDLE ?? 'feeds.social';
     const bskyAppUrl = bskyUri
-      ? `https://bsky.app/profile/${feedsHandle}/feed/${feed.uuid}`
+      ? `https://bsky.app/profile/${publishedHandle}/feed/${feed.uuid}`
       : null;
 
     logger.info({ feedId: feed.id, uuid: feed.uuid, name, seedCount: seedUris.length, bskyUri }, 'Custom feed created');
@@ -443,9 +462,8 @@ app.get('/my-feeds', async (c) => {
   const feeds = await getCustomFeedsByOwner(user.id);
 
   const feedCards = feeds.length > 0 ? feeds.map(f => {
-    const feedsHandle = process.env.FEEDS_BSKY_HANDLE ?? 'feeds.social';
     const bskyAppUrl = f.bsky_uri
-      ? `https://bsky.app/profile/${feedsHandle}/feed/${f.uuid}`
+      ? `https://bsky.app/profile/${user.handle}/feed/${f.uuid}`
       : null;
 
     return `
