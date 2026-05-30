@@ -16,7 +16,6 @@ async function main() {
       t.name,
       t.query,
       t.feed_published,
-      t.owner_did,
       COUNT(fr.id) AS total_requests,
       COUNT(DISTINCT fr.requester_did) AS unique_viewers,
       MIN(fr.created_at) AS first_request,
@@ -26,7 +25,7 @@ async function main() {
       ON fr.feed_name = t.uuid::text
       AND fr.created_at > NOW() - INTERVAL '${days} days'
     WHERE t.feed_published = true
-    GROUP BY t.id, t.uuid, t.name, t.query, t.feed_published, t.owner_did
+    GROUP BY t.id, t.uuid, t.name, t.query, t.feed_published
     HAVING COUNT(fr.id) > 0
     ORDER BY COUNT(fr.id) DESC
   `);
