@@ -31,7 +31,7 @@ export async function getOAuthClient(): Promise<NodeOAuthClient> {
       grant_types: ['authorization_code', 'refresh_token'],
       response_types: ['code'],
       token_endpoint_auth_method: 'none',
-      scope: 'atproto transition:generic',
+      scope: 'atproto transition:generic repo:app.bsky.feed.generator?action=create',
       dpop_bound_access_tokens: true,
     },
     requestLock,
@@ -88,7 +88,9 @@ export async function getOAuthClient(): Promise<NodeOAuthClient> {
 
 export async function getAgent(did: string) {
   const client = await getOAuthClient();
-  return client.restore(did);
+  const session = await client.restore(did);
+  const { Agent } = await import('@atproto/api');
+  return new Agent(session);
 }
 
 export const feedsAuthRouter = new Hono();
