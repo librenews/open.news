@@ -24,9 +24,24 @@ function escapeHtml(s: string): string {
 
 app.route('/', feedsAuthRouter);
 
+// ─── DID Document (so did:web:feeds.social resolves to this server) ─────────
+app.get('/.well-known/did.json', (c) => {
+  return c.json({
+    '@context': ['https://www.w3.org/ns/did/v1'],
+    id: 'did:web:feeds.social',
+    service: [
+      {
+        id: '#bsky_fg',
+        type: 'BskyFeedGenerator',
+        serviceEndpoint: 'https://feeds.social',
+      },
+    ],
+  });
+});
+
 // ─── Optional auth middleware (sets userId if logged in, but doesn't redirect) ─
 app.use('*', async (c, next) => {
-  if (c.req.path.startsWith('/login') || c.req.path.startsWith('/oauth') || c.req.path === '/favicon.png' || c.req.path === '/client-metadata.json') {
+  if (c.req.path.startsWith('/login') || c.req.path.startsWith('/oauth') || c.req.path === '/favicon.png' || c.req.path === '/client-metadata.json' || c.req.path.startsWith('/.well-known') || c.req.path.startsWith('/xrpc')) {
     return next();
   }
 
