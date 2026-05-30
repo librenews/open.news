@@ -23,7 +23,7 @@ async function main() {
       MAX(fr.created_at) AS last_request
     FROM tracks t
     LEFT JOIN feed_requests fr
-      ON fr.feed_name = t.uuid
+      ON fr.feed_name = t.uuid::text
       AND fr.created_at > NOW() - INTERVAL '${days} days'
     WHERE t.feed_published = true
     GROUP BY t.id, t.uuid, t.name, t.query, t.feed_published, t.owner_did
