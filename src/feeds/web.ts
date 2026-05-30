@@ -16,7 +16,7 @@ const app = new Hono<{ Variables: Variables }>();
 const FEEDS_PORT = parseInt(process.env.FEEDS_PORT ?? '4300', 10);
 const SESSION_SECRET = process.env.SESSION_SECRET ?? 'dev-secret';
 const FEEDS_BASE_URL = process.env.FEEDS_BASE_URL ?? 'http://localhost:4300';
-const FEED_DID = process.env.FEED_DID ?? 'did:web:track.social';
+const FEEDS_DID = process.env.FEEDS_DID ?? 'did:web:track.social';
 
 function escapeHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -314,8 +314,8 @@ app.post('/api/feeds/create', async (c) => {
     let bskyUri = '';
     try {
       const { AtpAgent } = await import('@atproto/api');
-      const handle = process.env.TRACK_BSKY_HANDLE;
-      const password = process.env.TRACK_BSKY_PASSWORD;
+      const handle = process.env.FEEDS_BSKY_HANDLE;
+      const password = process.env.FEEDS_BSKY_PASSWORD;
       if (handle && password) {
         const agent = new AtpAgent({ service: 'https://bsky.social' });
         await agent.login({ identifier: handle, password });
@@ -325,7 +325,7 @@ app.post('/api/feeds/create', async (c) => {
           collection: 'app.bsky.feed.generator',
           rkey: feed.uuid,
           record: {
-            did: FEED_DID,
+            did: FEEDS_DID,
             displayName: name.length > 24 ? name.slice(0, 24) : name,
             description: `Custom feed: ${name}`,
             createdAt: new Date().toISOString(),
@@ -479,7 +479,7 @@ app.get('/xrpc/app.bsky.feed.getFeedSkeleton', async (c) => {
 
 app.get('/xrpc/app.bsky.feed.describeFeedGenerator', (c) => {
   return c.json({
-    did: FEED_DID,
+    did: FEEDS_DID,
     feeds: [],
   });
 });
