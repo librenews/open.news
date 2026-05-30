@@ -1818,6 +1818,26 @@ app.post('/api/publish', async (c) => {
        if (pubRes?.data?.uri) {
          publicationUri = pubRes.data.uri;
          publicationCid = pubRes.data.cid;
+
+         // Auto-repair: if existing publication claims url=longform.social but
+         // the user isn't the Longform bot, rewrite it without the url field.
+         // This fixes .well-known verification failures for enhanced Bluesky cards.
+         const pubRecord = pubRes.data.value as any;
+         if (pubRecord?.url && /longform\.social/i.test(pubRecord.url) && sessionDid !== config.LONGFORM_BOT_DID) {
+           try {
+             const { url, ...cleanRecord } = pubRecord;
+             const fixRes = await agent.com.atproto.repo.putRecord({
+               repo: sessionDid,
+               collection: 'site.standard.publication',
+               rkey: 'self',
+               record: cleanRecord,
+             });
+             publicationCid = fixRes.data.cid;
+             logger.info({ did: sessionDid }, 'Auto-repaired publication: removed url=longform.social');
+           } catch (e) {
+             logger.warn({ err: e, did: sessionDid }, 'Failed to auto-repair publication (non-fatal)');
+           }
+         }
        } else {
          // Fetch profile for display name
          let pubTitle = 'My Blog';
