@@ -6,7 +6,7 @@ import { logger } from '../lib/logger.js';
 import { feedsAuthRouter, getOAuthClient, getAgent } from './auth.js';
 import { getFeedUserById, createCustomFeed, getCustomFeedByUuid, getCustomFeedsByOwner, updateCustomFeedBskyUri } from './db.js';
 import type { FeedUser, CustomFeed } from './db.js';
-import { searchSiteStandardArticles, getOsClient, upsertTrackQuery } from '../track/opensearch.js';
+import { upsertTrackQuery } from '../track/opensearch.js';
 import { db } from '../db/client.js';
 import { embedText } from '../track/embedClient.js';
 
@@ -154,15 +154,14 @@ app.get('/', async (c) => {
     return c.html(renderLayout(user, content, 'feeds.social — Create Custom Bluesky Feeds'));
   }
 
-  // Run search
+  // Run search against Bluesky
   try {
-    const hits = await searchSiteStandardArticles(q, 'all', 'relevant', 20);
-    const results = hits?.hits ?? [];
+    const posts = await searchBskyPosts(q, 20);
 
-    const resultsHtml = results.length > 0 ? `
+    const resultsHtml = posts.length > 0 ? `
       <div class="fade-in">
         <div class="flex items-center justify-between mb-6">
-          <p class="text-sm text-slate-500">${hits.total?.value ?? results.length} results for "<strong>${escapeHtml(q)}</strong>"</p>
+          <p class="text-sm text-slate-500">${posts.length} posts for "<strong>${escapeHtml(q)}</strong>"</p>
           <button
             hx-post="/api/feeds/create"
             hx-vals='${JSON.stringify({ query: q, name: q })}'
@@ -183,12 +182,12 @@ app.get('/', async (c) => {
           </div>
         </div>
         <div class="space-y-3">
-          ${results.map((hit: any) => renderArticleCard(hit)).join('')}
+          ${posts.map(p => renderPostCard(p)).join('')}
         </div>
       </div>
     ` : `
       <div class="fade-in text-center py-12">
-        <p class="text-slate-400 text-sm">No results found for "<strong>${escapeHtml(q)}</strong>". Try a different query.</p>
+        <p class="text-slate-400 text-sm">No posts found for "<strong>${escapeHtml(q)}</strong>". Try a different query.</p>
       </div>
     `;
 
@@ -215,30 +214,57 @@ function renderEmptyState(): string {
   `;
 }
 
-function renderArticleCard(hit: any): string {
-  const src = hit._source || {};
-  const title = src.title || 'Untitled';
-  const site = src.site || '';
-  const published = src.published_at ? new Date(src.published_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
-  const highlight = hit.highlight?.['text_content']?.[0] || hit.highlight?.['text_content.en']?.[0] || '';
-  const wordCount = src.word_count ? `${Math.round(src.word_count / 200)} min read` : '';
-  const verified = src.verified;
+// ─── Bluesky Post Search ────────────────────────────────────────────────────
+
+interface BskyPost {
+  uri: string;
+  cid: string;
+  author: { did: string; handle: string; displayName?: string; avatar?: string };
+  record: { text: string; createdAt: string };
+  likeCount?: number;
+  repostCount?: number;
+  replyCount?: number;
+}
+
+async function searchBskyPosts(query: string, limit = 25): Promise<BskyPost[]> {
+  const url = `https://public.api.bsky.app/xrpc/app.bsky.feed.searchPosts?q=${encodeURIComponent(query)}&limit=${limit}&sort=top`;
+  const res = await fetch(url);
+  if (!res.ok) {
+    logger.error({ status: res.status, query }, 'Bluesky search API failed');
+    return [];
+  }
+  const data = await res.json() as { posts: BskyPost[] };
+  return data.posts ?? [];
+}
+
+function renderPostCard(post: BskyPost): string {
+  const author = post.author;
+  const text = (post.record?.text ?? '').slice(0, 280);
+  const date = post.record?.createdAt
+    ? new Date(post.record.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+    : '';
+  const likes = post.likeCount ?? 0;
+  const reposts = post.repostCount ?? 0;
+  const postUrl = `https://bsky.app/profile/${author.handle}/post/${post.uri.split('/').pop()}`;
 
   return `
-    <div class="bg-white rounded-xl border border-slate-200 hover:border-slate-300 p-4 transition-all hover:shadow-sm">
-      <div class="flex items-start justify-between gap-3">
+    <a href="${postUrl}" target="_blank" rel="noopener" class="block bg-white rounded-xl border border-slate-200 hover:border-indigo-300 p-4 transition-all hover:shadow-sm no-underline group">
+      <div class="flex items-start gap-3">
+        ${author.avatar ? `<img src="${escapeHtml(author.avatar)}" class="w-9 h-9 rounded-full shrink-0" alt="">` : '<div class="w-9 h-9 rounded-full bg-slate-200 shrink-0"></div>'}
         <div class="flex-1 min-w-0">
-          <h3 class="text-sm font-bold text-slate-800 leading-snug mb-1">${escapeHtml(title)}</h3>
-          <div class="flex items-center gap-2 text-[11px] text-slate-400 mb-2">
-            ${verified ? '<span class="text-emerald-500" title="Verified source">✓</span>' : ''}
-            <span class="font-medium text-slate-500">${escapeHtml(site)}</span>
-            ${published ? `<span>·</span><span>${published}</span>` : ''}
-            ${wordCount ? `<span>·</span><span>${wordCount}</span>` : ''}
+          <div class="flex items-center gap-2 mb-1">
+            <span class="text-sm font-bold text-slate-800 group-hover:text-indigo-700 transition-colors">${escapeHtml(author.displayName || author.handle)}</span>
+            <span class="text-[11px] text-slate-400">@${escapeHtml(author.handle)}</span>
+            ${date ? `<span class="text-[11px] text-slate-400">· ${date}</span>` : ''}
           </div>
-          ${highlight ? `<p class="text-xs text-slate-500 leading-relaxed line-clamp-2">${highlight}</p>` : ''}
+          <p class="text-sm text-slate-600 leading-relaxed mb-2">${escapeHtml(text)}</p>
+          <div class="flex items-center gap-4 text-[11px] text-slate-400">
+            ${likes > 0 ? `<span>♥ ${likes}</span>` : ''}
+            ${reposts > 0 ? `<span>⟳ ${reposts}</span>` : ''}
+          </div>
         </div>
       </div>
-    </div>
+    </a>
   `;
 }
 
@@ -257,11 +283,9 @@ app.post('/api/feeds/create', async (c) => {
   }
 
   try {
-    // 1. Run the search to get seed URIs
-    const hits = await searchSiteStandardArticles(query, 'all', 'relevant', 30);
-    const seedUris = (hits?.hits ?? [])
-      .map((h: any) => h._source?.bsky_post_uri)
-      .filter((uri: string | undefined): uri is string => Boolean(uri && uri.startsWith('at://')));
+    // 1. Search Bluesky for seed post URIs
+    const posts = await searchBskyPosts(query, 30);
+    const seedUris = posts.map(p => p.uri);
 
     // 2. Create custom_feeds row
     const feed = await createCustomFeed({
