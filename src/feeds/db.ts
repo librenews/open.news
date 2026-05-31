@@ -125,3 +125,14 @@ export async function getCustomFeedMatchUris(uuid: string, limit = 30, cursor?: 
   const { rows } = await pool.query<{ uri: string; matched_at: string }>(q, params);
   return rows;
 }
+
+export async function deleteCustomFeed(id: bigint | number, uuid: string): Promise<void> {
+  // Delete linked track matches + track row
+  await pool.query(
+    `DELETE FROM track_matches WHERE track_id IN (SELECT id FROM tracks WHERE uuid = $1)`,
+    [uuid]
+  );
+  await pool.query('DELETE FROM tracks WHERE uuid = $1', [uuid]);
+  // Delete the custom feed
+  await pool.query('DELETE FROM custom_feeds WHERE id = $1', [id]);
+}

@@ -4,7 +4,7 @@ import { getCookie } from 'hono/cookie';
 import { createHmac } from 'crypto';
 import { logger } from '../lib/logger.js';
 import { feedsAuthRouter, getOAuthClient, getAgent } from './auth.js';
-import { getFeedUserById, createCustomFeed, getCustomFeedByUuid, getCustomFeedsByOwner, updateCustomFeedBskyUri } from './db.js';
+import { getFeedUserById, createCustomFeed, getCustomFeedByUuid, getCustomFeedsByOwner, updateCustomFeedBskyUri, deleteCustomFeed } from './db.js';
 import type { FeedUser, CustomFeed } from './db.js';
 import { upsertTrackQuery } from '../track/opensearch.js';
 import { db } from '../db/client.js';
@@ -467,7 +467,7 @@ app.get('/my-feeds', async (c) => {
       : null;
 
     return `
-      <div class="bg-white rounded-xl border border-slate-200 hover:border-slate-300 p-5 transition-all hover:shadow-sm fade-in">
+      <div class="bg-white rounded-xl border border-slate-200 hover:border-slate-300 p-5 transition-all hover:shadow-sm fade-in" id="feed-${f.uuid}" x-data="{ confirmDelete: false }">
         <div class="flex items-start justify-between gap-3">
           <div class="flex-1">
             <h3 class="text-sm font-bold text-slate-800 mb-1">${escapeHtml(f.name)}</h3>
@@ -477,11 +477,31 @@ app.get('/my-feeds', async (c) => {
               <span class="text-[10px] text-slate-400">${new Date(f.created_at).toLocaleDateString()}</span>
             </div>
           </div>
-          ${bskyAppUrl ? `
-            <a href="${bskyAppUrl}" target="_blank" rel="noopener" class="shrink-0 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors no-underline">
-              Open ↗
-            </a>
-          ` : ''}
+          <div class="flex items-center gap-2 shrink-0">
+            ${bskyAppUrl ? `
+              <a href="${bskyAppUrl}" target="_blank" rel="noopener" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-600 text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors no-underline">
+                Open ↗
+              </a>
+            ` : ''}
+            <button @click="confirmDelete = true" class="bg-slate-50 hover:bg-red-50 text-slate-400 hover:text-red-500 p-1.5 rounded-lg transition-colors cursor-pointer" title="Delete feed">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- Confirm delete modal -->
+        <div x-show="confirmDelete" x-cloak class="mt-4 bg-red-50 border border-red-200 rounded-xl p-4 fade-in">
+          <p class="text-sm text-red-800 font-medium mb-1">Delete "${escapeHtml(f.name)}"?</p>
+          <p class="text-xs text-red-600 mb-3">This will remove the feed from Bluesky and cannot be undone.</p>
+          <div class="flex items-center gap-2">
+            <button
+              hx-delete="/api/feeds/${f.uuid}"
+              hx-target="#feed-${f.uuid}"
+              hx-swap="outerHTML"
+              class="bg-red-600 hover:bg-red-700 text-white text-xs font-bold px-4 py-2 rounded-lg transition-colors cursor-pointer"
+            >Delete</button>
+            <button @click="confirmDelete = false" class="bg-white hover:bg-slate-50 text-slate-600 text-xs font-medium px-4 py-2 rounded-lg border border-slate-200 transition-colors cursor-pointer">Cancel</button>
+          </div>
         </div>
       </div>
     `;
@@ -509,6 +529,51 @@ app.get('/my-feeds', async (c) => {
   `;
 
   return c.html(renderLayout(user, content, 'My Feeds — feeds.social'));
+});
+
+// ─── Delete Feed API ────────────────────────────────────────────────────────
+
+app.delete('/api/feeds/:uuid', async (c) => {
+  const userId = c.get('userId');
+  const user = userId ? await getFeedUserById(userId) : null;
+  if (!user) return c.html('<p class="text-red-500 text-sm">Not authenticated.</p>', 401);
+
+  const uuid = c.req.param('uuid');
+  const feed = await getCustomFeedByUuid(uuid);
+  if (!feed) return c.html('<p class="text-red-500 text-sm">Feed not found.</p>', 404);
+
+  // Ensure the user owns this feed
+  if (feed.owner_id !== user.id) {
+    return c.html('<p class="text-red-500 text-sm">You don\'t own this feed.</p>', 403);
+  }
+
+  try {
+    // Remove feed generator record from the user's PDS
+    if (feed.bsky_uri) {
+      try {
+        const agent = await getAgent(user.did);
+        await agent.com.atproto.repo.deleteRecord({
+          repo: user.did,
+          collection: 'app.bsky.feed.generator',
+          rkey: uuid,
+        });
+        logger.info({ uuid, did: user.did }, 'Deleted feed generator from PDS');
+      } catch (err) {
+        logger.warn({ err, uuid }, 'Failed to delete feed generator from PDS (continuing)');
+      }
+    }
+
+    // Remove from database
+    await deleteCustomFeed(feed.id, uuid);
+
+    logger.info({ uuid, feedId: feed.id, user: user.handle }, 'Custom feed deleted');
+
+    // Return empty div so HTMX removes the card
+    return c.html('');
+  } catch (err) {
+    logger.error({ err, uuid }, 'Delete feed failed');
+    return c.html(`<p class="text-red-500 text-sm">Delete failed: ${escapeHtml((err as Error).message)}</p>`);
+  }
 });
 
 // ─── Feed Skeleton (Bluesky calls this) ─────────────────────────────────────
