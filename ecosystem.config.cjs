@@ -138,5 +138,16 @@ module.exports = {
       error_file: '/var/log/opennews/blogs-error.log',
       out_file: '/var/log/opennews/blogs-out.log',
     },
+    {
+      name: 'fatlink',
+      script: 'node',
+      args: '--import tsx/esm src/fatlink/index.ts',
+      cwd: '/home/opennews/open-news',
+      instances: 1, autorestart: true, watch: false,
+      max_memory_restart: '256M',
+      env: { ...envVars, FATLINK_PORT: '4900', FATLINK_DOMAIN: 'fat.link' },
+      error_file: '/var/log/opennews/fatlink-error.log',
+      out_file: '/var/log/opennews/fatlink-out.log',
+    },
   ],
 };
