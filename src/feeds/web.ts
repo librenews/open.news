@@ -24,6 +24,16 @@ function escapeHtml(s: string): string {
 
 app.route('/', feedsAuthRouter);
 
+// ─── Favicon ────────────────────────────────────────────────────────────────
+app.get('/favicon.png', async (c) => {
+  const { readFile } = await import('fs/promises');
+  const { join, dirname } = await import('path');
+  const { fileURLToPath } = await import('url');
+  const __dirname = dirname(fileURLToPath(import.meta.url));
+  const buf = await readFile(join(__dirname, 'favicon.png'));
+  return new Response(buf, { headers: { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=86400' } });
+});
+
 // ─── DID Document (so did:web:feeds.social resolves to this server) ─────────
 app.get('/.well-known/did.json', (c) => {
   return c.json({
