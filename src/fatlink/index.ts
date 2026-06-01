@@ -226,9 +226,9 @@ app.post('/api/create', async (c) => {
 
     // Save version 1
     await pool.query(
-      `INSERT INTO fatlink_versions (artifact_id, version, html, prompt, author_did)
-       VALUES ($1, 1, $2, $3, $4)`,
-      [rows[0].id, generatedHtml, prompt.trim(), session.did]
+      `INSERT INTO fatlink_versions (artifact_id, version, html, prompt, author_did, llm_provider, llm_model, input_tokens, output_tokens)
+       VALUES ($1, 1, $2, $3, $4, $5, $6, $7, $8)`,
+      [rows[0].id, generatedHtml, prompt.trim(), session.did, response.provider, response.model, response.inputTokens, response.outputTokens]
     );
 
     logger.info({
@@ -284,9 +284,9 @@ app.post('/api/:slug/prompt', async (c) => {
 
     // Save version
     await pool.query(
-      `INSERT INTO fatlink_versions (artifact_id, version, html, prompt, author_did)
-       VALUES ($1, $2, $3, $4, $5)`,
-      [artifact.id, newVersion, updatedHtml, prompt.trim(), session.did]
+      `INSERT INTO fatlink_versions (artifact_id, version, html, prompt, author_did, llm_provider, llm_model, input_tokens, output_tokens)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      [artifact.id, newVersion, updatedHtml, prompt.trim(), session.did, response.provider, response.model, response.inputTokens, response.outputTokens]
     );
 
     logger.info({
@@ -372,6 +372,66 @@ app.delete('/api/:slug', async (c) => {
   return c.json({ success: true });
 });
 
+// ── ACL API ─────────────────────────────────────────────────────────────────
+
+app.get('/api/:slug/acl', async (c) => {
+  const session = await getSession(c);
+  const slug = c.req.param('slug');
+  const { rows: artifacts } = await pool.query('SELECT id, owner_did FROM fatlink_artifacts WHERE slug = $1', [slug]);
+  if (artifacts.length === 0) return c.json({ error: 'Not found' }, 404);
+  if (!session || session.did !== artifacts[0].owner_did) return c.json({ error: 'Unauthorized' }, 403);
+
+  const { rows } = await pool.query('SELECT did, permission FROM fatlink_acl WHERE artifact_id = $1', [artifacts[0].id]);
+  const acls = await Promise.all(rows.map(async (r: any) => {
+    try {
+      const res = await fetch(`https://public.api.bsky.app/xrpc/app.bsky.actor.getProfile?actor=${encodeURIComponent(r.did)}`).then(r => r.json()) as any;
+      return { did: r.did, permission: r.permission, handle: res?.handle || r.did };
+    } catch { return { did: r.did, permission: r.permission, handle: r.did }; }
+  }));
+  return c.json({ acls });
+});
+
+app.post('/api/:slug/acl', async (c) => {
+  const session = await getSession(c);
+  const slug = c.req.param('slug');
+  const { rows: artifacts } = await pool.query('SELECT id, owner_did FROM fatlink_artifacts WHERE slug = $1', [slug]);
+  if (artifacts.length === 0) return c.json({ error: 'Not found' }, 404);
+  if (!session || session.did !== artifacts[0].owner_did) return c.json({ error: 'Unauthorized' }, 403);
+
+  const { handle } = await c.req.json();
+  if (!handle?.trim()) return c.json({ error: 'Handle is required' }, 400);
+
+  let targetDid = handle.trim().replace(/^@/, '');
+  if (!targetDid.startsWith('did:')) {
+    const res = await fetch(`https://public.api.bsky.app/xrpc/com.atproto.identity.resolveHandle?handle=${encodeURIComponent(targetDid)}`);
+    if (!res.ok) return c.json({ error: 'Handle not found on Bluesky' }, 404);
+    const data = await res.json() as any;
+    targetDid = data.did;
+  }
+
+  await pool.query(
+    `INSERT INTO fatlink_acl (artifact_id, did, permission) VALUES ($1, $2, 'write')
+     ON CONFLICT (artifact_id, did) DO UPDATE SET permission = 'write'`,
+    [artifacts[0].id, targetDid]
+  );
+  logger.info({ event: 'collab_added', slug, targetDid }, 'Collaborator added');
+  return c.json({ success: true, did: targetDid });
+});
+
+app.delete('/api/:slug/acl', async (c) => {
+  const session = await getSession(c);
+  const slug = c.req.param('slug');
+  const { rows: artifacts } = await pool.query('SELECT id, owner_did FROM fatlink_artifacts WHERE slug = $1', [slug]);
+  if (artifacts.length === 0) return c.json({ error: 'Not found' }, 404);
+  if (!session || session.did !== artifacts[0].owner_did) return c.json({ error: 'Unauthorized' }, 403);
+
+  const { did } = await c.req.json();
+  if (!did) return c.json({ error: 'Missing did' }, 400);
+  await pool.query('DELETE FROM fatlink_acl WHERE artifact_id = $1 AND did = $2', [artifacts[0].id, did]);
+  logger.info({ event: 'collab_removed', slug, did }, 'Collaborator removed');
+  return c.json({ success: true });
+});
+
 // ── Artifact Page ───────────────────────────────────────────────────────────
 
 app.get('/:slug', async (c) => {
@@ -434,9 +494,13 @@ app.get('/:slug', async (c) => {
                 by @${artifact.owner_handle} · v${artifact.version}
               </div>
             </div>
-            ${isOwner ? html`
-              <button onclick="if(confirm('Delete this page?'))fetch('/api/${slug}',{method:'DELETE'}).then(()=>location.href='/')" class="btn btn-ghost" style="font-size: 0.75rem; padding: 0.3rem 0.6rem; color: var(--red);">Delete</button>
-            ` : ''}
+            <div style="display: flex; gap: 0.4rem; align-items: center;">
+              <a href="https://bsky.app/intent/compose?text=${encodeURIComponent(artifact.title + ' — made with fat.link\n\nhttps://fat.link/' + slug)}" target="_blank" rel="noopener" class="btn btn-ghost" style="font-size: 0.75rem; padding: 0.3rem 0.6rem;">Share on 🦋</a>
+              ${isOwner ? html`
+                <button onclick="document.getElementById('collab-modal').style.display='flex';loadCollabs()" class="btn btn-ghost" style="font-size: 0.75rem; padding: 0.3rem 0.6rem;">Collaborators</button>
+                <button onclick="if(confirm('Delete this page?'))fetch('/api/${slug}',{method:'DELETE'}).then(()=>location.href='/')" class="btn btn-ghost" style="font-size: 0.75rem; padding: 0.3rem 0.6rem; color: var(--red);">Delete</button>
+              ` : ''}
+            </div>
           </div>
           <div style="border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; background: white;">
             <iframe
@@ -516,6 +580,60 @@ app.get('/:slug', async (c) => {
           </script>
         ` : ''}
       </div>
+
+      <!-- Collaborators Modal (owner only) -->
+      ${isOwner ? html`
+        <div id="collab-modal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); z-index: 200; justify-content: center; align-items: center;" onclick="if(event.target===this)this.style.display='none'">
+          <div class="card" style="width: 100%; max-width: 440px; margin: 1rem;" onclick="event.stopPropagation()">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+              <h2 style="font-size: 1.1rem; font-weight: 700;">Collaborators</h2>
+              <button onclick="document.getElementById('collab-modal').style.display='none'" style="background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 1.2rem;">×</button>
+            </div>
+            <div style="display: flex; gap: 0.5rem; margin-bottom: 1.25rem;">
+              <input id="collab-handle" type="text" placeholder="Handle (e.g. user.bsky.social)" class="input" style="flex: 1;" />
+              <button id="collab-invite-btn" class="btn btn-primary" type="button">Invite</button>
+            </div>
+            <div id="collab-list" style="display: flex; flex-direction: column; gap: 0.6rem;">
+              <div style="color: var(--text-muted); font-size: 0.82rem;">Loading...</div>
+            </div>
+          </div>
+        </div>
+
+        <script>
+        var SLUG = '${slug}';
+        function loadCollabs() {
+          var list = document.getElementById('collab-list');
+          list.innerHTML = '<div style="color:var(--text-muted);font-size:0.82rem;">Loading...</div>';
+          fetch('/api/' + SLUG + '/acl').then(r => r.json()).then(data => {
+            if (!data.acls || data.acls.length === 0) {
+              list.innerHTML = '<div style="color:var(--text-muted);font-size:0.82rem;">No collaborators yet.</div>';
+              return;
+            }
+            list.innerHTML = data.acls.map(a =>
+              '<div style="display:flex;justify-content:space-between;align-items:center;padding:0.4rem 0;">' +
+              '<div><div style="font-weight:600;font-size:0.85rem;">@' + (a.handle || a.did) + '</div>' +
+              '<div style="font-size:0.72rem;color:var(--text-muted);">Can edit</div></div>' +
+              '<button data-did="' + a.did + '" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:0.8rem;" onclick="removeCollab(this)">Remove</button>' +
+              '</div>'
+            ).join('');
+          }).catch(() => { list.innerHTML = '<div style="color:var(--red);">Failed to load</div>'; });
+        }
+        function removeCollab(btn) {
+          if (!confirm('Remove this collaborator?')) return;
+          fetch('/api/' + SLUG + '/acl', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ did: btn.getAttribute('data-did') }) })
+            .then(() => loadCollabs());
+        }
+        document.getElementById('collab-invite-btn').addEventListener('click', function() {
+          var h = document.getElementById('collab-handle').value.trim();
+          if (!h) return;
+          this.disabled = true; this.textContent = '...';
+          fetch('/api/' + SLUG + '/acl', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ handle: h }) })
+            .then(r => { if (!r.ok) return r.json().then(d => { alert(d.error || 'Failed'); }); document.getElementById('collab-handle').value = ''; loadCollabs(); })
+            .catch(() => alert('Network error'))
+            .finally(() => { document.getElementById('collab-invite-btn').disabled = false; document.getElementById('collab-invite-btn').textContent = 'Invite'; });
+        });
+        </script>
+      ` : ''}
     `,
   }));
 });
