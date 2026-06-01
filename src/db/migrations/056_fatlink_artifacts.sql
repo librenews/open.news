@@ -1,6 +1,15 @@
 -- fat.link reinvention: chat-to-artifact platform
 -- Drop old link-collection tables, create new artifact tables
 
+-- Ensure fatlink_users exists (may be missing on some environments)
+CREATE TABLE IF NOT EXISTS fatlink_users (
+  did TEXT PRIMARY KEY,
+  handle TEXT NOT NULL,
+  display_name TEXT,
+  avatar TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- Drop old tables
 DROP TABLE IF EXISTS fatlink_items CASCADE;
 DROP TABLE IF EXISTS fatlink_acl CASCADE;
