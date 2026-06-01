@@ -40,7 +40,19 @@ const app = new Hono();
 
 app.use('/logo.png', serveStatic({ root: './src/longform/public', path: 'logo.png' }));
 app.use('/favicon.png', serveStatic({ root: './src/longform/public', path: 'favicon.png' }));
-app.use('/.well-known/did.json', serveStatic({ root: './src/longform/public', path: '.well-known/did.json' }));
+app.get('/.well-known/did.json', (c) => {
+  return c.json({
+    '@context': ['https://www.w3.org/ns/did/v1'],
+    id: `did:web:${config.LONGFORM_DOMAIN}`,
+    service: [
+      {
+        id: '#bsky_fg',
+        type: 'BskyFeedGenerator',
+        serviceEndpoint: `https://${config.LONGFORM_DOMAIN}`,
+      },
+    ],
+  });
+});
 
 // ─── Bluesky Feed Generator XRPC ───────────────────────────────────────────
 
