@@ -30,6 +30,38 @@ function escapeHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+/** Strip dangerous/useless tags from LLM-generated HTML */
+function sanitizeHtml(rawHtml: string): string {
+  let html = rawHtml;
+  // Remove tags with zero product value inside an artifact
+  html = html.replace(/<meta\s+http-equiv\s*=\s*["']?refresh["']?[^>]*>/gi, '');
+  html = html.replace(/<base[^>]*>/gi, '');
+  html = html.replace(/<iframe[^>]*>[\s\S]*?<\/iframe>/gi, '');
+  html = html.replace(/<iframe[^>]*\/>/gi, '');
+  html = html.replace(/<object[^>]*>[\s\S]*?<\/object>/gi, '');
+  html = html.replace(/<embed[^>]*>/gi, '');
+  html = html.replace(/<applet[^>]*>[\s\S]*?<\/applet>/gi, '');
+  // Remove external script/link tags (keep inline)
+  html = html.replace(/<script[^>]+src\s*=[^>]*>[\s\S]*?<\/script>/gi, '');
+  html = html.replace(/<link[^>]+rel\s*=\s*["']stylesheet["'][^>]*>/gi, '');
+  // Remove password inputs (anti-phishing)
+  html = html.replace(/<input[^>]+type\s*=\s*["']password["'][^>]*>/gi, '');
+  // Remove form actions pointing externally
+  html = html.replace(/<form[^>]+action\s*=\s*["']https?:\/\/[^>]*>/gi, '<form>');
+  return html;
+}
+
+/** Rewrite links in artifact HTML to go through /out?url= */
+function rewriteLinks(rawHtml: string): string {
+  return rawHtml.replace(
+    /<a\s([^>]*?)href\s*=\s*["'](https?:\/\/[^"']+)["']([^>]*?)>/gi,
+    (_, before, url, after) => {
+      const safeUrl = encodeURIComponent(url);
+      return `<a ${before}href="/out?url=${safeUrl}" rel="noopener noreferrer" target="_top"${after}>`;
+    }
+  );
+}
+
 async function getPermission(artifact: { id: number | bigint; owner_did: string }, did: string | null): Promise<'owner' | 'write' | 'read' | null> {
   if (did === artifact.owner_did) return 'owner';
   if (!did) {
@@ -54,10 +86,50 @@ Rules:
 5. Make it interactive where appropriate (animations, hover effects, dynamic content)
 6. Do NOT include fetch(), XMLHttpRequest, or any external network calls
 7. Do NOT include <form action="..."> pointing to external URLs
-8. Keep total output under 100KB
-9. Use clean, semantic HTML5
+8. Do NOT include <iframe>, <object>, <embed>, or <input type="password">
+9. Keep total output under 100KB
+10. Use clean, semantic HTML5
 
 If given an existing artifact and a modification prompt, return the COMPLETE updated HTML (not a diff).`;
+
+// ── Outbound Link Redirect ──────────────────────────────────────────────────
+
+app.get('/out', (c) => {
+  const url = c.req.query('url');
+  if (!url) return c.text('Missing url parameter', 400);
+
+  // Validate it's a real URL
+  try {
+    const parsed = new URL(url);
+    if (!['http:', 'https:'].includes(parsed.protocol)) {
+      return c.text('Invalid URL', 400);
+    }
+  } catch {
+    return c.text('Invalid URL', 400);
+  }
+
+  logger.info({ event: 'outbound_click', url }, 'Outbound link clicked');
+  return c.redirect(url);
+});
+
+// ── Report API ──────────────────────────────────────────────────────────────
+
+app.post('/api/:slug/report', async (c) => {
+  const slug = c.req.param('slug');
+  const session = await getSession(c);
+
+  const { rows } = await pool.query('SELECT id FROM fatlink_artifacts WHERE slug = $1', [slug]);
+  if (rows.length === 0) return c.json({ error: 'Not found' }, 404);
+
+  logger.warn({
+    event: 'content_report',
+    slug,
+    artifact_id: rows[0].id,
+    reporter_did: session?.did || 'anonymous',
+  }, 'Content reported as harmful');
+
+  return c.json({ success: true });
+});
 
 // ── Homepage ────────────────────────────────────────────────────────────────
 
@@ -201,6 +273,9 @@ app.post('/api/create', async (c) => {
     // Strip markdown fences if the LLM wrapped it
     generatedHtml = generatedHtml.replace(/^```html?\n?/i, '').replace(/\n?```$/i, '');
 
+    // Sanitize: strip dangerous/useless tags
+    generatedHtml = sanitizeHtml(generatedHtml);
+
     // Extract title from generated HTML
     const titleMatch = generatedHtml.match(/<title[^>]*>([^<]+)<\/title>/i);
     const title = titleMatch?.[1]?.trim() || prompt.trim().slice(0, 60);
@@ -271,6 +346,7 @@ app.post('/api/:slug/prompt', async (c) => {
     const response = await llm.complete(messages, { maxTokens: 16384 });
     let updatedHtml = response.text.trim();
     updatedHtml = updatedHtml.replace(/^```html?\n?/i, '').replace(/\n?```$/i, '');
+    updatedHtml = sanitizeHtml(updatedHtml);
 
     const newVersion = artifact.version + 1;
     const titleMatch = updatedHtml.match(/<title[^>]*>([^<]+)<\/title>/i);
@@ -315,8 +391,8 @@ app.get('/api/:slug/render', async (c) => {
     if (!perm) return c.text('Not authorized', 403);
   }
 
-  // Inject CSP meta tag for sandbox safety
-  let safeHtml = artifact.html;
+  // Rewrite external links through /out?url= and inject CSP
+  let safeHtml = rewriteLinks(artifact.html);
   if (!safeHtml.includes('Content-Security-Policy')) {
     safeHtml = safeHtml.replace(
       '<head>',
@@ -500,13 +576,26 @@ app.get('/:slug', async (c) => {
                 <button onclick="document.getElementById('collab-modal').style.display='flex';loadCollabs()" class="btn btn-ghost" style="font-size: 0.75rem; padding: 0.3rem 0.6rem;">Collaborators</button>
                 <button onclick="if(confirm('Delete this page?'))fetch('/api/${slug}',{method:'DELETE'}).then(()=>location.href='/')" class="btn btn-ghost" style="font-size: 0.75rem; padding: 0.3rem 0.6rem; color: var(--red);">Delete</button>
               ` : ''}
+              <button onclick="if(confirm('Report this content as harmful or misleading?'))fetch('/api/${slug}/report',{method:'POST'}).then(()=>alert('Report submitted. Thank you.'))" class="btn btn-ghost" style="font-size: 0.75rem; padding: 0.3rem 0.6rem;">⚑ Report</button>
             </div>
           </div>
-          <div style="border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; background: white;">
+
+          <!-- Provenance bar -->
+          <div style="display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem 0.85rem; background: var(--bg-card); border: 1px solid var(--border); border-bottom: none; border-radius: var(--radius) var(--radius) 0 0; font-size: 0.72rem; color: var(--text-muted);">
+            ${artifact.owner_avatar ? html`<img src="${artifact.owner_avatar}" alt="" style="width: 18px; height: 18px; border-radius: 50%;" />` : ''}
+            <span>Created by <strong style="color: var(--text-secondary);">@${artifact.owner_handle}</strong></span>
+            <span>·</span>
+            <span>AI-generated</span>
+            <span>·</span>
+            <span>${new Date(artifact.created_at).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}</span>
+            ${artifact.version > 1 ? html`<span>·</span><span>${artifact.version} revisions</span>` : ''}
+          </div>
+
+          <div style="border: 1px solid var(--border); border-radius: 0 0 var(--radius) var(--radius); overflow: hidden; background: white;">
             <iframe
               src="/api/${slug}/render"
               sandbox="allow-scripts"
-              style="width: 100%; height: calc(100vh - 220px); border: none; display: block;"
+              style="width: 100%; height: calc(100vh - 260px); border: none; display: block;"
               title="${escapeHtml(artifact.title)}"
             ></iframe>
           </div>
