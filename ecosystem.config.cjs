@@ -149,5 +149,16 @@ module.exports = {
       error_file: '/var/log/opennews/fatlink-error.log',
       out_file: '/var/log/opennews/fatlink-out.log',
     },
+    {
+      name: 'localnews',
+      script: 'node',
+      args: '--import tsx/esm src/localnews/index.ts',
+      cwd: '/home/opennews/open-news',
+      instances: 1, autorestart: true, watch: false,
+      max_memory_restart: '256M',
+      env: { ...envVars, LOCALNEWS_PORT: '5000', LOCALNEWS_DOMAIN: 'stamfordtimes.com' },
+      error_file: '/var/log/opennews/localnews-error.log',
+      out_file: '/var/log/opennews/localnews-out.log',
+    },
   ],
 };
