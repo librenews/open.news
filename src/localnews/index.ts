@@ -12,6 +12,46 @@ process.on('unhandledRejection', (err) => {
 const app = new Hono();
 
 const LN_DOMAIN = process.env.LOCALNEWS_DOMAIN || 'stamfordtimes.com';
+const SUBMIT_ADDRESS = `submit@${LN_DOMAIN}`;
+
+// ── Helpers ─────────────────────────────────────────────────────────────────
+
+/** Detect if an email is a forward and extract original sender info */
+function parseForwardedEmail(subject: string, body: string): { isForward: boolean; originalSender?: string; originalSubject?: string; cleanBody: string } {
+  const isForward = /^(fwd?|fw):/i.test(subject.trim());
+
+  if (!isForward) return { isForward: false, cleanBody: body };
+
+  let originalSender: string | undefined;
+  let originalSubject: string | undefined;
+
+  // Gmail style: ---------- Forwarded message ---------
+  const gmailMatch = body.match(/---------- Forwarded message ---------[\s\S]*?From:\s*(.+?)\n/i);
+  if (gmailMatch) originalSender = gmailMatch[1].trim();
+
+  // Outlook style: From: ... Sent: ... To: ... Subject: ...
+  const outlookMatch = body.match(/From:\s*(.+?)\r?\n.*?Subject:\s*(.+?)\r?\n/i);
+  if (outlookMatch) {
+    if (!originalSender) originalSender = outlookMatch[1].trim();
+    originalSubject = outlookMatch[2].trim();
+  }
+
+  // Apple Mail: Begin forwarded message: From: ...
+  const appleMatch = body.match(/Begin forwarded message:[\s\S]*?From:\s*(.+?)\r?\n/i);
+  if (appleMatch && !originalSender) originalSender = appleMatch[1].trim();
+
+  // Extract email from "Name <email>" format
+  if (originalSender) {
+    const emailMatch = originalSender.match(/<([^>]+)>/);
+    if (emailMatch) originalSender = emailMatch[1].trim();
+  }
+
+  // Clean subject: remove Fwd:/FW: prefix
+  const cleanSubject = subject.replace(/^(fwd?|fw):\s*/i, '').trim();
+  if (!originalSubject) originalSubject = cleanSubject;
+
+  return { isForward: true, originalSender, originalSubject, cleanBody: body };
+}
 
 // ── Health ──────────────────────────────────────────────────────────────────
 
@@ -40,14 +80,36 @@ app.post('/api/ingest/email', async (c) => {
       return c.json({ status: 'skipped', reason: 'empty body' });
     }
 
-    // Find matching source (by sender email)
-    const { rows: sources } = await pool.query(
+    // Check if this is a community-forwarded submission (always to submit@ address)
+    const isSubmitAddress = to.toLowerCase().includes(SUBMIT_ADDRESS);
+    const fwd = parseForwardedEmail(subject, content);
+
+    if (isSubmitAddress) {
+      // Always store submit@ emails as submissions for admin review
+      await pool.query(
+        `INSERT INTO ln_submissions (submitted_by, original_sender, original_subject, raw_body)
+         VALUES ($1, $2, $3, $4)`,
+        [senderEmail, fwd.originalSender || senderEmail, fwd.originalSubject || subject, content]
+      );
+
+      logger.info({
+        event: 'submission_received',
+        submitted_by: senderEmail,
+        original_sender: fwd.originalSender,
+        original_subject: fwd.originalSubject,
+      }, 'Community submission received for admin review');
+
+      return c.json({ status: 'submitted', message: 'Forwarded email received for review' });
+    }
+
+    // Find matching source (by sender email or to-address)
+    const { rows: sourceRows } = await pool.query(
       `SELECT * FROM ln_sources WHERE source_type = 'email' AND active = TRUE
        AND (identifier = $1 OR $2 LIKE '%' || identifier || '%')`,
       [senderEmail, to.toLowerCase()]
     );
 
-    const source = sources[0] || null;
+    const source = sourceRows[0] || null;
 
     // Store ingestion
     const { rows: ingestions } = await pool.query(
@@ -67,7 +129,7 @@ app.post('/api/ingest/email', async (c) => {
       body_length: content.length,
     }, 'Email ingestion received');
 
-    // Process asynchronously (don't hold up the webhook response)
+    // Process asynchronously
     setImmediate(async () => {
       try {
         await extractFromEmail(ingestionId, subject, content, source);
@@ -233,6 +295,94 @@ app.post('/api/ingestions/:id/reprocess', async (c) => {
   });
 
   return c.json({ status: 'reprocessing' });
+});
+
+// ── Submissions (admin review) ──────────────────────────────────────────────
+
+app.get('/api/submissions', async (c) => {
+  const status = c.req.query('status') || 'pending';
+  const { rows } = await pool.query(
+    `SELECT * FROM ln_submissions WHERE status = $1 ORDER BY created_at DESC LIMIT 50`,
+    [status]
+  );
+  return c.json({ submissions: rows });
+});
+
+app.get('/api/submissions/:id', async (c) => {
+  const { rows } = await pool.query('SELECT * FROM ln_submissions WHERE id = $1', [c.req.param('id')]);
+  if (rows.length === 0) return c.json({ error: 'Not found' }, 404);
+  return c.json({ submission: rows[0] });
+});
+
+// Approve a submission: creates a source with a generated ingest address
+app.post('/api/submissions/:id/approve', async (c) => {
+  const id = c.req.param('id');
+  const { rows } = await pool.query('SELECT * FROM ln_submissions WHERE id = $1', [id]);
+  if (rows.length === 0) return c.json({ error: 'Not found' }, 404);
+  if (rows[0].status !== 'pending') return c.json({ error: 'Already reviewed' }, 400);
+
+  const sub = rows[0];
+  const { name, instructions } = await c.req.json().catch(() => ({ name: null, instructions: null }));
+
+  // Generate a unique ingest address for this source
+  const slug = sub.original_sender
+    ? sub.original_sender.split('@')[0].replace(/[^a-z0-9]/gi, '').slice(0, 20)
+    : 'src';
+  const ingestAddress = `${slug}-${Date.now().toString(36)}@${LN_DOMAIN}`;
+
+  // Create source
+  const { rows: sourceRows } = await pool.query(
+    `INSERT INTO ln_sources (source_type, identifier, name, instructions)
+     VALUES ('email', $1, $2, $3) RETURNING *`,
+    [ingestAddress, name || sub.original_sender || 'Unknown Source', instructions || null]
+  );
+
+  // Mark submission as approved
+  await pool.query(
+    `UPDATE ln_submissions SET status = 'approved', source_id = $1, reviewed_at = NOW() WHERE id = $2`,
+    [sourceRows[0].id, id]
+  );
+
+  // Also process the original email content as the first ingestion
+  const { rows: ingestions } = await pool.query(
+    `INSERT INTO ln_ingestions (source_id, raw_subject, raw_body, sender, status)
+     VALUES ($1, $2, $3, $4, 'pending') RETURNING id`,
+    [sourceRows[0].id, sub.original_subject, sub.raw_body, sub.original_sender]
+  );
+
+  setImmediate(async () => {
+    try {
+      await extractFromEmail(ingestions[0].id, sub.original_subject, sub.raw_body, sourceRows[0]);
+    } catch (err) {
+      logger.error({ err }, 'Extraction from approved submission failed');
+    }
+  });
+
+  logger.info({
+    event: 'submission_approved',
+    submission_id: id,
+    source_id: sourceRows[0].id,
+    ingest_address: ingestAddress,
+  }, 'Submission approved, source created');
+
+  return c.json({
+    source: sourceRows[0],
+    ingest_address: ingestAddress,
+    message: `Source created. Subscribe to the newsletter using: ${ingestAddress}`,
+  });
+});
+
+app.post('/api/submissions/:id/dismiss', async (c) => {
+  const id = c.req.param('id');
+  const { notes } = await c.req.json().catch(() => ({ notes: null }));
+
+  const { rowCount } = await pool.query(
+    `UPDATE ln_submissions SET status = 'dismissed', admin_notes = $1, reviewed_at = NOW() WHERE id = $2 AND status = 'pending'`,
+    [notes || null, id]
+  );
+
+  if (rowCount === 0) return c.json({ error: 'Not found or already reviewed' }, 404);
+  return c.json({ status: 'dismissed' });
 });
 
 // ── Error Handling ──────────────────────────────────────────────────────────
