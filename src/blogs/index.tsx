@@ -139,6 +139,7 @@ async function fetchSidebarData(): Promise<{ trendingTags: TrendingTag[]; popula
           FROM site_standard_articles s,
                jsonb_array_elements_text(s.raw_record->'tags') AS tag
           WHERE s.published_at > NOW() - INTERVAL '7 days'
+            AND jsonb_typeof(s.raw_record->'tags') = 'array'
           GROUP BY tag ORDER BY cnt DESC LIMIT 20
         `),
         db.query(`
