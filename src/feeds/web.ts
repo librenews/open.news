@@ -597,10 +597,31 @@ app.get('/xrpc/app.bsky.feed.getFeedSkeleton', async (c) => {
   const limit = Math.min(parseInt(c.req.query('limit') ?? '30', 10), 100);
   const cursor = c.req.query('cursor') ?? undefined;
 
+  // Check custom_feeds first, then fall back to tracks table
   const feed = await getCustomFeedByUuid(rkey);
-  if (!feed) return c.json({ error: 'UnknownFeed', message: 'Feed not found' }, 404);
+  const { rows: trackCheck } = feed
+    ? { rows: [{ id: null, name: null }] }
+    : await db.query<{ id: string; name: string }>(
+        'SELECT id, name FROM tracks WHERE uuid = $1 AND feed_published = true',
+        [rkey]
+      );
 
-  // Try to get dynamic matches from the track_matches table first
+  if (!feed && trackCheck.length === 0) {
+    return c.json({ error: 'UnknownFeed', message: 'Feed not found' }, 404);
+  }
+
+  // Log the request for analytics
+  const requesterDid = c.req.query('requester_did') ?? undefined;
+  const feedName = feed?.name || trackCheck[0]?.name || rkey;
+  try {
+    await db.query(
+      `INSERT INTO feed_requests (feed_name, requester_did, cursor_used, limit_requested)
+       VALUES ($1, $2, $3, $4)`,
+      [feedName, requesterDid || null, cursor || null, limit]
+    );
+  } catch {}
+
+  // Get matches from track_matches
   const { rows: matches } = await db.query<{ post_uri: string; matched_at: Date }>(
     `SELECT tm.post_uri, tm.matched_at
      FROM tracks t
@@ -619,11 +640,13 @@ app.get('/xrpc/app.bsky.feed.getFeedSkeleton', async (c) => {
     });
   }
 
-  // Fall back to seed URIs
-  const seedUris = (feed.seed_uris as any) || [];
-  if (Array.isArray(seedUris) && seedUris.length > 0) {
-    const page = seedUris.slice(0, limit);
-    return c.json({ feed: page.map((uri: string) => ({ post: uri })) });
+  // Fall back to seed URIs (custom_feeds only)
+  if (feed) {
+    const seedUris = (feed.seed_uris as any) || [];
+    if (Array.isArray(seedUris) && seedUris.length > 0) {
+      const page = seedUris.slice(0, limit);
+      return c.json({ feed: page.map((uri: string) => ({ post: uri })) });
+    }
   }
 
   return c.json({ feed: [] });
