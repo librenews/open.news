@@ -17,28 +17,38 @@ interface ExtractedEntity {
   website?: string;
 }
 
+interface ExtractedEntityRelation {
+  from_entity: string;   // name (must match an entity)
+  to_entity: string;     // name (must match an entity)
+  relation_type: string; // owns, member_of, employed_by, founded_by, located_in, partner_of
+}
+
 interface ExtractedEvent {
   title: string;
+  event_type?: string;    // opening, performance, class, meetup, sale, festival, crime, vote, construction, closure
   description?: string;
   venue_name?: string;
-  start_date?: string;   // ISO 8601
+  start_date?: string;    // ISO 8601
   end_date?: string;
   all_day?: boolean;
   performers?: string[];  // entity names
   metadata?: Record<string, any>;
+  related_to?: string;    // title of a related event (if cross-story connection detected)
 }
 
 interface ExtractionResult {
   entities: ExtractedEntity[];
+  entity_relations: ExtractedEntityRelation[];
   events: ExtractedEvent[];
 }
 
-const EXTRACTION_PROMPT = `You are an AI agent that extracts structured data from emails about local events, businesses, and community activities.
+const EXTRACTION_PROMPT = `You are an AI agent that extracts structured data from emails about local events, businesses, and community activities. You build a local civic ontology — a structured knowledge graph of people, places, things, events, and how they relate.
 
 Given an email, extract:
 
-1. **Entities** — people (musicians, artists, speakers, individuals), places (restaurants, venues, parks, businesses), and things (products, services)
-2. **Events** — performances, shows, dinners, classes, meetups, sales, openings
+1. **Entities** — people (musicians, artists, business owners, officials), places (restaurants, venues, parks, intersections), and things (products, services, organizations)
+2. **Entity Relationships** — ownership, membership, employment, location connections between entities
+3. **Events** — performances, openings, closures, votes, construction, classes, meetups, sales, festivals, crimes
 
 Return ONLY valid JSON with this exact structure (no markdown fences, no explanation):
 {
@@ -46,37 +56,49 @@ Return ONLY valid JSON with this exact structure (no markdown fences, no explana
     {
       "name": "Exact Name",
       "entity_type": "person|place|thing",
-      "subtype": "band|individual|artist|speaker|restaurant|venue|bar|park|business|product|service",
+      "subtype": "band|individual|artist|speaker|chef|official|restaurant|venue|bar|park|business|intersection|neighborhood|organization|council|product|service",
       "description": "brief description if available",
       "address": "street address if mentioned",
       "website": "URL if mentioned"
     }
   ],
+  "entity_relations": [
+    {
+      "from_entity": "Person or Entity Name",
+      "to_entity": "Other Entity Name",
+      "relation_type": "owns|member_of|employed_by|founded_by|located_in|partner_of|subsidiary_of|manages"
+    }
+  ],
   "events": [
     {
       "title": "Event Title",
+      "event_type": "performance|opening|closure|class|meetup|sale|festival|vote|construction|hearing|fundraiser|exhibition|competition",
       "description": "brief description",
       "venue_name": "name of the place (must match an entity name above)",
       "start_date": "2026-06-15T20:00:00",
       "end_date": "2026-06-15T23:00:00",
       "all_day": false,
       "performers": ["Artist Name"],
-      "metadata": { "price": "$20", "tickets_url": "..." }
+      "metadata": { "price": "$20", "tickets_url": "..." },
+      "related_to": "Title of a related event if this is connected to another event mentioned"
     }
   ]
 }
 
 Rules:
-- Extract ALL events and entities mentioned, not just the first
+- Extract ALL events, entities, and relationships mentioned
 - Use exact names as written (proper capitalization)
 - For dates, use ISO 8601 format. If only a date is given, use midnight. If no year, assume current year.
 - If a venue is mentioned, include it as both an entity and in the event's venue_name
+- If an owner, chef, manager, or organizer is mentioned for a business, create BOTH entities AND a relationship
 - For recurring events, create one entry per occurrence if specific dates are listed
-- If the email is not about events/entities (e.g. spam, unsubscribe notice), return {"entities":[],"events":[]}
+- event_type should be one of: performance, opening, closure, class, meetup, sale, festival, vote, construction, hearing, fundraiser, exhibition, competition
+- If events seem related (e.g., a construction project and a future opening), use related_to to link them
+- If the email is not about events/entities (e.g. spam, unsubscribe notice), return {"entities":[],"entity_relations":[],"events":[]}
 - Do NOT invent information that isn't in the email`;
 
 /**
- * Process an ingested email and extract entities/events using LLM
+ * Process an ingested email and extract entities/events/relations using LLM
  */
 export async function extractFromEmail(
   ingestionId: number | bigint,
@@ -84,7 +106,7 @@ export async function extractFromEmail(
   body: string,
   source: SourceContext | null
 ): Promise<void> {
-  const startTime = Date.now();
+  const extractionStart = Date.now();
 
   // Build prompt with source-specific instructions
   let userPrompt = '';
@@ -122,6 +144,7 @@ export async function extractFromEmail(
   }
 
   if (!result.entities) result.entities = [];
+  if (!result.entity_relations) result.entity_relations = [];
   if (!result.events) result.events = [];
 
   // Skip if nothing extracted
@@ -187,8 +210,36 @@ export async function extractFromEmail(
     entityNameToId.set(normalized, entityId);
   }
 
+  // ── Store Entity Relations ──────────────────────────────────────────────
+  let relationsCreated = 0;
+
+  for (const rel of result.entity_relations) {
+    if (!rel.from_entity || !rel.to_entity || !rel.relation_type) continue;
+
+    const fromId = entityNameToId.get(rel.from_entity.trim().toLowerCase());
+    const toId = entityNameToId.get(rel.to_entity.trim().toLowerCase());
+
+    if (!fromId || !toId || fromId === toId) continue;
+
+    try {
+      await pool.query(
+        `INSERT INTO ln_entity_relations (from_entity_id, to_entity_id, relation_type)
+         VALUES ($1, $2, $3)
+         ON CONFLICT (from_entity_id, to_entity_id, relation_type) DO NOTHING`,
+        [fromId, toId, rel.relation_type.trim().toLowerCase()]
+      );
+      relationsCreated++;
+      logger.debug({
+        from: rel.from_entity, to: rel.to_entity, type: rel.relation_type,
+      }, 'Entity relation created');
+    } catch (err) {
+      logger.warn({ err, rel }, 'Failed to insert entity relation');
+    }
+  }
+
   // ── Upsert Events ───────────────────────────────────────────────────────
   let eventsCreated = 0;
+  const eventTitleToId = new Map<string, bigint>(); // for cross-event linking
 
   for (const evt of result.events) {
     if (!evt.title?.trim()) continue;
@@ -207,6 +258,7 @@ export async function extractFromEmail(
       );
 
       if (dupCheck.length > 0) {
+        eventTitleToId.set(normalizedTitle, dupCheck[0].id);
         logger.debug({ title: evt.title, date: startTime.toISOString() }, 'Duplicate event, skipping');
         continue;
       }
@@ -231,12 +283,14 @@ export async function extractFromEmail(
     const endTime = evt.end_date ? new Date(evt.end_date) : null;
 
     const { rows: eventRows } = await pool.query(
-      `INSERT INTO ln_events (title, title_normalized, description, venue_id, start_time, end_time, all_day, source_ingestion_id, metadata)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      `INSERT INTO ln_events (title, title_normalized, description, event_type, venue_id, start_time, end_time, all_day, source_ingestion_id, metadata)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        RETURNING id`,
       [
         evt.title.trim(), normalizedTitle,
-        evt.description || null, venueId,
+        evt.description || null,
+        evt.event_type || null,
+        venueId,
         startTime && !isNaN(startTime.getTime()) ? startTime.toISOString() : null,
         endTime && !isNaN(endTime.getTime()) ? endTime.toISOString() : null,
         evt.all_day || false,
@@ -247,6 +301,7 @@ export async function extractFromEmail(
 
     const eventId = eventRows[0].id;
     eventsCreated++;
+    eventTitleToId.set(normalizedTitle, eventId);
 
     // Link performers
     if (evt.performers && evt.performers.length > 0) {
@@ -264,7 +319,45 @@ export async function extractFromEmail(
       }
     }
 
-    logger.info({ title: evt.title, event_id: eventId, venue_id: venueId }, 'Event created');
+    logger.info({ title: evt.title, event_type: evt.event_type, event_id: eventId, venue_id: venueId }, 'Event created');
+  }
+
+  // ── Store Event Relations (cross-story connections) ─────────────────────
+  let eventRelationsCreated = 0;
+
+  for (const evt of result.events) {
+    if (!evt.related_to || !evt.title) continue;
+
+    const fromId = eventTitleToId.get(evt.title.trim().toLowerCase());
+    const toNorm = evt.related_to.trim().toLowerCase();
+
+    // Check in current batch first
+    let toId = eventTitleToId.get(toNorm);
+
+    // Then check database for previously stored events
+    if (!toId) {
+      const { rows: existing } = await pool.query(
+        `SELECT id FROM ln_events WHERE title_normalized = $1
+         ORDER BY created_at DESC LIMIT 1`,
+        [toNorm]
+      );
+      if (existing.length > 0) toId = existing[0].id;
+    }
+
+    if (fromId && toId && fromId !== toId) {
+      try {
+        await pool.query(
+          `INSERT INTO ln_event_relations (from_event_id, to_event_id, relation_type)
+           VALUES ($1, $2, 'related_to')
+           ON CONFLICT (from_event_id, to_event_id, relation_type) DO NOTHING`,
+          [fromId, toId]
+        );
+        eventRelationsCreated++;
+        logger.debug({ from: evt.title, to: evt.related_to }, 'Event relation created');
+      } catch (err) {
+        logger.warn({ err, from: evt.title, to: evt.related_to }, 'Failed to insert event relation');
+      }
+    }
   }
 
   // ── Update ingestion status ─────────────────────────────────────────────
@@ -287,8 +380,10 @@ export async function extractFromEmail(
     event: 'extraction_complete',
     ingestion_id: ingestionId,
     entities: entityNameToId.size,
+    entity_relations: relationsCreated,
     events: eventsCreated,
-    duration_ms: Date.now() - (startTime as number),
+    event_relations: eventRelationsCreated,
+    duration_ms: Date.now() - extractionStart,
     tokens: { input: response.inputTokens, output: response.outputTokens },
   }, 'Email extraction complete');
 }

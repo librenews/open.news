@@ -226,21 +226,29 @@ app.get('/api/entities', async (c) => {
 
 app.get('/api/events', async (c) => {
   const upcoming = c.req.query('upcoming') !== 'false';
+  const eventType = c.req.query('event_type');
   const limit = Math.min(Number(c.req.query('limit') || 50), 200);
 
   let query = `
     SELECT e.*, v.name AS venue_name, v.address AS venue_address
     FROM ln_events e
     LEFT JOIN ln_entities v ON v.id = e.venue_id
+    WHERE 1=1
   `;
+  const params: any[] = [];
 
   if (upcoming) {
-    query += ` WHERE e.start_time >= NOW() OR e.start_time IS NULL`;
+    query += ` AND (e.start_time >= NOW() OR e.start_time IS NULL)`;
+  }
+  if (eventType) {
+    params.push(eventType);
+    query += ` AND e.event_type = $${params.length}`;
   }
 
-  query += ` ORDER BY e.start_time ASC NULLS LAST LIMIT $1`;
+  params.push(limit);
+  query += ` ORDER BY e.start_time ASC NULLS LAST LIMIT $${params.length}`;
 
-  const { rows } = await pool.query(query, [limit]);
+  const { rows } = await pool.query(query, params);
 
   // Attach performers
   for (const event of rows) {
@@ -255,6 +263,130 @@ app.get('/api/events', async (c) => {
   }
 
   return c.json({ events: rows });
+});
+
+// ── Ontology: Entity Relations ──────────────────────────────────────────────
+
+app.get('/api/entities/:id/relations', async (c) => {
+  const id = c.req.param('id');
+
+  const { rows } = await pool.query(
+    `SELECT
+       er.relation_type, er.from_entity_id, er.to_entity_id,
+       ef.name AS from_name, ef.entity_type AS from_type,
+       et.name AS to_name, et.entity_type AS to_type
+     FROM ln_entity_relations er
+     JOIN ln_entities ef ON ef.id = er.from_entity_id
+     JOIN ln_entities et ON et.id = er.to_entity_id
+     WHERE er.from_entity_id = $1 OR er.to_entity_id = $1
+     ORDER BY er.relation_type`,
+    [id]
+  );
+
+  return c.json({ relations: rows });
+});
+
+// Full entity graph for an entity (entity + its relations + their events)
+app.get('/api/entities/:id/graph', async (c) => {
+  const id = c.req.param('id');
+
+  // Entity itself
+  const { rows: entity } = await pool.query('SELECT * FROM ln_entities WHERE id = $1', [id]);
+  if (entity.length === 0) return c.json({ error: 'Not found' }, 404);
+
+  // Relations
+  const { rows: relations } = await pool.query(
+    `SELECT er.*, ef.name AS from_name, et.name AS to_name
+     FROM ln_entity_relations er
+     JOIN ln_entities ef ON ef.id = er.from_entity_id
+     JOIN ln_entities et ON et.id = er.to_entity_id
+     WHERE er.from_entity_id = $1 OR er.to_entity_id = $1`,
+    [id]
+  );
+
+  // Events this entity is involved in
+  const { rows: events } = await pool.query(
+    `SELECT DISTINCT e.id, e.title, e.event_type, e.start_time, e.description,
+            v.name AS venue_name, ee.role
+     FROM ln_event_entities ee
+     JOIN ln_events e ON e.id = ee.event_id
+     LEFT JOIN ln_entities v ON v.id = e.venue_id
+     WHERE ee.entity_id = $1
+     ORDER BY e.start_time DESC NULLS LAST LIMIT 50`,
+    [id]
+  );
+
+  // Events at this entity (if it's a venue)
+  const { rows: hostedEvents } = await pool.query(
+    `SELECT e.id, e.title, e.event_type, e.start_time, e.description
+     FROM ln_events e
+     WHERE e.venue_id = $1
+     ORDER BY e.start_time DESC NULLS LAST LIMIT 50`,
+    [id]
+  );
+
+  return c.json({
+    entity: entity[0],
+    relations,
+    events,
+    hosted_events: hostedEvents,
+  });
+});
+
+// ── Ontology: Event Relations ───────────────────────────────────────────────
+
+app.get('/api/events/:id/related', async (c) => {
+  const id = c.req.param('id');
+
+  const { rows } = await pool.query(
+    `SELECT
+       er.relation_type,
+       CASE WHEN er.from_event_id = $1::bigint THEN 'outgoing' ELSE 'incoming' END AS direction,
+       e.id, e.title, e.event_type, e.start_time, e.description,
+       v.name AS venue_name
+     FROM ln_event_relations er
+     JOIN ln_events e ON e.id = CASE WHEN er.from_event_id = $1::bigint THEN er.to_event_id ELSE er.from_event_id END
+     LEFT JOIN ln_entities v ON v.id = e.venue_id
+     WHERE er.from_event_id = $1 OR er.to_event_id = $1`,
+    [id]
+  );
+
+  return c.json({ related_events: rows });
+});
+
+// ── Ontology: Event Types Summary ───────────────────────────────────────────
+
+app.get('/api/ontology/event-types', async (c) => {
+  const { rows } = await pool.query(
+    `SELECT event_type, COUNT(*)::int AS count
+     FROM ln_events
+     WHERE event_type IS NOT NULL
+     GROUP BY event_type
+     ORDER BY count DESC`
+  );
+  return c.json({ event_types: rows });
+});
+
+// ── Ontology: Relation Types Summary ────────────────────────────────────────
+
+app.get('/api/ontology/stats', async (c) => {
+  const [entities, events, entityRels, eventRels, sources, ingestions] = await Promise.all([
+    pool.query('SELECT entity_type, COUNT(*)::int AS count FROM ln_entities GROUP BY entity_type ORDER BY count DESC'),
+    pool.query('SELECT event_type, COUNT(*)::int AS count FROM ln_events WHERE event_type IS NOT NULL GROUP BY event_type ORDER BY count DESC'),
+    pool.query('SELECT relation_type, COUNT(*)::int AS count FROM ln_entity_relations GROUP BY relation_type ORDER BY count DESC'),
+    pool.query('SELECT relation_type, COUNT(*)::int AS count FROM ln_event_relations GROUP BY relation_type ORDER BY count DESC'),
+    pool.query('SELECT COUNT(*)::int AS count FROM ln_sources WHERE active = true'),
+    pool.query("SELECT status, COUNT(*)::int AS count FROM ln_ingestions GROUP BY status"),
+  ]);
+
+  return c.json({
+    entities: entities.rows,
+    event_types: events.rows,
+    entity_relations: entityRels.rows,
+    event_relations: eventRels.rows,
+    active_sources: sources.rows[0]?.count || 0,
+    ingestions: ingestions.rows,
+  });
 });
 
 // ── Ingestions (audit) ──────────────────────────────────────────────────────
