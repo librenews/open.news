@@ -610,8 +610,19 @@ app.get('/xrpc/app.bsky.feed.getFeedSkeleton', async (c) => {
     return c.json({ error: 'UnknownFeed', message: 'Feed not found' }, 404);
   }
 
+  // Extract requester DID from Authorization header (JWT)
+  const authHeader = c.req.header('Authorization');
+  let requesterDid: string | undefined;
+  if (authHeader?.startsWith('Bearer ')) {
+    try {
+      const token = authHeader.slice(7);
+      const payloadB64 = token.split('.')[1];
+      const payload = JSON.parse(Buffer.from(payloadB64, 'base64url').toString());
+      requesterDid = payload.iss;
+    } catch {}
+  }
+
   // Log the request for analytics
-  const requesterDid = c.req.query('requester_did') ?? undefined;
   const feedName = feed?.name || trackCheck[0]?.name || rkey;
   try {
     await db.query(
