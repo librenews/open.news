@@ -27,7 +27,7 @@ function isAuthed(c: any): boolean {
   return getCookie(c, 'ln_admin') === makeToken();
 }
 
-adminApp.use('/*', async (c, next) => {
+adminApp.use('/admin/*', async (c, next) => {
   if (c.req.path === '/admin/login' || isAuthed(c)) return next();
   return c.redirect('/admin/login');
 });
