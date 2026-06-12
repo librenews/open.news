@@ -95,7 +95,33 @@ Rules:
 - event_type should be one of: performance, opening, closure, class, meetup, sale, festival, vote, construction, hearing, fundraiser, exhibition, competition
 - If events seem related (e.g., a construction project and a future opening), use related_to to link them
 - If the email is not about events/entities (e.g. spam, unsubscribe notice), return {"entities":[],"entity_relations":[],"events":[]}
-- Do NOT invent information that isn't in the email`;
+- Do NOT invent information that isn't in the email
+- IMPORTANT: You MUST produce complete, valid JSON. Do not truncate the response.`;
+
+/**
+ * Strip HTML tags and collapse whitespace to get plain text.
+ * Reduces a 55KB HTML newsletter to ~10KB of readable text.
+ */
+function htmlToText(html: string): string {
+  return html
+    .replace(/<style[\s\S]*?<\/style>/gi, '') // remove style blocks
+    .replace(/<script[\s\S]*?<\/script>/gi, '') // remove script blocks
+    .replace(/<a[^>]*href=["']([^"']*)["'][^>]*>([\s\S]*?)<\/a>/gi, '$2 ($1)') // preserve links
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/p>/gi, '\n\n')
+    .replace(/<\/div>/gi, '\n')
+    .replace(/<[^>]+>/g, '') // strip remaining tags
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/[ \t]+/g, ' ') // collapse horizontal whitespace
+    .replace(/\n{3,}/g, '\n\n') // collapse excess newlines
+    .trim();
+}
+
 
 /**
  * Process an ingested email and extract entities/events/relations using LLM
@@ -108,6 +134,9 @@ export async function extractFromEmail(
 ): Promise<void> {
   const extractionStart = Date.now();
 
+  // Strip HTML and clean up — turns a 55KB HTML email into ~8KB of readable text
+  const cleanBody = htmlToText(body);
+
   // Build prompt with source-specific instructions
   let userPrompt = '';
   if (source?.instructions) {
@@ -116,18 +145,35 @@ export async function extractFromEmail(
   if (subject) {
     userPrompt += `Subject: ${subject}\n\n`;
   }
-  userPrompt += `Email body:\n${body.slice(0, 12000)}`; // Cap to avoid token explosion
+  userPrompt += `Email body:\n${cleanBody.slice(0, 20000)}`; // ~5k tokens of clean text
 
   const messages: LLMMessage[] = [
     { role: 'system', content: EXTRACTION_PROMPT },
     { role: 'user', content: userPrompt },
   ];
 
-  const response = await llm.complete(messages, { maxTokens: 4096 });
+  const response = await llm.complete(messages, { maxTokens: 16384 });
   let resultText = response.text.trim();
 
   // Strip markdown fences if present
   resultText = resultText.replace(/^```json?\n?/i, '').replace(/\n?```$/i, '');
+
+  // If truncated (unterminated JSON), try to close it gracefully
+  if (!resultText.endsWith('}')) {
+    // Find the last complete top-level array entry and close the JSON
+    const lastBrace = resultText.lastIndexOf('},');
+    if (lastBrace > 0) {
+      resultText = resultText.slice(0, lastBrace + 1);
+      // Close whichever arrays/object are open
+      resultText = resultText + ']}}' // rough close — JSON.parse will catch if still invalid
+        .slice(0, resultText.split('{').length - resultText.split('}').length + 1);
+    }
+    // Simpler fallback: try wrapping with close braces
+    const opens = (resultText.match(/\[/g) || []).length;
+    const closes = (resultText.match(/\]/g) || []).length;
+    if (opens > closes) resultText += ']'.repeat(opens - closes);
+    if (!resultText.endsWith('}')) resultText += '}';
+  }
 
   let result: ExtractionResult;
   try {
