@@ -103,18 +103,41 @@ adminApp.get('/admin', async (c) => {
 // ── Sources ─────────────────────────────────────────────────────────────────
 
 adminApp.get('/admin/sources', async (c) => {
-  const { rows } = await pool.query('SELECT * FROM ln_sources ORDER BY created_at DESC');
+  const { rows } = await pool.query(`
+    SELECT
+      s.*,
+      COUNT(i.id)::int              AS email_count,
+      MAX(i.created_at)             AS last_email_at,
+      COUNT(i.id) FILTER (WHERE i.status = 'failed')::int AS failed_count
+    FROM ln_sources s
+    LEFT JOIN ln_ingestions i ON i.source_id = s.id
+    GROUP BY s.id
+    ORDER BY s.created_at DESC
+  `);
 
-  const sourceRows = rows.map(s => `
+  const sourceRows = rows.map(s => {
+    const lastEmail = s.last_email_at
+      ? new Date(s.last_email_at).toLocaleString()
+      : '<span style="color:var(--accent)">never</span>';
+    const countBadge = s.email_count === 0 && s.active
+      ? `<span style="color:var(--accent);font-weight:600;">0 ⚠</span>`
+      : `${s.email_count}`;
+    const failedNote = s.failed_count > 0
+      ? ` <span style="color:var(--accent);font-size:0.75rem;">(${s.failed_count} failed)</span>`
+      : '';
+    return `
     <tr>
       <td><strong>${escHtml(s.name || '—')}</strong></td>
       <td><code style="font-size:0.75rem;">${escHtml(s.identifier)}</code></td>
       <td>${s.source_type}</td>
       <td>${s.active ? '✅' : '❌'}</td>
-      <td style="font-size:0.78rem;color:var(--muted);max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(s.instructions || '—')}</td>
+      <td style="text-align:center;">${countBadge}${failedNote}</td>
+      <td style="font-size:0.78rem;color:var(--muted);">${lastEmail}</td>
+      <td style="font-size:0.78rem;color:var(--muted);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(s.instructions || '—')}</td>
       <td><a href="/admin/sources/${s.id}/edit" style="font-size:0.8rem;">Edit</a></td>
     </tr>
-  `).join('');
+  `;
+  }).join('');
 
   return c.html(layout('Sources', `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem;">
@@ -122,11 +145,12 @@ adminApp.get('/admin/sources', async (c) => {
       <a href="/admin/sources/new" class="btn">+ New Source</a>
     </div>
     <table>
-      <thead><tr><th>Name</th><th>Address</th><th>Type</th><th>Active</th><th>Instructions</th><th></th></tr></thead>
-      <tbody>${sourceRows || '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:2rem;">No sources yet</td></tr>'}</tbody>
+      <thead><tr><th>Name</th><th>Ingest Address</th><th>Type</th><th>Active</th><th>Emails</th><th>Last Received</th><th>Instructions</th><th></th></tr></thead>
+      <tbody>${sourceRows || '<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:2rem;">No sources yet</td></tr>'}</tbody>
     </table>
   `));
 });
+
 
 adminApp.get('/admin/sources/new', (c) => {
   return c.html(layout('New Source', `
