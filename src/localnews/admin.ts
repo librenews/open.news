@@ -6,6 +6,7 @@ import { getCookie, setCookie } from 'hono/cookie';
 import { createHmac } from 'crypto';
 import { pool } from '../db/client.js';
 import { logger } from '../lib/logger.js';
+import { extractFromEmail } from './extract.js';
 
 const ADMIN_PASSWORD = process.env.LOCALNEWS_ADMIN_PASSWORD || 'Kx9$mTv2!pLqN7wR';
 const SESSION_SECRET = process.env.SESSION_SECRET || 'ln-admin-secret';
@@ -298,7 +299,20 @@ adminApp.post('/admin/submissions/:id/approve', async (c) => {
     [srcRows[0].id, id]
   );
 
-  logger.info({ event: 'submission_approved_via_admin', id, source_id: srcRows[0].id }, 'Submission approved via admin');
+  // Insert ingestion record and process the original email immediately
+  const { rows: ingRows } = await pool.query(
+    `INSERT INTO ln_ingestions (source_id, raw_subject, raw_body, sender, status)
+     VALUES ($1, $2, $3, $4, 'pending') RETURNING id`,
+    [srcRows[0].id, sub.original_subject, sub.raw_body, sub.original_sender]
+  );
+  const ingestionId = ingRows[0].id;
+  const source = { id: srcRows[0].id, instructions: srcRows[0].instructions };
+  setImmediate(() => {
+    extractFromEmail(ingestionId, sub.original_subject, sub.raw_body, source)
+      .catch(err => logger.error({ err, ingestionId }, 'Async extraction failed after approve'));
+  });
+
+  logger.info({ event: 'submission_approved_via_admin', id, source_id: srcRows[0].id, ingestionId }, 'Submission approved, ingestion queued');
   return c.redirect('/admin/submissions');
 });
 
