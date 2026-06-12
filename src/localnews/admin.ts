@@ -111,6 +111,7 @@ adminApp.get('/admin/sources', async (c) => {
       <td>${s.source_type}</td>
       <td>${s.active ? '✅' : '❌'}</td>
       <td style="font-size:0.78rem;color:var(--muted);max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(s.instructions || '—')}</td>
+      <td><a href="/admin/sources/${s.id}/edit" style="font-size:0.8rem;">Edit</a></td>
     </tr>
   `).join('');
 
@@ -120,8 +121,8 @@ adminApp.get('/admin/sources', async (c) => {
       <a href="/admin/sources/new" class="btn">+ New Source</a>
     </div>
     <table>
-      <thead><tr><th>Name</th><th>Address</th><th>Type</th><th>Active</th><th>Instructions</th></tr></thead>
-      <tbody>${sourceRows || '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:2rem;">No sources yet</td></tr>'}</tbody>
+      <thead><tr><th>Name</th><th>Address</th><th>Type</th><th>Active</th><th>Instructions</th><th></th></tr></thead>
+      <tbody>${sourceRows || '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:2rem;">No sources yet</td></tr>'}</tbody>
     </table>
   `));
 });
@@ -176,6 +177,53 @@ adminApp.post('/admin/sources/new', async (c) => {
   );
 
   logger.info({ event: 'source_created_via_admin', name, identifier }, 'Source created via admin');
+  return c.redirect('/admin/sources');
+});
+
+adminApp.get('/admin/sources/:id/edit', async (c) => {
+  const { rows } = await pool.query('SELECT * FROM ln_sources WHERE id = $1', [c.req.param('id')]);
+  if (rows.length === 0) return c.redirect('/admin/sources');
+  const s = rows[0];
+
+  return c.html(layout('Edit Source', `
+    <h1>Edit Source</h1>
+    <form method="POST" action="/admin/sources/${s.id}/edit" class="card" style="max-width:560px;">
+      <label>Name</label>
+      <input type="text" name="name" value="${escHtml(s.name || '')}" required>
+
+      <label>Identifier <span style="color:var(--muted);font-size:0.8rem;">(read-only)</span></label>
+      <input type="text" value="${escHtml(s.identifier)}" disabled style="opacity:0.6;">
+
+      <label>AI Instructions</label>
+      <textarea name="instructions" rows="4">${escHtml(s.instructions || '')}</textarea>
+
+      <label style="margin-top:0.75rem;">Status</label>
+      <select name="active">
+        <option value="true" ${s.active ? 'selected' : ''}>Active</option>
+        <option value="false" ${!s.active ? 'selected' : ''}>Inactive</option>
+      </select>
+
+      <div style="margin-top:1.25rem;display:flex;gap:0.75rem;">
+        <button type="submit" class="btn">Save Changes</button>
+        <a href="/admin/sources" class="btn btn-outline">Cancel</a>
+      </div>
+    </form>
+  `));
+});
+
+adminApp.post('/admin/sources/:id/edit', async (c) => {
+  const id = c.req.param('id');
+  const body = await c.req.parseBody();
+  const name = (body.name as string || '').trim();
+  const instructions = (body.instructions as string || '').trim() || null;
+  const active = body.active === 'true';
+
+  await pool.query(
+    `UPDATE ln_sources SET name = $1, instructions = $2, active = $3, updated_at = NOW() WHERE id = $4`,
+    [name, instructions, active, id]
+  );
+
+  logger.info({ event: 'source_updated_via_admin', id, name }, 'Source updated via admin');
   return c.redirect('/admin/sources');
 });
 
