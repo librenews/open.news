@@ -53,6 +53,357 @@ function parseForwardedEmail(subject: string, body: string): { isForward: boolea
   return { isForward: true, originalSender, originalSubject, cleanBody: body };
 }
 
+// ── Static Assets ──────────────────────────────────────────────────────────
+
+import { readFileSync } from 'fs';
+import { dirname, join } from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const logoBuffer = readFileSync(join(__dirname, 'logo.png'));
+
+app.get('/logo.png', (c) => {
+  c.header('Content-Type', 'image/png');
+  c.header('Cache-Control', 'public, max-age=86400');
+  return c.body(logoBuffer);
+});
+
+// ── Homepage ────────────────────────────────────────────────────────────────
+
+app.get('/', async (c) => {
+  // Grab live counts for the holding page
+  let entityCount = 0, eventCount = 0, sourceCount = 0;
+  try {
+    const [e, ev, s] = await Promise.all([
+      pool.query('SELECT COUNT(*)::int AS c FROM ln_entities'),
+      pool.query('SELECT COUNT(*)::int AS c FROM ln_events'),
+      pool.query('SELECT COUNT(*)::int AS c FROM ln_sources WHERE active = true'),
+    ]);
+    entityCount = e.rows[0]?.c || 0;
+    eventCount = ev.rows[0]?.c || 0;
+    sourceCount = s.rows[0]?.c || 0;
+  } catch {}
+
+  // Next 5 upcoming events for a teaser
+  let upcomingEvents: any[] = [];
+  try {
+    const { rows } = await pool.query(`
+      SELECT e.title, e.event_type, e.start_time, v.name AS venue_name
+      FROM ln_events e
+      LEFT JOIN ln_entities v ON v.id = e.venue_id
+      WHERE e.start_time >= NOW()
+      ORDER BY e.start_time ASC
+      LIMIT 5
+    `);
+    upcomingEvents = rows;
+  } catch {}
+
+  const today = new Date();
+  const dateStr = today.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+
+  return c.html(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Stamford Times — Local News, Events & Community</title>
+  <meta name="description" content="Stamford Times — your AI-powered civic intelligence platform for local news, events, and community happenings in Stamford, CT.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;0,900;1,400&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --ink: #1a1a1a;
+      --paper: #faf8f5;
+      --rule: #c8c0b4;
+      --accent: #8b1a1a;
+      --muted: #6b6560;
+      --card-bg: #ffffff;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--paper);
+      color: var(--ink);
+      line-height: 1.6;
+      min-height: 100vh;
+    }
+
+    /* ── Masthead ────────────────────────────────── */
+    .masthead {
+      text-align: center;
+      padding: 2.5rem 1.5rem 1.5rem;
+      border-bottom: 3px double var(--rule);
+    }
+    .masthead img {
+      max-width: min(90vw, 520px);
+      height: auto;
+      margin-bottom: 0.75rem;
+      padding: 1.25rem 2rem;
+      background: var(--card-bg);
+      border: 1px solid var(--rule);
+    }
+    .dateline {
+      font-family: 'Inter', sans-serif;
+      font-size: 0.78rem;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-top: 0.5rem;
+    }
+    .edition-bar {
+      display: flex;
+      justify-content: center;
+      gap: 2rem;
+      padding: 0.5rem 1.5rem;
+      font-size: 0.72rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--muted);
+      border-bottom: 1px solid var(--rule);
+    }
+
+    /* ── Main ────────────────────────────────────── */
+    .container {
+      max-width: 820px;
+      margin: 0 auto;
+      padding: 2.5rem 1.5rem 4rem;
+    }
+
+    /* ── Holding headline ────────────────────────── */
+    .headline {
+      font-family: 'Playfair Display', Georgia, serif;
+      font-size: clamp(1.8rem, 5vw, 2.8rem);
+      font-weight: 900;
+      line-height: 1.15;
+      letter-spacing: -0.02em;
+      text-align: center;
+      margin-bottom: 1rem;
+    }
+    .subhead {
+      font-family: 'Playfair Display', Georgia, serif;
+      font-style: italic;
+      font-size: 1.1rem;
+      text-align: center;
+      color: var(--muted);
+      margin-bottom: 2rem;
+    }
+
+    .rule { border: none; border-top: 1px solid var(--rule); margin: 2rem 0; }
+    .rule-double { border: none; border-top: 3px double var(--rule); margin: 2rem 0; }
+
+    /* ── Stats row ───────────────────────────────── */
+    .stats {
+      display: flex;
+      justify-content: center;
+      gap: 2.5rem;
+      flex-wrap: wrap;
+      margin: 2rem 0;
+    }
+    .stat {
+      text-align: center;
+    }
+    .stat-num {
+      font-family: 'Playfair Display', Georgia, serif;
+      font-size: 2.2rem;
+      font-weight: 700;
+      color: var(--accent);
+      line-height: 1;
+    }
+    .stat-label {
+      font-size: 0.7rem;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-top: 0.25rem;
+    }
+
+    /* ── Upcoming events ─────────────────────────── */
+    .events-header {
+      font-family: 'Playfair Display', Georgia, serif;
+      font-size: 1.1rem;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      text-align: center;
+      margin-bottom: 1.25rem;
+    }
+    .event-list {
+      list-style: none;
+    }
+    .event-item {
+      display: flex;
+      align-items: baseline;
+      gap: 1rem;
+      padding: 0.65rem 0;
+      border-bottom: 1px solid var(--rule);
+      font-size: 0.9rem;
+    }
+    .event-item:last-child { border-bottom: none; }
+    .event-date {
+      flex-shrink: 0;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      color: var(--muted);
+      min-width: 90px;
+    }
+    .event-type {
+      flex-shrink: 0;
+      font-size: 0.62rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      background: var(--ink);
+      color: var(--paper);
+      padding: 0.15rem 0.5rem;
+      border-radius: 2px;
+      font-weight: 500;
+    }
+    .event-title {
+      font-family: 'Playfair Display', Georgia, serif;
+      font-weight: 700;
+    }
+    .event-venue {
+      color: var(--muted);
+      font-size: 0.82rem;
+    }
+    .event-venue::before { content: '— '; }
+    .no-events {
+      text-align: center;
+      color: var(--muted);
+      font-style: italic;
+      padding: 1.5rem 0;
+    }
+
+    /* ── Coming soon notice ──────────────────────── */
+    .notice {
+      text-align: center;
+      padding: 2rem 1.5rem;
+      margin: 2rem 0;
+      border: 1px solid var(--rule);
+      background: var(--card-bg);
+    }
+    .notice h3 {
+      font-family: 'Playfair Display', Georgia, serif;
+      font-size: 1.05rem;
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+    }
+    .notice p {
+      font-size: 0.85rem;
+      color: var(--muted);
+      max-width: 480px;
+      margin: 0 auto;
+    }
+
+    /* ── Footer ──────────────────────────────────── */
+    .footer {
+      text-align: center;
+      padding: 1.5rem;
+      font-size: 0.7rem;
+      color: var(--muted);
+      border-top: 1px solid var(--rule);
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+    .footer a { color: var(--accent); text-decoration: none; }
+    .footer a:hover { text-decoration: underline; }
+
+    /* ── Animation ───────────────────────────────── */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(12px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .animate { animation: fadeUp 0.6s ease-out both; }
+    .delay-1 { animation-delay: 0.1s; }
+    .delay-2 { animation-delay: 0.2s; }
+    .delay-3 { animation-delay: 0.35s; }
+    .delay-4 { animation-delay: 0.5s; }
+
+    @media (max-width: 600px) {
+      .stats { gap: 1.5rem; }
+      .event-item { flex-wrap: wrap; gap: 0.4rem; }
+      .edition-bar { gap: 1rem; flex-wrap: wrap; }
+    }
+  </style>
+</head>
+<body>
+  <header class="masthead animate">
+    <img src="/logo.png" alt="Stamford Times">
+    <div class="dateline">${dateStr}</div>
+  </header>
+  <div class="edition-bar animate delay-1">
+    <span>Digital Edition</span>
+    <span>·</span>
+    <span>Stamford, Connecticut</span>
+    <span>·</span>
+    <span>AI-Powered Civic Intelligence</span>
+  </div>
+
+  <main class="container">
+    <h1 class="headline animate delay-1">Your Community, Connected.</h1>
+    <p class="subhead animate delay-2">
+      AI-curated local events, people, places &amp; stories — coming soon.
+    </p>
+
+    <hr class="rule">
+
+    ${entityCount + eventCount > 0 ? `
+    <div class="stats animate delay-2">
+      <div class="stat">
+        <div class="stat-num">${entityCount.toLocaleString()}</div>
+        <div class="stat-label">People, Places &amp; Things</div>
+      </div>
+      <div class="stat">
+        <div class="stat-num">${eventCount.toLocaleString()}</div>
+        <div class="stat-label">Events Tracked</div>
+      </div>
+      <div class="stat">
+        <div class="stat-num">${sourceCount.toLocaleString()}</div>
+        <div class="stat-label">Active Sources</div>
+      </div>
+    </div>
+    <hr class="rule">
+    ` : ''}
+
+    ${upcomingEvents.length > 0 ? `
+    <div class="animate delay-3">
+      <div class="events-header">Upcoming Events</div>
+      <ul class="event-list">
+        ${upcomingEvents.map(ev => {
+          const d = ev.start_time ? new Date(ev.start_time).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
+          return `<li class="event-item">
+            <span class="event-date">${d}</span>
+            ${ev.event_type ? `<span class="event-type">${ev.event_type}</span>` : ''}
+            <span>
+              <span class="event-title">${ev.title}</span>
+              ${ev.venue_name ? `<span class="event-venue">${ev.venue_name}</span>` : ''}
+            </span>
+          </li>`;
+        }).join('')}
+      </ul>
+    </div>
+    <hr class="rule-double">
+    ` : ''}
+
+    <div class="notice animate delay-3">
+      <h3>The Stamford Times is Building Something New</h3>
+      <p>We're using AI to connect the dots between local events, businesses, people, and community happenings — creating a living map of civic life in Stamford.</p>
+    </div>
+
+    <div class="notice animate delay-4" style="border-style: dashed;">
+      <h3>Know a Great Newsletter?</h3>
+      <p>Forward any Stamford-area newsletter to <strong>${SUBMIT_ADDRESS}</strong> and our editors will review it as a potential source.</p>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <p>Stamford Times &mdash; Est. 1876 &mdash; Powered by <a href="https://open.news">Open News</a></p>
+  </footer>
+</body>
+</html>`);
+});
+
 // ── Health ──────────────────────────────────────────────────────────────────
 
 app.get('/health', (c) => c.json({ status: 'ok', service: 'localnews', domain: LN_DOMAIN }));
