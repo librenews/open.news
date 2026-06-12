@@ -4,12 +4,14 @@ import { logger } from '../lib/logger.js';
 import { pool } from '../db/client.js';
 import { runMigrations } from '../db/migrate.js';
 import { extractFromEmail } from './extract.js';
+import { adminApp } from './admin.js';
 
 process.on('unhandledRejection', (err) => {
   logger.warn({ err }, 'Caught unhandled promise rejection in localnews');
 });
 
 const app = new Hono();
+app.route('/', adminApp);
 
 const LN_DOMAIN = process.env.LOCALNEWS_DOMAIN || 'stamfordtimes.com';
 const SUBMIT_ADDRESS = `submit@${LN_DOMAIN}`;
