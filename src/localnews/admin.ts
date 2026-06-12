@@ -232,16 +232,6 @@ adminApp.post('/admin/submissions/:id/approve', async (c) => {
   const name = (body.name as string || '').trim() || null;
   const instructions = (body.instructions as string || '').trim() || null;
 
-  // Call the existing API logic
-  const resp = await adminApp.request(
-    new Request(`http://localhost/api/submissions/${id}/approve`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, instructions }),
-    })
-  );
-
-  // We can't easily call the API internally, so do it inline
   const { rows } = await pool.query('SELECT * FROM ln_submissions WHERE id = $1', [id]);
   if (rows.length === 0 || rows[0].status !== 'pending') return c.redirect('/admin/submissions');
 
@@ -282,23 +272,34 @@ adminApp.get('/admin/ingestions', async (c) => {
      ORDER BY i.created_at DESC LIMIT 30`
   );
 
-  const trs = rows.map(i => `
-    <tr>
-      <td>${i.id}</td>
-      <td>${escHtml(i.source_name || '—')}</td>
-      <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(i.raw_subject || '—')}</td>
-      <td><span class="badge badge-${i.status}">${i.status}</span></td>
-      <td>${i.entities_extracted || 0} / ${i.events_extracted || 0}</td>
-      <td style="font-size:0.75rem;color:var(--muted);">${new Date(i.created_at).toLocaleString()}</td>
-    </tr>
-  `).join('');
+  const cards = rows.map(i => {
+    // Convert URLs in body to clickable links for verification emails
+    const bodyHtml = escHtml(i.raw_body?.slice(0, 5000) || '').replace(
+      /(https?:\/\/[^\s<&"]+)/g,
+      '<a href="$1" target="_blank" rel="noopener" style="color:var(--accent)">$1</a>'
+    );
+    return `
+    <div class="card" style="margin-bottom:0.75rem;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.4rem;">
+        <div>
+          <span class="badge badge-${i.status}">${i.status}</span>
+          <strong style="margin-left:0.5rem;">${escHtml(i.raw_subject || '(no subject)')}</strong>
+        </div>
+        <span style="font-size:0.75rem;color:var(--muted);">${new Date(i.created_at).toLocaleString()}</span>
+      </div>
+      <div style="font-size:0.8rem;color:var(--muted);margin-bottom:0.4rem;">
+        Source: ${escHtml(i.source_name || '—')} · Sender: ${escHtml(i.sender || '—')} · Extracted: ${i.entities_extracted || 0} entities, ${i.events_extracted || 0} events
+      </div>
+      ${i.error ? `<div style="font-size:0.8rem;color:var(--accent);margin-bottom:0.4rem;">Error: ${escHtml(i.error)}</div>` : ''}
+      <details><summary style="cursor:pointer;font-size:0.8rem;color:var(--muted);">Show email body (click links for verification)</summary>
+        <pre style="max-height:300px;overflow:auto;font-size:0.75rem;background:#f5f3f0;padding:0.75rem;margin-top:0.5rem;border:1px solid var(--rule);white-space:pre-wrap;word-break:break-all;">${bodyHtml}</pre>
+      </details>
+    </div>`;
+  }).join('');
 
   return c.html(layout('Ingestions', `
     <h1>Ingestion Log</h1>
-    <table>
-      <thead><tr><th>#</th><th>Source</th><th>Subject</th><th>Status</th><th>Entities/Events</th><th>Date</th></tr></thead>
-      <tbody>${trs || '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:2rem;">No ingestions</td></tr>'}</tbody>
-    </table>
+    ${cards || '<p style="color:var(--muted);text-align:center;padding:2rem;">No ingestions</p>'}
   `));
 });
 
