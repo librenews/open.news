@@ -1,21 +1,23 @@
 import { db } from '../db/client.js';
 import { logger } from '../lib/logger.js';
-import { embedTexts } from '../track/embedClient.js';
+import { getOsClient, SITE_STANDARD_CHUNKS_INDEX } from '../track/opensearch.js';
 import { llmLight } from '../services/llm.js';
 
-interface TrackForClustering {
-  id: number;
-  keywords: string[];
-  query: string | null;
+interface ArticleForClustering {
+  uri: string;
+  title: string;
+  site: string | null;
 }
 
 interface Cluster {
-  trackIds: number[];
-  keywords: string[];
+  articleUris: string[];
+  titles: string[];
   centroid: number[];
 }
 
-const SIMILARITY_THRESHOLD = 0.75;
+const SIMILARITY_THRESHOLD = 0.72;
+const MAX_ARTICLES_TO_CLUSTER = 200;
+const EMBED_BATCH_SIZE = 50;
 
 /**
  * Compute cosine similarity between two vectors.
@@ -46,20 +48,10 @@ function centroid(vectors: number[][]): number[] {
 }
 
 /**
- * Build the text to embed for a track — combines keywords + semantic query.
+ * Ask LLM to generate a clean, short topic label from article titles.
  */
-function trackToEmbedText(t: TrackForClustering): string {
-  const parts: string[] = [];
-  if (t.keywords.length > 0) parts.push(t.keywords.join(', '));
-  if (t.query) parts.push(t.query);
-  return parts.join(' — ') || 'general';
-}
-
-/**
- * Ask LLM to generate a clean, short topic label from a set of keywords.
- */
-async function generateTopicLabel(keywords: string[]): Promise<string> {
-  const deduped = [...new Set(keywords)].slice(0, 20);
+async function generateTopicLabel(titles: string[]): Promise<string> {
+  const deduped = [...new Set(titles)].slice(0, 15);
   try {
     const response = await llmLight.complete([
       {
@@ -68,69 +60,120 @@ async function generateTopicLabel(keywords: string[]): Promise<string> {
       },
       {
         role: 'user',
-        content: `Generate a topic label for news articles matching these terms: ${deduped.join(', ')}`,
+        content: `Generate a topic label that captures the shared theme of these article titles:\n${deduped.map(t => `- ${t}`).join('\n')}`,
       },
     ], { maxTokens: 20 });
     return response.text.trim().replace(/^["']|["']$/g, '');
   } catch (err) {
-    logger.error({ err, keywords }, 'Failed to generate topic label');
-    // Fallback: use first keyword, title-cased
-    return deduped[0]?.replace(/\b\w/g, c => c.toUpperCase()) || 'General';
+    logger.error({ err }, 'Failed to generate topic label');
+    // Fallback: extract most common words from titles
+    const words = deduped.join(' ').split(/\s+/).filter(w => w.length > 3);
+    return words[0]?.replace(/\b\w/g, c => c.toUpperCase()) || 'General';
   }
 }
 
 /**
- * Main clustering job: fetches active tracks, embeds their keywords/queries,
- * clusters by cosine similarity, generates labels, and persists to topic_clusters.
+ * Fetch the first chunk embedding for an article from OpenSearch.
+ * Returns null if no embedding exists.
+ */
+async function getArticleEmbedding(os: any, uri: string): Promise<number[] | null> {
+  try {
+    const res = await os.search({
+      index: SITE_STANDARD_CHUNKS_INDEX,
+      body: {
+        size: 1,
+        query: { term: { uri } },
+        sort: [{ chunk_index: 'asc' }],
+        _source: ['embedding'],
+      },
+    });
+    return res.body.hits?.hits?.[0]?._source?.embedding ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Main clustering job: fetches recent verified articles, retrieves their
+ * existing embeddings from the site_standard_chunks index, clusters by
+ * cosine similarity, generates AI labels, and persists to topic_clusters.
  */
 export async function refreshTopicClusters(): Promise<void> {
-  logger.info('Starting topic cluster refresh');
+  logger.info('Starting topic cluster refresh (site_standard mode)');
 
-  // 1. Fetch tracks that had matches in the last 48 hours
-  const { rows: tracks } = await db.query<TrackForClustering>(
-    `SELECT DISTINCT t.id, t.keywords, t.query
-     FROM tracks t
-     JOIN track_matches tm ON t.id = tm.track_id
-     WHERE t.is_active = true
-       AND tm.matched_at > NOW() - INTERVAL '48 hours'`
+  // 1. Fetch recent verified articles (last 7 days, most interacted first)
+  const { rows: articles } = await db.query<ArticleForClustering>(
+    `SELECT a.uri, a.title, a.site
+     FROM site_standard_articles a
+     LEFT JOIN LATERAL (
+       SELECT COUNT(*) AS cnt FROM article_interactions
+       WHERE article_uri = a.uri
+     ) ic ON true
+     WHERE a.verified = true
+       AND a.suppressed IS NOT TRUE
+       AND a.title IS NOT NULL
+       AND a.published_at > NOW() - INTERVAL '7 days'
+     ORDER BY COALESCE(ic.cnt, 0) DESC, a.published_at DESC
+     LIMIT $1`,
+    [MAX_ARTICLES_TO_CLUSTER]
   );
 
-  if (tracks.length === 0) {
-    logger.info('No active tracks with recent matches, skipping clustering');
+  if (articles.length === 0) {
+    logger.info('No recent verified articles, skipping clustering');
     return;
   }
 
-  logger.info({ trackCount: tracks.length }, 'Fetched tracks for clustering');
+  logger.info({ articleCount: articles.length }, 'Fetched articles for clustering');
 
-  // 2. Build embedding texts and embed them
-  const embedTextsArr = tracks.map(trackToEmbedText);
-  const { embeddings } = await embedTexts(embedTextsArr);
+  // 2. Retrieve existing embeddings from OpenSearch (in batches)
+  const os = getOsClient();
+  const embeddings: (number[] | null)[] = [];
+
+  for (let i = 0; i < articles.length; i += EMBED_BATCH_SIZE) {
+    const batch = articles.slice(i, i + EMBED_BATCH_SIZE);
+    const batchEmbeddings = await Promise.all(
+      batch.map(a => getArticleEmbedding(os, a.uri))
+    );
+    embeddings.push(...batchEmbeddings);
+  }
+
+  // Filter to only articles that have embeddings
+  const indexed: { article: ArticleForClustering; embedding: number[] }[] = [];
+  for (let i = 0; i < articles.length; i++) {
+    if (embeddings[i]) {
+      indexed.push({ article: articles[i], embedding: embeddings[i]! });
+    }
+  }
+
+  if (indexed.length < 3) {
+    logger.info({ withEmbeddings: indexed.length }, 'Too few articles with embeddings, skipping');
+    return;
+  }
+
+  logger.info({ withEmbeddings: indexed.length, total: articles.length }, 'Articles with embeddings ready');
 
   // 3. Agglomerative clustering by cosine similarity
   const clusters: Cluster[] = [];
   const assigned = new Set<number>();
 
-  for (let i = 0; i < tracks.length; i++) {
+  for (let i = 0; i < indexed.length; i++) {
     if (assigned.has(i)) continue;
 
-    // Start a new cluster with this track
     const cluster: Cluster = {
-      trackIds: [tracks[i].id],
-      keywords: [...tracks[i].keywords, ...(tracks[i].query ? [tracks[i].query!] : [])],
-      centroid: embeddings[i],
+      articleUris: [indexed[i].article.uri],
+      titles: indexed[i].article.title ? [indexed[i].article.title] : [],
+      centroid: indexed[i].embedding,
     };
     assigned.add(i);
 
-    // Find all unassigned tracks similar to this cluster's centroid
-    const clusterVectors = [embeddings[i]];
-    for (let j = i + 1; j < tracks.length; j++) {
+    const clusterVectors = [indexed[i].embedding];
+    for (let j = i + 1; j < indexed.length; j++) {
       if (assigned.has(j)) continue;
-      const sim = cosineSim(cluster.centroid, embeddings[j]);
+      const sim = cosineSim(cluster.centroid, indexed[j].embedding);
       if (sim >= SIMILARITY_THRESHOLD) {
-        cluster.trackIds.push(tracks[j].id);
-        cluster.keywords.push(...tracks[j].keywords);
-        if (tracks[j].query) cluster.keywords.push(tracks[j].query!);
-        clusterVectors.push(embeddings[j]);
+        cluster.articleUris.push(indexed[j].article.uri);
+        if (indexed[j].article.title) cluster.titles.push(indexed[j].article.title);
+        clusterVectors.push(indexed[j].embedding);
         cluster.centroid = centroid(clusterVectors);
         assigned.add(j);
       }
@@ -139,37 +182,39 @@ export async function refreshTopicClusters(): Promise<void> {
     clusters.push(cluster);
   }
 
-  logger.info({ clusterCount: clusters.length }, 'Formed clusters');
+  // Sort clusters: multi-article clusters first, then by size
+  clusters.sort((a, b) => b.articleUris.length - a.articleUris.length);
 
-  // 4. For each cluster, count articles and generate label
+  // Only keep clusters with 2+ articles (singleton clusters aren't interesting topics)
+  const meaningfulClusters = clusters.filter(c => c.articleUris.length >= 2);
+
+  logger.info({
+    totalClusters: clusters.length,
+    meaningful: meaningfulClusters.length,
+    singletons: clusters.length - meaningfulClusters.length,
+  }, 'Formed clusters');
+
+  // 4. Generate labels and persist
   await db.query('DELETE FROM topic_clusters');
 
-  for (const cluster of clusters) {
-    // Count articles matched by this cluster's tracks in last 48h
-    const { rows: [countRow] } = await db.query(
-      `SELECT COUNT(DISTINCT a.id) AS cnt
-       FROM articles a
-       JOIN article_sources asrc ON a.id = asrc.article_id
-       JOIN track_matches tm ON asrc.post_uri = tm.post_uri
-       WHERE tm.track_id = ANY($1)
-         AND a.is_news = true
-         AND tm.matched_at > NOW() - INTERVAL '48 hours'`,
-      [cluster.trackIds]
-    );
-    const articleCount = Number(countRow?.cnt || 0);
-
-    // Generate AI label
-    const uniqueKeywords = [...new Set(cluster.keywords)];
-    const label = await generateTopicLabel(uniqueKeywords);
+  for (const cluster of meaningfulClusters.slice(0, 30)) {
+    const label = await generateTopicLabel(cluster.titles);
+    const articleCount = cluster.articleUris.length;
 
     await db.query(
       `INSERT INTO topic_clusters (label, track_ids, keywords, centroid, article_count)
        VALUES ($1, $2, $3, $4, $5)`,
-      [label, cluster.trackIds, uniqueKeywords.slice(0, 30), cluster.centroid, articleCount]
+      [
+        label,
+        [], // no track_ids in the new model
+        cluster.titles.slice(0, 20),
+        cluster.centroid,
+        articleCount,
+      ]
     );
 
-    logger.info({ label, tracks: cluster.trackIds.length, articles: articleCount }, 'Created topic cluster');
+    logger.info({ label, articles: articleCount }, 'Created topic cluster');
   }
 
-  logger.info('Topic cluster refresh complete');
+  logger.info({ clusters: meaningfulClusters.length }, 'Topic cluster refresh complete');
 }
