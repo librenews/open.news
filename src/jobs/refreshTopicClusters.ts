@@ -15,8 +15,10 @@ interface Cluster {
   centroid: number[];
 }
 
-const SIMILARITY_THRESHOLD = 0.58;
+const SIMILARITY_THRESHOLD = 0.65;
 const MAX_ARTICLES_TO_CLUSTER = 300;
+const MAX_PER_SITE = 5;
+const MAX_CLUSTER_SIZE = 20;
 const EMBED_BATCH_SIZE = 50;
 
 /**
@@ -101,8 +103,8 @@ async function getArticleEmbedding(os: any, uri: string): Promise<number[] | nul
 export async function refreshTopicClusters(): Promise<void> {
   logger.info('Starting topic cluster refresh (site_standard mode)');
 
-  // 1. Fetch recent verified articles (last 7 days, most interacted first)
-  const { rows: articles } = await db.query<ArticleForClustering>(
+  // 1. Fetch recent verified articles, diversified across sites
+  const { rows: rawArticles } = await db.query<ArticleForClustering>(
     `SELECT a.uri, a.title, a.site
      FROM site_standard_articles a
      LEFT JOIN LATERAL (
@@ -115,8 +117,20 @@ export async function refreshTopicClusters(): Promise<void> {
        AND a.published_at > NOW() - INTERVAL '30 days'
      ORDER BY COALESCE(ic.cnt, 0) DESC, a.published_at DESC
      LIMIT $1`,
-    [MAX_ARTICLES_TO_CLUSTER]
+    [MAX_ARTICLES_TO_CLUSTER * 3] // fetch extra to allow site diversity filtering
   );
+
+  // Diversify: at most MAX_PER_SITE articles per site
+  const siteCounts = new Map<string, number>();
+  const articles: ArticleForClustering[] = [];
+  for (const a of rawArticles) {
+    const siteKey = a.site || 'unknown';
+    const count = siteCounts.get(siteKey) || 0;
+    if (count >= MAX_PER_SITE) continue;
+    siteCounts.set(siteKey, count + 1);
+    articles.push(a);
+    if (articles.length >= MAX_ARTICLES_TO_CLUSTER) break;
+  }
 
   if (articles.length === 0) {
     logger.info('No recent verified articles, skipping clustering');
@@ -171,6 +185,7 @@ export async function refreshTopicClusters(): Promise<void> {
       if (assigned.has(j)) continue;
       const sim = cosineSim(cluster.centroid, indexed[j].embedding);
       if (sim >= SIMILARITY_THRESHOLD) {
+        if (cluster.articleUris.length >= MAX_CLUSTER_SIZE) continue;
         cluster.articleUris.push(indexed[j].article.uri);
         if (indexed[j].article.title) cluster.titles.push(indexed[j].article.title);
         clusterVectors.push(indexed[j].embedding);
