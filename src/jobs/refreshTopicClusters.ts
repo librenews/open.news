@@ -15,8 +15,8 @@ interface Cluster {
   centroid: number[];
 }
 
-const SIMILARITY_THRESHOLD = 0.72;
-const MAX_ARTICLES_TO_CLUSTER = 200;
+const SIMILARITY_THRESHOLD = 0.58;
+const MAX_ARTICLES_TO_CLUSTER = 300;
 const EMBED_BATCH_SIZE = 50;
 
 /**
@@ -112,7 +112,7 @@ export async function refreshTopicClusters(): Promise<void> {
      WHERE a.verified = true
        AND a.suppressed IS NOT TRUE
        AND a.title IS NOT NULL
-       AND a.published_at > NOW() - INTERVAL '7 days'
+       AND a.published_at > NOW() - INTERVAL '30 days'
      ORDER BY COALESCE(ic.cnt, 0) DESC, a.published_at DESC
      LIMIT $1`,
     [MAX_ARTICLES_TO_CLUSTER]
@@ -185,19 +185,23 @@ export async function refreshTopicClusters(): Promise<void> {
   // Sort clusters: multi-article clusters first, then by size
   clusters.sort((a, b) => b.articleUris.length - a.articleUris.length);
 
-  // Only keep clusters with 2+ articles (singleton clusters aren't interesting topics)
-  const meaningfulClusters = clusters.filter(c => c.articleUris.length >= 2);
+  // Keep clusters with 2+ articles; if very few, also include singletons
+  const multiArticle = clusters.filter(c => c.articleUris.length >= 2);
+  const minSize = multiArticle.length >= 5 ? 2 : 1;
+  const finalClusters = clusters
+    .filter(c => c.articleUris.length >= minSize)
+    .slice(0, 30);
 
   logger.info({
     totalClusters: clusters.length,
-    meaningful: meaningfulClusters.length,
-    singletons: clusters.length - meaningfulClusters.length,
+    meaningful: finalClusters.length,
+    singletons: clusters.length - multiArticle.length,
   }, 'Formed clusters');
 
   // 4. Generate labels and persist
   await db.query('DELETE FROM topic_clusters');
 
-  for (const cluster of meaningfulClusters.slice(0, 30)) {
+  for (const cluster of finalClusters) {
     const label = await generateTopicLabel(cluster.titles);
     const articleCount = cluster.articleUris.length;
 
@@ -216,5 +220,5 @@ export async function refreshTopicClusters(): Promise<void> {
     logger.info({ label, articles: articleCount }, 'Created topic cluster');
   }
 
-  logger.info({ clusters: meaningfulClusters.length }, 'Topic cluster refresh complete');
+  logger.info({ clusters: finalClusters.length }, 'Topic cluster refresh complete');
 }
