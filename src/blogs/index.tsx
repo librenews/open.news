@@ -364,6 +364,71 @@ app.get('/', async (c) => {
   ) as unknown as string);
 });
 
+// ── Topic cluster page ───────────────────────────────────────────────────────
+app.get('/topic/:id', async (c) => {
+  const session = await enrichSession(await getBlogsSession(c));
+  const clusterId = parseInt(c.req.param('id'));
+  if (isNaN(clusterId)) return c.text('Not found', 404);
+
+  // Fetch the cluster
+  const { rows: clusterR } = await db.query(
+    'SELECT id, label, keywords, article_count FROM topic_clusters WHERE id = $1',
+    [clusterId]
+  );
+  if (clusterR.length === 0) return c.text('Topic not found', 404);
+  const cluster = clusterR[0];
+
+  // Fetch articles matching the cluster's keyword titles
+  const titles: string[] = cluster.keywords || [];
+  const { rows } = await db.query(`
+    SELECT
+      s.uri, s.author_did, s.title, s.site, s.path,
+      s.published_at, s.word_count, s.created_at,
+      COALESCE(s.description, s.raw_record->>'content', s.raw_record->>'textContent') AS text_content,
+      s.raw_record->'tags' AS tags_json,
+      COALESCE(ai_counts.like_count, 0) AS like_count,
+      COALESCE(ai_counts.share_count, 0) AS share_count,
+      COALESCE(ul.user_liked, false) AS user_liked
+    FROM site_standard_articles s
+    LEFT JOIN LATERAL (
+      SELECT
+        COUNT(CASE WHEN interaction_type='like' THEN 1 END)::int AS like_count,
+        COUNT(CASE WHEN interaction_type IN ('share','repost') THEN 1 END)::int AS share_count
+      FROM article_interactions WHERE article_uri = s.uri
+    ) ai_counts ON true
+    LEFT JOIN LATERAL (
+      SELECT COUNT(*) > 0 AS user_liked
+      FROM article_interactions
+      WHERE article_uri = s.uri AND actor_did = $2 AND interaction_type = 'like'
+    ) ul ON true
+    WHERE s.title = ANY($1)
+      AND s.verified = true
+    ORDER BY s.published_at DESC NULLS LAST
+    LIMIT 30
+  `, [titles, session?.did ?? '']);
+
+  const [items, { trendingTags, popularPosts }, followedDids] = await Promise.all([
+    buildFeedItems(rows, session?.did ?? null),
+    fetchSidebarData(),
+    getFollowedDids(session?.did ?? null),
+  ]);
+
+  return c.html((
+    <BlogsLayout title={`${cluster.label} — blogs.social`} session={session}>
+      <FeedPage
+        items={items}
+        page={1}
+        newPostsTs={new Date().toISOString()}
+        session={session}
+        followedDids={followedDids}
+        view="latest"
+        trendingTags={trendingTags}
+        popularPosts={popularPosts}
+      />
+    </BlogsLayout>
+  ) as unknown as string);
+});
+
 // ── Tag page ─────────────────────────────────────────────────────────────────
 app.get('/tag/:tag', async (c) => {
   const session = await enrichSession(await getBlogsSession(c));
