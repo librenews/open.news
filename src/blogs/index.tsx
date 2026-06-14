@@ -19,7 +19,7 @@ import { blogsFollowRouter } from './routes/follow.js';
 import { blogsComposeRouter } from './routes/compose.js';
 import { blogsInteractRouter } from './routes/interact.js';
 import { attachLiveFeed } from './lib/liveFeed.js';
-import { type TrendingTag, type PopularPost } from './views/feed.js';
+import { type TrendingTag, type PopularPost, type TopicCluster } from './views/feed.js';
 
 const app = new Hono();
 
@@ -188,7 +188,11 @@ async function fetchSidebarData(): Promise<{ trendingTags: TrendingTag[]; popula
 app.get('/', async (c) => {
   const session = await enrichSession(await getBlogsSession(c));
   const page = Math.max(1, parseInt(c.req.query('page') || '1'));
-  const view = (c.req.query('view') === 'following' && session) ? 'following' : 'latest';
+  const rawView = c.req.query('view');
+  // Default: trending for everyone; 'latest' and 'following' if explicitly requested
+  let view: 'trending' | 'latest' | 'following' = 'trending';
+  if (rawView === 'latest') view = 'latest';
+  else if (rawView === 'following' && session) view = 'following';
   const perPage = 30;
   const offset = (page - 1) * perPage;
 
@@ -230,7 +234,40 @@ app.get('/', async (c) => {
       `, [didsArray, perPage, session!.did]);
       rows = r;
     }
+  } else if (view === 'trending') {
+    // Hot-ranked verified articles
+    const { rows: r } = await db.query(`
+      SELECT
+        s.uri, s.author_did, s.title, s.site, s.path,
+        s.published_at, s.word_count, s.created_at,
+        COALESCE(s.description, s.raw_record->>'content', s.raw_record->>'textContent') AS text_content,
+        s.raw_record->'tags' AS tags_json,
+        COALESCE(ai_counts.like_count, 0) AS like_count,
+        COALESCE(ai_counts.share_count, 0) AS share_count,
+        COALESCE(ul.user_liked, false) AS user_liked,
+        (COALESCE(ai_counts.like_count, 0) + COALESCE(ai_counts.share_count, 0) * 2 + 1)::float
+          / POWER(EXTRACT(EPOCH FROM (NOW() - s.published_at)) / 3600.0 + 2, 1.3) AS hotness
+      FROM site_standard_articles s
+      LEFT JOIN LATERAL (
+        SELECT
+          COUNT(CASE WHEN interaction_type='like' THEN 1 END)::int AS like_count,
+          COUNT(CASE WHEN interaction_type IN ('share','repost') THEN 1 END)::int AS share_count
+        FROM article_interactions WHERE article_uri = s.uri
+      ) ai_counts ON true
+      LEFT JOIN LATERAL (
+        SELECT COUNT(*) > 0 AS user_liked
+        FROM article_interactions
+        WHERE article_uri = s.uri AND actor_did = $3 AND interaction_type = 'like'
+      ) ul ON true
+      WHERE s.verified = true
+        AND s.suppressed IS NOT TRUE
+        AND s.published_at > NOW() - INTERVAL '7 days'
+      ORDER BY hotness DESC
+      LIMIT $1 OFFSET $2
+    `, [perPage, offset, session?.did ?? '']);
+    rows = r;
   } else {
+    // Latest (all articles, chronological)
     const { rows: r } = await db.query(`
       SELECT
         s.uri, s.author_did, s.title, s.site, s.path,
@@ -258,6 +295,20 @@ app.get('/', async (c) => {
     rows = r;
   }
 
+  // Fetch topic clusters for the pills bar
+  const { rows: clusterRows } = await db.query(`
+    SELECT id, label, article_count
+    FROM topic_clusters
+    WHERE article_count > 0
+    ORDER BY article_count DESC
+    LIMIT 15
+  `);
+  const topicClusters: TopicCluster[] = clusterRows.map((r: any) => ({
+    id: r.id,
+    label: r.label,
+    article_count: Number(r.article_count),
+  }));
+
   const [items, { trendingTags, popularPosts }] = await Promise.all([
     buildFeedItems(rows, session?.did ?? null),
     fetchSidebarData(),
@@ -276,6 +327,7 @@ app.get('/', async (c) => {
         view={view}
         trendingTags={trendingTags}
         popularPosts={popularPosts}
+        topicClusters={topicClusters}
       />
     </BlogsLayout>
   ) as unknown as string);
@@ -559,6 +611,22 @@ app.get('/author/:did', async (c) => {
     try { return new URL(r.site).hostname.replace(/^www\./, ''); } catch { return r.site; }
   });
 
+  // Interaction stats
+  const { rows: statsRows } = await db.query(`
+    SELECT
+      COUNT(CASE WHEN interaction_type = 'like' THEN 1 END)::int AS total_likes,
+      COUNT(CASE WHEN interaction_type IN ('share','repost') THEN 1 END)::int AS total_shares,
+      MIN(s.published_at) AS first_published
+    FROM site_standard_articles s
+    LEFT JOIN article_interactions ai ON ai.article_uri = s.uri
+    WHERE s.author_did = $1
+  `, [did]);
+  const authorStats = {
+    totalLikes: Number(statsRows[0]?.total_likes || 0),
+    totalShares: Number(statsRows[0]?.total_shares || 0),
+    firstPublished: statsRows[0]?.first_published?.toISOString() || null,
+  };
+
   const { rows: postRows } = await db.query(`
     SELECT
       s.uri, s.title, s.site, s.path, s.published_at, s.word_count,
@@ -597,7 +665,7 @@ app.get('/author/:did', async (c) => {
 
   return c.html((
     <BlogsLayout title={`${profile.displayName || profile.handle} — blogs.social`} session={session} navPage="profile">
-      <AuthorPage profile={profile} posts={posts} page={page} session={session} followedDids={followedDids} />
+      <AuthorPage profile={profile} posts={posts} page={page} session={session} followedDids={followedDids} authorStats={authorStats} />
     </BlogsLayout>
   ) as unknown as string);
 });

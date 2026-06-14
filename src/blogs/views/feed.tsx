@@ -37,6 +37,12 @@ export interface PopularPost {
   share_count: number;
 }
 
+export interface TopicCluster {
+  id: number;
+  label: string;
+  article_count: number;
+}
+
 function timeAgo(dateStr: string): string {
   const now = Date.now();
   const then = new Date(dateStr).getTime();
@@ -141,15 +147,16 @@ function renderPostCard(
   `;
 }
 
-export function FeedPage({ items, page, newPostsTs, session, followedDids, view = 'latest', trendingTags = [], popularPosts = [] }: {
+export function FeedPage({ items, page, newPostsTs, session, followedDids, view = 'trending', trendingTags = [], popularPosts = [], topicClusters = [] }: {
   items: FeedItem[];
   page: number;
   newPostsTs: string;
   session: { did: string; handle: string } | null;
   followedDids: Set<string>;
-  view?: 'latest' | 'following';
+  view?: 'trending' | 'latest' | 'following';
   trendingTags?: TrendingTag[];
   popularPosts?: PopularPost[];
+  topicClusters?: TopicCluster[];
 }) {
   return html`
     <div class="bl-feed-layout">
@@ -159,11 +166,24 @@ export function FeedPage({ items, page, newPostsTs, session, followedDids, view 
 
         <!-- Tabs -->
         <div class="bl-tabs">
-          <a href="/" class="bl-tab ${view === 'latest' ? 'bl-tab-active' : ''}">Latest</a>
+          <a href="/?view=trending" class="bl-tab ${view === 'trending' ? 'bl-tab-active' : ''}">🔥 Trending</a>
+          <a href="/?view=latest" class="bl-tab ${view === 'latest' ? 'bl-tab-active' : ''}">Latest</a>
           ${session ? html`
             <a href="/?view=following" class="bl-tab ${view === 'following' ? 'bl-tab-active' : ''}">Following</a>
           ` : ''}
         </div>
+
+        <!-- Topic clusters -->
+        ${topicClusters.length > 0 ? html`
+          <div class="bl-topic-bar">
+            ${topicClusters.map(tc => html`
+              <a href="/topic/${tc.id}" class="bl-topic-pill">
+                ${tc.label}
+                <span class="bl-topic-count">${tc.article_count}</span>
+              </a>
+            `)}
+          </div>
+        ` : ''}
 
         <div class="bl-new-posts-header">
           <button class="bl-new-posts" id="newPostsBanner" onclick="loadNewPosts()">
@@ -186,9 +206,9 @@ export function FeedPage({ items, page, newPostsTs, session, followedDids, view 
 
         ${items.length > 0 ? html`
           <div class="bl-pagination">
-            ${page > 1 ? html`<a href="/?page=${page - 1}${view === 'following' ? '&view=following' : ''}">← Newer</a>` : ''}
+            ${page > 1 ? html`<a href="/?page=${page - 1}&view=${view}">← Newer</a>` : ''}
             <span>Page ${page}</span>
-            ${items.length >= 30 ? html`<a href="/?page=${page + 1}${view === 'following' ? '&view=following' : ''}">Older →</a>` : ''}
+            ${items.length >= 30 ? html`<a href="/?page=${page + 1}&view=${view}">Older →</a>` : ''}
           </div>
         ` : ''}
       </div>

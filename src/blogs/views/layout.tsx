@@ -827,6 +827,75 @@ export function BlogsLayout({ title, children, session, navPage = '', headExtra 
             border-bottom-color: var(--accent);
           }
 
+          /* ── Topic cluster pills ────────────────────────────────── */
+          .bl-topic-bar {
+            display: flex;
+            gap: 0.4rem;
+            padding: 0.5rem 0 0.75rem;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: none;
+            mask-image: linear-gradient(90deg, #000 0, #000 calc(100% - 1.5rem), transparent);
+          }
+          .bl-topic-bar::-webkit-scrollbar { display: none; }
+          .bl-topic-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            padding: 0.3rem 0.75rem;
+            border-radius: 99px;
+            border: 1px solid var(--border);
+            background: var(--surface);
+            color: var(--text-secondary);
+            font-size: 0.75rem;
+            font-weight: 500;
+            white-space: nowrap;
+            text-decoration: none;
+            transition: all 0.2s;
+            flex-shrink: 0;
+          }
+          .bl-topic-pill:hover {
+            border-color: rgba(99,102,241,0.35);
+            color: var(--accent);
+            background: rgba(99,102,241,0.08);
+            transform: translateY(-1px);
+          }
+          .bl-topic-count {
+            font-size: 0.62rem;
+            font-weight: 700;
+            background: rgba(255,255,255,0.06);
+            padding: 0.1rem 0.35rem;
+            border-radius: 99px;
+          }
+
+          /* ── Author stats grid ──────────────────────────────────── */
+          .bl-author-stats {
+            display: flex;
+            gap: 0.75rem;
+            margin-top: 0.5rem;
+            flex-wrap: wrap;
+          }
+          .bl-author-stat {
+            display: flex;
+            align-items: baseline;
+            gap: 0.3rem;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 0.4rem 0.7rem;
+            font-size: 0.78rem;
+          }
+          .bl-author-stat strong {
+            color: var(--text);
+            font-weight: 700;
+            font-variant-numeric: tabular-nums;
+          }
+          .bl-author-stat span {
+            color: var(--text-muted);
+            font-size: 0.7rem;
+            font-weight: 500;
+          }
+
           /* ── Sidebar sections ───────────────────────────────────── */
           .bl-sidebar-section {
             background: var(--surface);

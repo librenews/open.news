@@ -17,13 +17,11 @@ import { logger } from '../lib/logger.js';
 import { getUserById } from '../db/queries/users.js';
 import { getArticlesForUser } from '../db/queries/articles.js';
 import { getOrCreateDefaultConversation, getMessages } from '../db/queries/conversations.js';
-import { getVerifiedArticles, getLatestVerifiedArticles, getFrontPageStats, getActiveTopicClusters, getTopAuthors, getPublicationSites, getAuthorProfile, getAuthorArticles } from '../db/queries/articleRelations.js';
 import { sseRegistry } from './sseRegistry.js';
 import { LoginPage } from './views/login.js';
 import { FeedPage } from './views/feed.js';
 import { ChatPage } from './views/chat.js';
-import { NewsHomePage } from './views/newsHome.js';
-import { AuthorProfilePage } from './views/authorProfile.js';
+import { HoldingPage } from './views/holdingPage.js';
 import { Layout } from './views/layout.js';
 import { PrivacyPage } from './views/privacy.js';
 import { TosPage } from './views/tos.js';
@@ -65,52 +63,9 @@ app.get('/api/stream', sessionRequired, (c) => {
 
 // ─── Page Routes ────────────────────────────────────────────────────────────
 
-// GET / → verified articles front page
-app.get('/', async (c) => {
-  const view = (c.req.query('view') || 'trending') as 'trending' | 'latest';
-  const userId = c.get('userId' as never) as bigint | undefined;
-
-  const [stats, topics, authors, sites] = await Promise.all([
-    getFrontPageStats(),
-    getActiveTopicClusters(),
-    getTopAuthors(8),
-    getPublicationSites(12),
-  ]);
-
-  const articles = view === 'latest'
-    ? await getLatestVerifiedArticles(40)
-    : await getVerifiedArticles(40);
-
-  return c.html((<NewsHomePage
-    articles={articles}
-    stats={stats}
-    view={view}
-    topics={topics}
-    authors={authors}
-    sites={sites}
-    isLoggedIn={!!userId}
-  />) as unknown as string);
-});
-
-// GET /author/:did → author profile page
-app.get('/author/:did', async (c) => {
-  const did = decodeURIComponent(c.req.param('did'));
-  const userId = c.get('userId' as never) as bigint | undefined;
-
-  const [profile, articles] = await Promise.all([
-    getAuthorProfile(did),
-    getAuthorArticles(did, 30),
-  ]);
-
-  if (!profile) {
-    return c.text('Author not found', 404);
-  }
-
-  return c.html((<AuthorProfilePage
-    profile={profile}
-    articles={articles}
-    isLoggedIn={!!userId}
-  />) as unknown as string);
+// GET / → holding page
+app.get('/', (c) => {
+  return c.html((<HoldingPage />) as unknown as string);
 });
 
 // GET /login

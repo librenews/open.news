@@ -37,15 +37,19 @@ function timeAgo(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-export function AuthorPage({ profile, posts, page, session, followedDids }: {
+export function AuthorPage({ profile, posts, page, session, followedDids, authorStats }: {
   profile: AuthorProfile;
   posts: AuthorPost[];
   page: number;
   session: { did: string; handle: string } | null;
   followedDids: Set<string>;
+  authorStats?: { totalLikes: number; totalShares: number; firstPublished: string | null };
 }) {
   const showFollow = session && session.did !== profile.did;
   const isFollowing = followedDids.has(profile.did);
+  const memberSince = authorStats?.firstPublished
+    ? new Date(authorStats.firstPublished).toLocaleDateString('en-US', { year: 'numeric', month: 'short' })
+    : null;
 
   return html`
     <div class="bl-feed" style="padding-top: 1.5rem;">
@@ -60,12 +64,21 @@ export function AuthorPage({ profile, posts, page, session, followedDids }: {
           <div style="font-size: 1.2rem; font-weight: 700; letter-spacing: -0.02em;">${profile.displayName || profile.handle}</div>
           <div style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 0.4rem;">@${profile.handle}</div>
           ${profile.description ? html`<div style="font-size: 0.85rem; color: var(--text-secondary); line-height: 1.5; margin-bottom: 0.5rem;">${profile.description}</div>` : ''}
-          <div style="display: flex; gap: 1.25rem; font-size: 0.78rem; color: var(--text-muted);">
-            <span><strong style="color: var(--text);">${profile.postCount}</strong> documents</span>
-            ${profile.sites.length > 0 ? html`
-              <span>${profile.sites.slice(0, 3).map(s => html`<span class="bl-source" style="margin-right: 0.25rem;">${s}</span>`)}</span>
-            ` : ''}
-          </div>
+          ${authorStats ? html`
+            <div class="bl-author-stats">
+              <div class="bl-author-stat"><strong>${profile.postCount.toLocaleString()}</strong> <span>documents</span></div>
+              <div class="bl-author-stat"><strong>${authorStats.totalLikes.toLocaleString()}</strong> <span>likes</span></div>
+              <div class="bl-author-stat"><strong>${authorStats.totalShares.toLocaleString()}</strong> <span>shares</span></div>
+              ${memberSince ? html`<div class="bl-author-stat"><strong>${memberSince}</strong> <span>since</span></div>` : ''}
+            </div>
+          ` : html`
+            <div style="display: flex; gap: 1.25rem; font-size: 0.78rem; color: var(--text-muted);">
+              <span><strong style="color: var(--text);">${profile.postCount}</strong> documents</span>
+              ${profile.sites.length > 0 ? html`
+                <span>${profile.sites.slice(0, 3).map(s => html`<span class="bl-source" style="margin-right: 0.25rem;">${s}</span>`)}</span>
+              ` : ''}
+            </div>
+          `}
         </div>
         <div style="display:flex; gap: 0.5rem; flex-shrink: 0; align-items: center;">
           ${showFollow ? (
