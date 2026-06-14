@@ -1071,6 +1071,17 @@ export function BlogsLayout({ title, children, session, navPage = '', headExtra 
             font-size: 0.7rem;
             font-weight: 500;
           }
+          .bl-author-rank-badge {
+            background: rgba(99,102,241,0.12);
+            border: 1px solid rgba(99,102,241,0.25);
+            text-decoration: none;
+            transition: background 0.15s, border-color 0.15s;
+          }
+          .bl-author-rank-badge:hover {
+            background: rgba(99,102,241,0.2);
+            border-color: rgba(99,102,241,0.4);
+          }
+          .bl-author-rank-badge strong { color: var(--accent); }
 
           /* ── Sidebar sections ───────────────────────────────────── */
           .bl-sidebar-section {

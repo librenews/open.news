@@ -44,6 +44,7 @@ export function AuthorPage({ profile, posts, page, session, followedDids, author
   session: { did: string; handle: string } | null;
   followedDids: Set<string>;
   authorStats?: { totalLikes: number; totalShares: number; firstPublished: string | null };
+  authorRank?: { rank: number; ais: number } | null;
 }) {
   const showFollow = session && session.did !== profile.did;
   const isFollowing = followedDids.has(profile.did);
@@ -69,6 +70,7 @@ export function AuthorPage({ profile, posts, page, session, followedDids, author
               <div class="bl-author-stat"><strong>${profile.postCount.toLocaleString()}</strong> <span>documents</span></div>
               <div class="bl-author-stat"><strong>${authorStats.totalLikes.toLocaleString()}</strong> <span>likes</span></div>
               <div class="bl-author-stat"><strong>${authorStats.totalShares.toLocaleString()}</strong> <span>shares</span></div>
+              ${authorRank ? html`<a href="/leaderboard" class="bl-author-stat bl-author-rank-badge"><strong>#${authorRank.rank}</strong> <span>AIS ${authorRank.ais >= 10 ? authorRank.ais.toFixed(1) : authorRank.ais.toFixed(2)}</span></a>` : ''}
               ${memberSince ? html`<div class="bl-author-stat"><strong>${memberSince}</strong> <span>since</span></div>` : ''}
             </div>
           ` : html`

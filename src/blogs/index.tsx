@@ -771,6 +771,15 @@ app.get('/author/:did', async (c) => {
     firstPublished: statsRows[0]?.first_published?.toISOString() || null,
   };
 
+  // Author ranking (single PK lookup, essentially free)
+  const { rows: rankRows } = await db.query(
+    'SELECT rank, ais FROM author_rankings WHERE author_did = $1',
+    [did]
+  );
+  const authorRank = rankRows.length > 0
+    ? { rank: Number(rankRows[0].rank), ais: Number(rankRows[0].ais) }
+    : null;
+
   const { rows: postRows } = await db.query(`
     SELECT
       s.uri, s.title, s.site, s.path, s.published_at, s.word_count,
@@ -809,7 +818,7 @@ app.get('/author/:did', async (c) => {
 
   return c.html((
     <BlogsLayout title={`${profile.displayName || profile.handle} — blogs.social`} session={session} navPage="profile">
-      <AuthorPage profile={profile} posts={posts} page={page} session={session} followedDids={followedDids} authorStats={authorStats} />
+      <AuthorPage profile={profile} posts={posts} page={page} session={session} followedDids={followedDids} authorStats={authorStats} authorRank={authorRank} />
     </BlogsLayout>
   ) as unknown as string);
 });
