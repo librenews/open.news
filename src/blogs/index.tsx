@@ -242,36 +242,55 @@ app.get('/', async (c) => {
       rows = r;
     }
   } else if (view === 'trending') {
-    // Hot-ranked verified articles — pre-aggregate interactions to avoid per-row LATERAL scans
+    // Hot-ranked verified articles — start from interactions (small set), backfill with recent
     const { rows: r } = await db.query(`
-      WITH recent AS (
-        SELECT uri, author_did, title, site, path, published_at, word_count, created_at,
+      WITH interacted AS (
+        SELECT s.uri, s.author_did, s.title, s.site, s.path,
+               s.published_at, s.word_count, s.created_at,
+               COALESCE(s.description, s.raw_record->>'content', s.raw_record->>'textContent') AS text_content,
+               s.raw_record->'tags' AS tags_json,
+               COALESCE(c.like_count, 0) AS like_count,
+               COALESCE(c.share_count, 0) AS share_count,
+               (COALESCE(c.like_count, 0) + COALESCE(c.share_count, 0) * 2 + 1)::float
+                 / POWER(GREATEST(EXTRACT(EPOCH FROM (NOW() - s.published_at)) / 3600.0, 0) + 2, 1.3) AS hotness
+        FROM (
+          SELECT article_uri,
+            COUNT(CASE WHEN interaction_type = 'like' THEN 1 END)::int AS like_count,
+            COUNT(CASE WHEN interaction_type IN ('share','repost') THEN 1 END)::int AS share_count
+          FROM article_interactions
+          GROUP BY article_uri
+        ) c
+        JOIN site_standard_articles s ON s.uri = c.article_uri
+        WHERE s.verified = true
+          AND s.suppressed IS NOT TRUE
+          AND s.published_at > NOW() - INTERVAL '14 days'
+      ),
+      backfill AS (
+        SELECT uri, author_did, title, site, path,
+               published_at, word_count, created_at,
                COALESCE(description, raw_record->>'content', raw_record->>'textContent') AS text_content,
-               raw_record->'tags' AS tags_json
+               raw_record->'tags' AS tags_json,
+               0 AS like_count, 0 AS share_count,
+               1.0 / POWER(GREATEST(EXTRACT(EPOCH FROM (NOW() - published_at)) / 3600.0, 0) + 2, 1.3) AS hotness
         FROM site_standard_articles
         WHERE verified = true
           AND suppressed IS NOT TRUE
-          AND published_at > NOW() - INTERVAL '7 days'
+          AND published_at > NOW() - INTERVAL '3 days'
+          AND uri NOT IN (SELECT uri FROM interacted)
+        ORDER BY published_at DESC
+        LIMIT 60
       ),
-      counts AS (
-        SELECT article_uri,
-          COUNT(CASE WHEN interaction_type = 'like' THEN 1 END)::int AS like_count,
-          COUNT(CASE WHEN interaction_type IN ('share','repost') THEN 1 END)::int AS share_count
-        FROM article_interactions
-        WHERE article_uri IN (SELECT uri FROM recent)
-        GROUP BY article_uri
+      combined AS (
+        SELECT * FROM interacted
+        UNION ALL
+        SELECT * FROM backfill
       )
-      SELECT r.*,
-        COALESCE(c.like_count, 0) AS like_count,
-        COALESCE(c.share_count, 0) AS share_count,
-        COALESCE(ul.user_liked, false) AS user_liked,
-        (COALESCE(c.like_count, 0) + COALESCE(c.share_count, 0) * 2 + 1)::float
-          / POWER(GREATEST(EXTRACT(EPOCH FROM (NOW() - r.published_at)) / 3600.0, 0) + 2, 1.3) AS hotness
-      FROM recent r
-      LEFT JOIN counts c ON c.article_uri = r.uri
+      SELECT combined.*,
+        COALESCE(ul.user_liked, false) AS user_liked
+      FROM combined
       LEFT JOIN LATERAL (
         SELECT true AS user_liked FROM article_interactions
-        WHERE article_uri = r.uri AND actor_did = $3 AND interaction_type = 'like'
+        WHERE article_uri = combined.uri AND actor_did = $3 AND interaction_type = 'like'
         LIMIT 1
       ) ul ON true
       ORDER BY hotness DESC
