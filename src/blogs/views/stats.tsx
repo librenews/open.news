@@ -73,7 +73,7 @@ export function StatsPage({ stats }: { stats: BlogStats }) {
           <div class="bl-kpi-label">Weekly Active Authors</div>
           <div class="bl-kpi-sub">rolling 7 days</div>
           <div class="bl-kpi-split bl-kpi-split-wrap">
-            <span class="bl-kpi-native">🌐 ${fmt(stats.waa_native)} native</span>
+            <span class="bl-kpi-native">🌐 ${fmt(stats.waa_native)} unverified</span>
             <span class="bl-kpi-bridgy">🌉 ${fmt(stats.waa_bridgyfed)} bridgyfed</span>
             <span class="bl-kpi-verified">✅ ${fmt(stats.waa_verified)} verified</span>
           </div>
@@ -83,7 +83,7 @@ export function StatsPage({ stats }: { stats: BlogStats }) {
           <div class="bl-kpi-label">Daily Active Authors</div>
           <div class="bl-kpi-sub">yesterday</div>
           <div class="bl-kpi-split bl-kpi-split-wrap">
-            <span class="bl-kpi-native">🌐 ${fmt(stats.daa_native)} native</span>
+            <span class="bl-kpi-native">🌐 ${fmt(stats.daa_native)} unverified</span>
             <span class="bl-kpi-bridgy">🌉 ${fmt(stats.daa_bridgyfed)} bridgyfed</span>
             <span class="bl-kpi-verified">✅ ${fmt(stats.daa_verified)} verified</span>
           </div>
@@ -93,7 +93,7 @@ export function StatsPage({ stats }: { stats: BlogStats }) {
           <div class="bl-kpi-label">Posts Yesterday</div>
           <div class="bl-kpi-sub">${(stats.postsYesterday / Math.max(stats.daa, 1)).toFixed(1)} per author</div>
           <div class="bl-kpi-split bl-kpi-split-wrap">
-            <span class="bl-kpi-native">🌐 ${fmt(stats.posts_native)} native</span>
+            <span class="bl-kpi-native">🌐 ${fmt(stats.posts_native)} unverified</span>
             <span class="bl-kpi-bridgy">🌉 ${fmt(stats.posts_bridgyfed)} bridgyfed</span>
             <span class="bl-kpi-verified">✅ ${fmt(stats.posts_verified)} verified</span>
           </div>
@@ -103,7 +103,7 @@ export function StatsPage({ stats }: { stats: BlogStats }) {
           <div class="bl-kpi-label">Total Authors</div>
           <div class="bl-kpi-sub">all time</div>
           <div class="bl-kpi-split bl-kpi-split-wrap">
-            <span class="bl-kpi-native">🌐 ${fmt(stats.totalAuthors_native)} native</span>
+            <span class="bl-kpi-native">🌐 ${fmt(stats.totalAuthors_native)} unverified</span>
             <span class="bl-kpi-bridgy">🌉 ${fmt(stats.totalAuthors_bridgyfed)} bridgyfed</span>
             <span class="bl-kpi-verified">✅ ${fmt(stats.totalAuthors_verified)} verified</span>
           </div>
@@ -113,7 +113,7 @@ export function StatsPage({ stats }: { stats: BlogStats }) {
           <div class="bl-kpi-label">Total Posts</div>
           <div class="bl-kpi-sub">all time</div>
           <div class="bl-kpi-split bl-kpi-split-wrap">
-            <span class="bl-kpi-native">🌐 ${fmt(stats.totalPosts_native)} native</span>
+            <span class="bl-kpi-native">🌐 ${fmt(stats.totalPosts_native)} unverified</span>
             <span class="bl-kpi-bridgy">🌉 ${fmt(stats.totalPosts_bridgyfed)} bridgyfed</span>
             <span class="bl-kpi-verified">✅ ${fmt(stats.totalPosts_verified)} verified</span>
           </div>
@@ -123,7 +123,7 @@ export function StatsPage({ stats }: { stats: BlogStats }) {
           <div class="bl-kpi-label">Author Growth</div>
           <div class="bl-kpi-sub">weekly active authors · week-over-week</div>
           <div class="bl-kpi-split bl-kpi-split-wrap">
-            <span class="bl-kpi-native">🌐 ${wowNative} native</span>
+            <span class="bl-kpi-native">🌐 ${wowNative} unverified</span>
             <span class="bl-kpi-bridgy">🌉 ${wowBridgy} bridgyfed</span>
             <span class="bl-kpi-verified">✅ ${wowVerified} verified</span>
           </div>
@@ -152,7 +152,7 @@ export function StatsPage({ stats }: { stats: BlogStats }) {
             </div>
             <div class="bl-toggle" data-target="waa">
               <button class="bl-toggle-btn active" data-mode="all">All</button>
-              <button class="bl-toggle-btn" data-mode="native">Native</button>
+              <button class="bl-toggle-btn" data-mode="native">Unverified</button>
               <button class="bl-toggle-btn" data-mode="bridgyfed">BridgyFed</button>
               <button class="bl-toggle-btn" data-mode="verified">Verified</button>
             </div>
@@ -169,7 +169,7 @@ export function StatsPage({ stats }: { stats: BlogStats }) {
             </div>
             <div class="bl-toggle" data-target="daily">
               <button class="bl-toggle-btn active" data-mode="all">All</button>
-              <button class="bl-toggle-btn" data-mode="native">Native</button>
+              <button class="bl-toggle-btn" data-mode="native">Unverified</button>
               <button class="bl-toggle-btn" data-mode="bridgyfed">BridgyFed</button>
               <button class="bl-toggle-btn" data-mode="verified">Verified</button>
             </div>
@@ -186,7 +186,7 @@ export function StatsPage({ stats }: { stats: BlogStats }) {
             </div>
             <div class="bl-toggle" data-target="retention">
               <button class="bl-toggle-btn active" data-mode="all">All</button>
-              <button class="bl-toggle-btn" data-mode="native">Native</button>
+              <button class="bl-toggle-btn" data-mode="native">Unverified</button>
               <button class="bl-toggle-btn" data-mode="bridgyfed">BridgyFed</button>
               <button class="bl-toggle-btn" data-mode="verified">Verified</button>
             </div>
@@ -203,7 +203,7 @@ export function StatsPage({ stats }: { stats: BlogStats }) {
             </div>
             <div class="bl-toggle" data-target="newauth">
               <button class="bl-toggle-btn active" data-mode="all">All</button>
-              <button class="bl-toggle-btn" data-mode="native">Native</button>
+              <button class="bl-toggle-btn" data-mode="native">Unverified</button>
               <button class="bl-toggle-btn" data-mode="bridgyfed">BridgyFed</button>
               <button class="bl-toggle-btn" data-mode="verified">Verified</button>
             </div>
@@ -220,7 +220,7 @@ export function StatsPage({ stats }: { stats: BlogStats }) {
             </div>
             <div class="bl-toggle" data-target="heatmap">
               <button class="bl-toggle-btn active" data-mode="all">All</button>
-              <button class="bl-toggle-btn" data-mode="native">Native</button>
+              <button class="bl-toggle-btn" data-mode="native">Unverified</button>
               <button class="bl-toggle-btn" data-mode="bridgyfed">BridgyFed</button>
               <button class="bl-toggle-btn" data-mode="verified">Verified</button>
             </div>
@@ -237,7 +237,7 @@ export function StatsPage({ stats }: { stats: BlogStats }) {
             </div>
             <div class="bl-toggle" data-target="sites">
               <button class="bl-toggle-btn active" data-mode="all">All</button>
-              <button class="bl-toggle-btn" data-mode="native">Native</button>
+              <button class="bl-toggle-btn" data-mode="native">Unverified</button>
               <button class="bl-toggle-btn" data-mode="bridgyfed">BridgyFed</button>
               <button class="bl-toggle-btn" data-mode="verified">Verified</button>
             </div>
@@ -254,7 +254,7 @@ export function StatsPage({ stats }: { stats: BlogStats }) {
             </div>
             <div class="bl-toggle" data-target="lang">
               <button class="bl-toggle-btn active" data-mode="all">All</button>
-              <button class="bl-toggle-btn" data-mode="native">Native</button>
+              <button class="bl-toggle-btn" data-mode="native">Unverified</button>
               <button class="bl-toggle-btn" data-mode="bridgyfed">BridgyFed</button>
               <button class="bl-toggle-btn" data-mode="verified">Verified</button>
             </div>
@@ -328,7 +328,7 @@ export function StatsPage({ stats }: { stats: BlogStats }) {
               fill: true, tension: 0.4, pointRadius: 2, pointHoverRadius: 5, borderWidth: 2,
             },
             {
-              label: 'Native',
+              label: 'Unverified',
               data: WAA_DATA.map(d => d.waa_native),
               borderColor: AMBER, backgroundColor: 'transparent',
               tension: 0.4, pointRadius: 1, pointHoverRadius: 4, borderWidth: 1.5, borderDash: [4, 2],
@@ -366,9 +366,9 @@ export function StatsPage({ stats }: { stats: BlogStats }) {
         data: {
           labels: DAILY_DATA.map(d => d.day.slice(5)),
           datasets: [
-            { label: 'Posts (Native)', data: DAILY_DATA.map(d => d.posts_native), backgroundColor: 'rgba(99,102,241,0.55)', stack: 'posts', yAxisID: 'y', order: 3 },
+            { label: 'Posts (Unverified)', data: DAILY_DATA.map(d => d.posts_native), backgroundColor: 'rgba(99,102,241,0.55)', stack: 'posts', yAxisID: 'y', order: 3 },
             { label: 'Posts (BridgyFed)', data: DAILY_DATA.map(d => d.posts_bridgyfed), backgroundColor: 'rgba(16,185,129,0.45)', stack: 'posts', yAxisID: 'y', order: 3 },
-            { label: 'Authors (Native)', data: DAILY_DATA.map(d => d.authors_native), type: 'line', borderColor: AMBER, backgroundColor: 'transparent', tension: 0.3, pointRadius: 1, borderWidth: 1.5, yAxisID: 'y1', order: 1 },
+            { label: 'Authors (Unverified)', data: DAILY_DATA.map(d => d.authors_native), type: 'line', borderColor: AMBER, backgroundColor: 'transparent', tension: 0.3, pointRadius: 1, borderWidth: 1.5, yAxisID: 'y1', order: 1 },
             { label: 'Authors (BridgyFed)', data: DAILY_DATA.map(d => d.authors_bridgyfed), type: 'line', borderColor: GREEN, backgroundColor: 'transparent', tension: 0.3, pointRadius: 1, borderWidth: 1.5, borderDash: [4, 2], yAxisID: 'y1', order: 1 }
           ]
         },
@@ -396,12 +396,12 @@ export function StatsPage({ stats }: { stats: BlogStats }) {
         } else if (mode === 'native') {
           dailyChart.data.datasets[0].data = DAILY_DATA.map(d => d.posts_native);
           dailyChart.data.datasets[0].backgroundColor = 'rgba(245,158,11,0.55)';
-          dailyChart.data.datasets[0].label = 'Posts (Native)';
+          dailyChart.data.datasets[0].label = 'Posts (Unverified)';
           dailyChart.data.datasets[1].data = DAILY_DATA.map(d => 0);
           dailyChart.data.datasets[1].backgroundColor = 'transparent';
           dailyChart.data.datasets[2].data = DAILY_DATA.map(d => d.authors_native);
           dailyChart.data.datasets[2].borderColor = AMBER;
-          dailyChart.data.datasets[2].label = 'Authors (Native)';
+          dailyChart.data.datasets[2].label = 'Authors (Unverified)';
           dailyChart.data.datasets[3].data = DAILY_DATA.map(d => 0);
         } else if (mode === 'bridgyfed') {
           dailyChart.data.datasets[0].data = DAILY_DATA.map(d => d.posts_bridgyfed);
@@ -416,12 +416,12 @@ export function StatsPage({ stats }: { stats: BlogStats }) {
         } else {
           dailyChart.data.datasets[0].data = DAILY_DATA.map(d => d.posts_native);
           dailyChart.data.datasets[0].backgroundColor = 'rgba(99,102,241,0.55)';
-          dailyChart.data.datasets[0].label = 'Posts (Native)';
+          dailyChart.data.datasets[0].label = 'Posts (Unverified)';
           dailyChart.data.datasets[1].data = DAILY_DATA.map(d => d.posts_bridgyfed);
           dailyChart.data.datasets[1].backgroundColor = 'rgba(16,185,129,0.45)';
           dailyChart.data.datasets[2].data = DAILY_DATA.map(d => d.authors_native);
           dailyChart.data.datasets[2].borderColor = AMBER;
-          dailyChart.data.datasets[2].label = 'Authors (Native)';
+          dailyChart.data.datasets[2].label = 'Authors (Unverified)';
           dailyChart.data.datasets[3].data = DAILY_DATA.map(d => d.authors_bridgyfed);
         }
         dailyChart.update();
@@ -464,7 +464,7 @@ export function StatsPage({ stats }: { stats: BlogStats }) {
         data: {
           labels: NEWAUTH_DATA.map(d => d.day.slice(5)),
           datasets: [
-            { label: 'Native', data: NEWAUTH_DATA.map(d => d.new_native), backgroundColor: 'rgba(245,158,11,0.6)', stack: 'a' },
+            { label: 'Unverified', data: NEWAUTH_DATA.map(d => d.new_native), backgroundColor: 'rgba(245,158,11,0.6)', stack: 'a' },
             { label: 'BridgyFed', data: NEWAUTH_DATA.map(d => d.new_bridgyfed), backgroundColor: 'rgba(16,185,129,0.6)', stack: 'a' },
             { label: 'Verified', data: NEWAUTH_DATA.map(d => d.new_verified), backgroundColor: 'rgba(34,211,238,0.6)', stack: 'a', hidden: true }
           ]
