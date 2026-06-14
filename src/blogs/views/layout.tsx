@@ -828,14 +828,42 @@ export function BlogsLayout({ title, children, session, navPage = '', headExtra 
           }
 
           /* ── Topic cluster pills ────────────────────────────────── */
+          .bl-topic-wrap {
+            position: relative;
+          }
+          .bl-topic-arrow {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            z-index: 2;
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            border: 1px solid var(--border);
+            background: var(--bg);
+            color: var(--text-muted);
+            font-size: 1.1rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: opacity 0.2s, background 0.15s, color 0.15s;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+          }
+          .bl-topic-arrow:hover { background: var(--surface); color: var(--text); }
+          .bl-topic-arrow-left { left: -4px; }
+          .bl-topic-arrow-right { right: -4px; }
           .bl-topic-bar {
             display: flex;
+            flex-wrap: nowrap;
             gap: 0.4rem;
             padding: 0.5rem 0 0.75rem;
             overflow-x: auto;
+            overflow-y: hidden;
             -webkit-overflow-scrolling: touch;
             scrollbar-width: none;
-            mask-image: linear-gradient(90deg, #000 0, #000 calc(100% - 1.5rem), transparent);
+            max-width: 100%;
+            mask-image: linear-gradient(90deg, #000 0, #000 calc(100% - 2rem), transparent);
           }
           .bl-topic-bar::-webkit-scrollbar { display: none; }
           .bl-topic-pill {

@@ -175,14 +175,32 @@ export function FeedPage({ items, page, newPostsTs, session, followedDids, view 
 
         <!-- Topic clusters -->
         ${topicClusters.length > 0 ? html`
-          <div class="bl-topic-bar">
-            ${topicClusters.map(tc => html`
-              <a href="/topic/${tc.id}" class="bl-topic-pill">
-                ${tc.label}
-                <span class="bl-topic-count">${tc.article_count}</span>
-              </a>
-            `)}
+          <div class="bl-topic-wrap">
+            <button class="bl-topic-arrow bl-topic-arrow-left" id="topicLeft" onclick="document.getElementById('topicBar').scrollBy({left:-200,behavior:'smooth'})" aria-label="Scroll left">‹</button>
+            <div class="bl-topic-bar" id="topicBar">
+              ${topicClusters.map(tc => html`
+                <a href="/topic/${tc.id}" class="bl-topic-pill">
+                  ${tc.label}
+                  <span class="bl-topic-count">${tc.article_count}</span>
+                </a>
+              `)}
+            </div>
+            <button class="bl-topic-arrow bl-topic-arrow-right" id="topicRight" onclick="document.getElementById('topicBar').scrollBy({left:200,behavior:'smooth'})" aria-label="Scroll right">›</button>
           </div>
+          <script>
+            (function(){
+              var bar=document.getElementById('topicBar'),l=document.getElementById('topicLeft'),r=document.getElementById('topicRight');
+              if(!bar)return;
+              function u(){
+                l.style.opacity=bar.scrollLeft>8?'1':'0';
+                l.style.pointerEvents=bar.scrollLeft>8?'auto':'none';
+                var atEnd=bar.scrollLeft+bar.clientWidth>=bar.scrollWidth-8;
+                r.style.opacity=atEnd?'0':'1';
+                r.style.pointerEvents=atEnd?'none':'auto';
+              }
+              bar.addEventListener('scroll',u);u();
+            })();
+          </script>
         ` : ''}
 
         <div class="bl-new-posts-header">
