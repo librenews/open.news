@@ -86,6 +86,8 @@ app.get('/.well-known/site.standard.publication', async (c) => {
 // ── Pre-warm stats cache immediately, refresh every 5 minutes ────────────────
 startStatsWarm();
 setInterval(() => startStatsWarm(), 5 * 60 * 1000);
+// Pre-warm sidebar cache after module is fully loaded
+setTimeout(() => { try { fetchSidebarData().catch(() => {}); } catch {} }, 100);
 
 // ── Feed helpers ─────────────────────────────────────────────────────────────
 async function buildFeedItems(rows: any[], sessionDid: string | null): Promise<FeedItem[]> {
@@ -135,24 +137,29 @@ async function fetchSidebarData(): Promise<{ trendingTags: TrendingTag[]; popula
     try {
       const [tagRows, popRows] = await Promise.all([
         db.query(`
+          WITH recent_tags AS (
+            SELECT raw_record->'tags' AS tags
+            FROM site_standard_articles
+            WHERE published_at > NOW() - INTERVAL '7 days'
+              AND verified = true
+              AND jsonb_typeof(raw_record->'tags') = 'array'
+            ORDER BY published_at DESC
+            LIMIT 500
+          )
           SELECT tag, COUNT(*)::int AS cnt
-          FROM site_standard_articles s,
-               jsonb_array_elements_text(s.raw_record->'tags') AS tag
-          WHERE s.published_at > NOW() - INTERVAL '7 days'
-            AND jsonb_typeof(s.raw_record->'tags') = 'array'
+          FROM recent_tags, jsonb_array_elements_text(tags) AS tag
           GROUP BY tag ORDER BY cnt DESC LIMIT 20
         `),
         db.query(`
           SELECT s.uri, s.author_did, s.title, s.published_at,
             COUNT(CASE WHEN ai.interaction_type = 'like' THEN 1 END)::int AS like_count,
-            COUNT(CASE WHEN ai.interaction_type IN ('share','repost') THEN 1 END)::int AS share_count,
-            COUNT(*) * EXP(-EXTRACT(EPOCH FROM (NOW() - s.published_at)) / (7 * 86400)) AS decay_score
+            COUNT(CASE WHEN ai.interaction_type IN ('share','repost') THEN 1 END)::int AS share_count
           FROM article_interactions ai
           JOIN site_standard_articles s ON s.uri = ai.article_uri
-          WHERE s.published_at > NOW() - INTERVAL '30 days'
+          WHERE ai.created_at > NOW() - INTERVAL '7 days'
           GROUP BY s.uri, s.author_did, s.title, s.published_at
-          HAVING COUNT(*) >= 1
-          ORDER BY decay_score DESC LIMIT 6
+          HAVING COUNT(*) >= 2
+          ORDER BY COUNT(*) DESC LIMIT 6
         `),
       ]);
 
