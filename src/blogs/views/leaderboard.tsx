@@ -1,4 +1,4 @@
-import { html } from 'hono/html';
+import { html, raw } from 'hono/html';
 
 export interface RankedAuthor {
   rank: number;
@@ -44,9 +44,9 @@ function rankBadge(rank: number): string {
   return `#${rank}`;
 }
 
-function signalBar(value: number, max: number, color: string): string {
+function signalBar(value: number, max: number, color: string) {
   const pct = Math.min((value / Math.max(max, 0.001)) * 100, 100);
-  return `<div class="bl-signal-bar"><div class="bl-signal-fill" style="width:${pct}%;background:${color}"></div></div>`;
+  return raw(`<div class="bl-signal-bar"><div class="bl-signal-fill" style="width:${pct}%;background:${color}"></div></div>`);
 }
 
 export function LeaderboardPage({ authors, computedAt }: {
