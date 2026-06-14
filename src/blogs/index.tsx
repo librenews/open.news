@@ -246,7 +246,7 @@ app.get('/', async (c) => {
         COALESCE(ai_counts.share_count, 0) AS share_count,
         COALESCE(ul.user_liked, false) AS user_liked,
         (COALESCE(ai_counts.like_count, 0) + COALESCE(ai_counts.share_count, 0) * 2 + 1)::float
-          / POWER(EXTRACT(EPOCH FROM (NOW() - s.published_at)) / 3600.0 + 2, 1.3) AS hotness
+          / POWER(GREATEST(EXTRACT(EPOCH FROM (NOW() - s.published_at)) / 3600.0, 0) + 2, 1.3) AS hotness
       FROM site_standard_articles s
       LEFT JOIN LATERAL (
         SELECT
