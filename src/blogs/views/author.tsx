@@ -37,7 +37,7 @@ function timeAgo(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-export function AuthorPage({ profile, posts, page, session, followedDids, authorStats }: {
+export function AuthorPage({ profile, posts, page, session, followedDids, authorStats, authorRank }: {
   profile: AuthorProfile;
   posts: AuthorPost[];
   page: number;
