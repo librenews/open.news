@@ -896,6 +896,154 @@ export function BlogsLayout({ title, children, session, navPage = '', headExtra 
             border-radius: 99px;
           }
 
+          /* ── Leaderboard ──────────────────────────────────────── */
+          .bl-leaderboard-header {
+            margin-bottom: 1.25rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--border);
+          }
+          .bl-leaderboard-header h1 {
+            font-size: 1.3rem;
+            font-weight: 700;
+            letter-spacing: -0.03em;
+            margin-bottom: 0.3rem;
+          }
+          .bl-leaderboard-header p {
+            font-size: 0.78rem;
+            color: var(--text-muted);
+            line-height: 1.5;
+            max-width: 600px;
+          }
+          .bl-lb-updated {
+            font-size: 0.68rem;
+            color: var(--text-muted);
+          }
+          .bl-lb-list {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+          }
+          .bl-lb-row {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.65rem 0.75rem;
+            border-radius: 10px;
+            text-decoration: none;
+            transition: background 0.15s;
+          }
+          .bl-lb-row:hover { background: var(--surface); }
+          .bl-lb-rank {
+            width: 32px;
+            text-align: center;
+            font-size: 0.78rem;
+            font-weight: 700;
+            color: var(--text-muted);
+            flex-shrink: 0;
+          }
+          .bl-lb-rank-top { font-size: 1.1rem; }
+          .bl-lb-avatar { flex-shrink: 0; }
+          .bl-lb-avatar img {
+            width: 38px;
+            height: 38px;
+            border-radius: 50%;
+            object-fit: cover;
+          }
+          .bl-lb-avatar-ph {
+            width: 38px;
+            height: 38px;
+            border-radius: 50%;
+            background: var(--accent-dim);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--accent);
+          }
+          .bl-lb-info {
+            flex: 1;
+            min-width: 0;
+          }
+          .bl-lb-name {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+          }
+          .bl-lb-handle {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+          }
+          .bl-lb-signals {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+            width: 100px;
+            flex-shrink: 0;
+          }
+          .bl-lb-signal {
+            display: flex;
+            align-items: center;
+            gap: 0.3rem;
+          }
+          .bl-lb-signal-label {
+            font-size: 0.58rem;
+            font-weight: 700;
+            color: var(--text-muted);
+            width: 16px;
+            flex-shrink: 0;
+          }
+          .bl-signal-bar {
+            flex: 1;
+            height: 4px;
+            background: rgba(255,255,255,0.06);
+            border-radius: 2px;
+            overflow: hidden;
+          }
+          .bl-signal-fill {
+            height: 100%;
+            border-radius: 2px;
+            transition: width 0.3s ease;
+          }
+          .bl-lb-meta {
+            display: flex;
+            flex-direction: column;
+            gap: 1px;
+            flex-shrink: 0;
+            text-align: right;
+            min-width: 70px;
+          }
+          .bl-lb-stat {
+            font-size: 0.65rem;
+            color: var(--text-muted);
+            white-space: nowrap;
+          }
+          .bl-lb-score {
+            text-align: center;
+            flex-shrink: 0;
+            min-width: 48px;
+          }
+          .bl-lb-ais {
+            font-size: 1rem;
+            font-weight: 700;
+            color: var(--accent);
+            font-variant-numeric: tabular-nums;
+          }
+          .bl-lb-ais-label {
+            font-size: 0.55rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+          }
+          @media (max-width: 640px) {
+            .bl-lb-signals { display: none; }
+            .bl-lb-meta { display: none; }
+          }
+
           /* ── Author stats grid ──────────────────────────────────── */
           .bl-author-stats {
             display: flex;
@@ -1204,6 +1352,10 @@ export function BlogsLayout({ title, children, session, navPage = '', headExtra 
               <a href="/" class="bl-nav-item ${navPage === 'home' ? 'bl-nav-active' : ''}">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
                 Home
+              </a>
+              <a href="/leaderboard" class="bl-nav-item ${navPage === 'leaderboard' ? 'bl-nav-active' : ''}">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20v-4"/><circle cx="12" cy="7" r="1" fill="currentColor"/><circle cx="18" cy="2" r="1" fill="currentColor"/><circle cx="6" cy="14" r="1" fill="currentColor"/></svg>
+                Top Authors
               </a>
               <a href="/stats" class="bl-nav-item ${navPage === 'stats' ? 'bl-nav-active' : ''}">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>

@@ -11,6 +11,7 @@ import { FeedPage, type FeedItem } from './views/feed.js';
 import { AuthorPage, type AuthorProfile, type AuthorPost } from './views/author.js';
 import { SubscriptionsPage, type SubscriptionItem } from './views/subscriptions.js';
 import { StatsPage } from './views/stats.js';
+import { LeaderboardPage, type RankedAuthor } from './views/leaderboard.js';
 import { BlogSearchContent, BlogSearchStyles, type BlogSearchResult } from './views/search.js';
 import { searchSiteStandardArticles } from '../track/opensearch.js';
 import { getBlogStats, startStatsWarm } from './lib/statsCache.js';
@@ -512,6 +513,53 @@ app.get('/js/blogs.js', (c) => {
   c.header('Content-Type', 'application/javascript; charset=utf-8');
   c.header('Cache-Control', 'public, max-age=3600');
   return c.body(blogsJs);
+});
+
+// ── Leaderboard ──────────────────────────────────────────────────────────────
+app.get('/leaderboard', async (c) => {
+  const session = await enrichSession(await getBlogsSession(c));
+
+  const { rows } = await db.query(`
+    SELECT * FROM author_rankings
+    WHERE rank IS NOT NULL
+    ORDER BY rank ASC
+    LIMIT 40
+  `);
+
+  // Resolve profiles
+  const dids = rows.map((r: any) => r.author_did);
+  const profileMap = await getCachedProfiles(dids);
+
+  const authors: RankedAuthor[] = rows.map((r: any) => {
+    const p = profileMap.get(r.author_did);
+    return {
+      rank: r.rank,
+      did: r.author_did,
+      handle: p?.handle || r.author_did,
+      displayName: p?.displayName || '',
+      avatar: p?.avatar || null,
+      ais: Number(r.ais),
+      engagement_vel: Number(r.engagement_vel),
+      content_momentum: Number(r.content_momentum),
+      quality_signal: Number(r.quality_signal),
+      consistency: Number(r.consistency),
+      network_score: Number(r.network_score),
+      freshness_decay: Number(r.freshness_decay),
+      article_count_90d: Number(r.article_count_90d),
+      total_likes: Number(r.total_likes),
+      total_shares: Number(r.total_shares),
+      follower_count: Number(r.follower_count),
+      last_published: r.last_published?.toISOString() || null,
+    };
+  });
+
+  const computedAt = rows[0]?.computed_at?.toISOString() || null;
+
+  return c.html((
+    <BlogsLayout title="Top Authors — blogs.social" session={session} navPage="leaderboard">
+      <LeaderboardPage authors={authors} computedAt={computedAt} />
+    </BlogsLayout>
+  ) as unknown as string);
 });
 
 // ── Stats page ─────────────────────────────────────────────────────────────
