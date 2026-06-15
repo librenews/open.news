@@ -475,10 +475,13 @@ app.get('/', async (c) => {
     queryText = `SELECT * FROM (
        SELECT DISTINCT ON (split_part(s.uri, '/', 5)) s.uri, s.author_did, s.title, s.description, s.published_at, COALESCE(p.url, s.site) as site, s.path, s.word_count,
          split_part(s.uri, '/', 4) AS collection,
-         CASE WHEN s.uri LIKE '%/site.standard.document/%' OR s.uri LIKE '%/pub.leaflet.document/%'
-           THEN jsonb_path_query_first(s.raw_record, '$.content.pages[0].blocks[*].block ? (@."$type" == "pub.leaflet.blocks.image").image.ref."$link"') #>> '{}'
-           ELSE NULL
-         END AS image_cid,
+         COALESCE(
+           s.raw_record->'coverImage'->'ref'->>'$link',
+           s.raw_record->'images'->0->'image'->'ref'->>'$link',
+           s.raw_record->'images'->0->'ref'->>'$link',
+           CASE WHEN s.uri LIKE '%/site.standard.document/%' OR s.uri LIKE '%/pub.leaflet.document/%'
+             THEN jsonb_path_query_first(s.raw_record, '$.content.pages[0].blocks[*].block ? (@."$type" == "pub.leaflet.blocks.image").image.ref."$link"') #>>'{}' ELSE NULL END
+         ) AS image_cid,
          CASE WHEN s.raw_record->>'site' LIKE 'at://%site.standard.publication%'
            THEN s.raw_record->>'site'
            ELSE NULL
@@ -497,10 +500,13 @@ app.get('/', async (c) => {
     queryText = `SELECT * FROM (
        SELECT DISTINCT ON (split_part(s.uri, '/', 5)) s.uri, s.author_did, s.title, s.description, s.published_at, COALESCE(p.url, s.site) as site, s.path, s.word_count,
          split_part(s.uri, '/', 4) AS collection,
-         CASE WHEN s.uri LIKE '%/site.standard.document/%' OR s.uri LIKE '%/pub.leaflet.document/%'
-           THEN jsonb_path_query_first(s.raw_record, '$.content.pages[0].blocks[*].block ? (@."$type" == "pub.leaflet.blocks.image").image.ref."$link"') #>> '{}'
-           ELSE NULL
-         END AS image_cid,
+         COALESCE(
+           s.raw_record->'coverImage'->'ref'->>'$link',
+           s.raw_record->'images'->0->'image'->'ref'->>'$link',
+           s.raw_record->'images'->0->'ref'->>'$link',
+           CASE WHEN s.uri LIKE '%/site.standard.document/%' OR s.uri LIKE '%/pub.leaflet.document/%'
+             THEN jsonb_path_query_first(s.raw_record, '$.content.pages[0].blocks[*].block ? (@."$type" == "pub.leaflet.blocks.image").image.ref."$link"') #>>'{}' ELSE NULL END
+         ) AS image_cid,
          CASE WHEN s.raw_record->>'site' LIKE 'at://%site.standard.publication%'
            THEN s.raw_record->>'site'
            ELSE NULL
@@ -578,10 +584,13 @@ app.get('/tag/:tag', async (c) => {
     `SELECT * FROM (
        SELECT DISTINCT ON (split_part(s.uri, '/', 5)) s.uri, s.author_did, s.title, s.description, s.published_at, COALESCE(p.url, s.site) as site, s.path, s.word_count,
          split_part(s.uri, '/', 4) AS collection,
-         CASE WHEN s.uri LIKE '%/site.standard.document/%' OR s.uri LIKE '%/pub.leaflet.document/%'
-           THEN jsonb_path_query_first(s.raw_record, '$.content.pages[0].blocks[*].block ? (@."$type" == "pub.leaflet.blocks.image").image.ref."$link"') #>> '{}'
-           ELSE NULL
-         END AS image_cid,
+         COALESCE(
+           s.raw_record->'coverImage'->'ref'->>'$link',
+           s.raw_record->'images'->0->'image'->'ref'->>'$link',
+           s.raw_record->'images'->0->'ref'->>'$link',
+           CASE WHEN s.uri LIKE '%/site.standard.document/%' OR s.uri LIKE '%/pub.leaflet.document/%'
+             THEN jsonb_path_query_first(s.raw_record, '$.content.pages[0].blocks[*].block ? (@."$type" == "pub.leaflet.blocks.image").image.ref."$link"') #>>'{}' ELSE NULL END
+         ) AS image_cid,
          CASE WHEN s.raw_record->>'site' LIKE 'at://%site.standard.publication%'
            THEN s.raw_record->>'site'
            ELSE NULL
@@ -704,10 +713,13 @@ app.get('/feed/latest.xml', async (c) => {
   const { rows } = await db.query(
     `SELECT s.uri, s.author_did, s.title, s.description, s.published_at, s.word_count,
        s.raw_record->>'tags' as tags_json,
-       CASE WHEN s.uri LIKE '%/site.standard.document/%' OR s.uri LIKE '%/pub.leaflet.document/%'
-         THEN jsonb_path_query_first(s.raw_record, '$.content.pages[0].blocks[*].block ? (@."$type" == "pub.leaflet.blocks.image").image.ref."$link"') #>> '{}'
-         ELSE NULL
-       END AS image_cid
+       COALESCE(
+         s.raw_record->'coverImage'->'ref'->>'$link',
+         s.raw_record->'images'->0->'image'->'ref'->>'$link',
+         s.raw_record->'images'->0->'ref'->>'$link',
+         CASE WHEN s.uri LIKE '%/site.standard.document/%' OR s.uri LIKE '%/pub.leaflet.document/%'
+           THEN jsonb_path_query_first(s.raw_record, '$.content.pages[0].blocks[*].block ? (@."$type" == "pub.leaflet.blocks.image").image.ref."$link"') #>>'{}' ELSE NULL END
+       ) AS image_cid
      FROM site_standard_articles s
      WHERE s.word_count > 100 AND s.language = 'eng' AND s.suppressed = false
      ORDER BY s.published_at DESC NULLS LAST
@@ -795,10 +807,13 @@ app.get('/feed/following.xml', async (c) => {
     const { rows } = await db.query(
       `SELECT s.uri, s.author_did, s.title, s.description, s.published_at, s.word_count,
          s.raw_record->>'tags' as tags_json,
-         CASE WHEN s.uri LIKE '%/site.standard.document/%' OR s.uri LIKE '%/pub.leaflet.document/%'
-           THEN jsonb_path_query_first(s.raw_record, '$.content.pages[0].blocks[*].block ? (@."$type" == "pub.leaflet.blocks.image").image.ref."$link"') #>> '{}'
-           ELSE NULL
-         END AS image_cid
+         COALESCE(
+           s.raw_record->'coverImage'->'ref'->>'$link',
+           s.raw_record->'images'->0->'image'->'ref'->>'$link',
+           s.raw_record->'images'->0->'ref'->>'$link',
+           CASE WHEN s.uri LIKE '%/site.standard.document/%' OR s.uri LIKE '%/pub.leaflet.document/%'
+             THEN jsonb_path_query_first(s.raw_record, '$.content.pages[0].blocks[*].block ? (@."$type" == "pub.leaflet.blocks.image").image.ref."$link"') #>>'{}' ELSE NULL END
+         ) AS image_cid
        FROM site_standard_articles s
        WHERE s.word_count > 100 AND s.language = 'eng'
          AND s.raw_record->>'site' = ANY($1)
@@ -1258,10 +1273,13 @@ app.get('/profile/:identifier', async (c) => {
     `SELECT * FROM (
        SELECT DISTINCT ON (split_part(s.uri, '/', 5)) s.uri, s.author_did, s.title, s.description, s.published_at, COALESCE(p.url, s.site) as site, s.path, s.word_count,
          split_part(s.uri, '/', 4) AS collection,
-         CASE WHEN s.uri LIKE '%/site.standard.document/%' OR s.uri LIKE '%/pub.leaflet.document/%'
-           THEN jsonb_path_query_first(s.raw_record, '$.content.pages[0].blocks[*].block ? (@."$type" == "pub.leaflet.blocks.image").image.ref."$link"') #>> '{}'
-           ELSE NULL
-         END AS image_cid,
+         COALESCE(
+           s.raw_record->'coverImage'->'ref'->>'$link',
+           s.raw_record->'images'->0->'image'->'ref'->>'$link',
+           s.raw_record->'images'->0->'ref'->>'$link',
+           CASE WHEN s.uri LIKE '%/site.standard.document/%' OR s.uri LIKE '%/pub.leaflet.document/%'
+             THEN jsonb_path_query_first(s.raw_record, '$.content.pages[0].blocks[*].block ? (@."$type" == "pub.leaflet.blocks.image").image.ref."$link"') #>>'{}' ELSE NULL END
+         ) AS image_cid,
          CASE WHEN s.raw_record->>'site' LIKE 'at://%site.standard.publication%'
            THEN s.raw_record->>'site'
            ELSE NULL
