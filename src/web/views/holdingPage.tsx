@@ -84,7 +84,7 @@ export function HoldingPage() {
 
           .services {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            grid-template-columns: repeat(2, 1fr);
             gap: 1.25rem;
             max-width: 960px;
             width: 100%;
@@ -150,6 +150,7 @@ export function HoldingPage() {
           .fade-d1 { animation-delay: 0.1s; }
           .fade-d2 { animation-delay: 0.2s; }
           .fade-d3 { animation-delay: 0.3s; }
+          .fade-d4 { animation-delay: 0.4s; }
 
           @media (max-width: 640px) {
             .logo { font-size: 2.5rem; }
@@ -174,7 +175,16 @@ export function HoldingPage() {
               <div class="service-link">Explore publications →</div>
             </a>
 
-            <a href="https://track.social" class="service-card fade fade-d2">
+            <a href="https://longform.social" class="service-card fade fade-d2">
+              <div class="service-icon">✍️</div>
+              <div class="service-name">longform.social</div>
+              <div class="service-desc">
+                Write and publish long-form articles directly to the AT Protocol. Collaborative editing, version history, and instant distribution.
+              </div>
+              <div class="service-link">Start writing →</div>
+            </a>
+
+            <a href="https://track.social" class="service-card fade fade-d3">
               <div class="service-icon">🎯</div>
               <div class="service-name">track.social</div>
               <div class="service-desc">
@@ -183,7 +193,7 @@ export function HoldingPage() {
               <div class="service-link">Start tracking →</div>
             </a>
 
-            <a href="https://feeds.social" class="service-card fade fade-d3">
+            <a href="https://feeds.social" class="service-card fade fade-d4">
               <div class="service-icon">📡</div>
               <div class="service-name">feeds.social</div>
               <div class="service-desc">
