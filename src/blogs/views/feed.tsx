@@ -18,6 +18,7 @@ export interface FeedItem {
   like_count: number;
   share_count: number;
   user_liked: boolean;
+  cover_image: string | null;
 }
 
 export interface TrendingTag {
@@ -102,6 +103,12 @@ function renderPostCard(
         <div class="bl-post-title">
           <a href="/read/${item.author_did}/${item.rkey}">${item.title}</a>
         </div>
+      ` : ''}
+
+      ${item.cover_image ? html`
+        <a href="/read/${item.author_did}/${item.rkey}" class="bl-post-cover">
+          <img src="${item.cover_image}" alt="" loading="lazy" />
+        </a>
       ` : ''}
 
       <div class="bl-post-body">

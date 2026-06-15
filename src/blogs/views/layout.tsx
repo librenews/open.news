@@ -480,6 +480,25 @@ export function BlogsLayout({ title, children, session, navPage = '', headExtra 
           }
           .bl-post-title a:hover { color: var(--accent); }
 
+          .bl-post-cover {
+            display: block;
+            border-radius: 12px;
+            overflow: hidden;
+            margin-bottom: 0.75rem;
+          }
+          .bl-post-cover img {
+            width: 100%;
+            height: auto;
+            max-height: 320px;
+            object-fit: cover;
+            display: block;
+            border-radius: 12px;
+            transition: opacity 0.2s;
+          }
+          .bl-post-cover:hover img {
+            opacity: 0.9;
+          }
+
           .bl-post-body {
             font-size: 0.88rem;
             line-height: 1.6;

@@ -117,6 +117,9 @@ async function buildFeedItems(rows: any[], sessionDid: string | null): Promise<F
       like_count: Number(r.like_count || 0),
       share_count: Number(r.share_count || 0),
       user_liked: r.user_liked === true,
+      cover_image: r.cover_cid
+        ? `https://cdn.bsky.app/img/feed_thumbnail/plain/${r.author_did}/${r.cover_cid}@jpeg`
+        : null,
     };
   });
 }
@@ -219,6 +222,11 @@ app.get('/', async (c) => {
             s.published_at, s.word_count, s.created_at,
             COALESCE(s.description, s.raw_record->>'content', s.raw_record->>'textContent') AS text_content,
             s.raw_record->'tags' AS tags_json,
+            COALESCE(
+              s.raw_record->'coverImage'->'ref'->>'$link',
+              s.raw_record->'images'->0->'image'->'ref'->>'$link',
+              s.raw_record->'images'->0->'ref'->>'$link'
+            ) AS cover_cid,
             COALESCE(ai_counts.like_count, 0) AS like_count,
             COALESCE(ai_counts.share_count, 0) AS share_count,
             COALESCE(ul.user_liked, false) AS user_liked
@@ -250,6 +258,11 @@ app.get('/', async (c) => {
                s.published_at, s.word_count, s.created_at,
                COALESCE(s.description, s.raw_record->>'content', s.raw_record->>'textContent') AS text_content,
                s.raw_record->'tags' AS tags_json,
+               COALESCE(
+                 s.raw_record->'coverImage'->'ref'->>'$link',
+                 s.raw_record->'images'->0->'image'->'ref'->>'$link',
+                 s.raw_record->'images'->0->'ref'->>'$link'
+               ) AS cover_cid,
                COALESCE(c.like_count, 0) AS like_count,
                COALESCE(c.share_count, 0) AS share_count,
                (COALESCE(c.like_count, 0) + COALESCE(c.share_count, 0) * 2 + 1)::float
@@ -271,6 +284,11 @@ app.get('/', async (c) => {
                published_at, word_count, created_at,
                COALESCE(description, raw_record->>'content', raw_record->>'textContent') AS text_content,
                raw_record->'tags' AS tags_json,
+               COALESCE(
+                 raw_record->'coverImage'->'ref'->>'$link',
+                 raw_record->'images'->0->'image'->'ref'->>'$link',
+                 raw_record->'images'->0->'ref'->>'$link'
+               ) AS cover_cid,
                0 AS like_count, 0 AS share_count,
                1.0 / POWER(GREATEST(EXTRACT(EPOCH FROM (NOW() - published_at)) / 3600.0, 0) + 2, 1.3) AS hotness
         FROM site_standard_articles
@@ -306,6 +324,11 @@ app.get('/', async (c) => {
         s.published_at, s.word_count, s.created_at,
         COALESCE(s.description, s.raw_record->>'content', s.raw_record->>'textContent') AS text_content,
         s.raw_record->'tags' AS tags_json,
+        COALESCE(
+          s.raw_record->'coverImage'->'ref'->>'$link',
+          s.raw_record->'images'->0->'image'->'ref'->>'$link',
+          s.raw_record->'images'->0->'ref'->>'$link'
+        ) AS cover_cid,
         COALESCE(ai_counts.like_count, 0) AS like_count,
         COALESCE(ai_counts.share_count, 0) AS share_count,
         COALESCE(ul.user_liked, false) AS user_liked
