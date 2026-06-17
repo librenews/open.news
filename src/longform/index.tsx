@@ -31,6 +31,7 @@ import { WebSocketServer } from 'ws';
 import { db } from '../db/client.js';
 import { searchSiteStandardArticles, getRelatedArticles } from '../track/opensearch.js';
 import { getSubscribedPublications } from './lib/subscriptionCache.js';
+import { slugify, isValidRkey } from '../lib/slugify.js';
 
 process.on('unhandledRejection', (err) => {
   logger.warn({ err }, 'Caught unhandled promise rejection in Longform (likely a background OAuth token getter)');
@@ -1430,9 +1431,27 @@ app.get('/posts', async (c) => {
   }
 });
 
-app.get('/post/:did/:rkey', async (c) => {
-  const did = c.req.param('did');
+app.get('/post/:identifier/:rkey', async (c) => {
+  const identifier = c.req.param('identifier');
   const rkey = c.req.param('rkey');
+
+  // Handle-based URLs: resolve handle → DID and redirect to canonical DID URL
+  if (!identifier.startsWith('did:')) {
+    try {
+      const resolveRes = await fetch(
+        `https://public.api.bsky.app/xrpc/com.atproto.identity.resolveHandle?handle=${encodeURIComponent(identifier)}`
+      );
+      if (resolveRes.ok) {
+        const { did: resolvedDid } = await resolveRes.json() as { did: string };
+        return c.redirect(`/post/${resolvedDid}/${rkey}`, 302);
+      }
+    } catch (e) {
+      // Fall through to 404
+    }
+    return c.html((<Layout title="Post Not Found"><h1>Post Not Found</h1><p>Could not resolve handle "{identifier}".</p></Layout>) as unknown as string, 404);
+  }
+
+  const did = identifier;
   
   try {
     const sessionDid = await getSession(c);
@@ -1834,13 +1853,20 @@ app.post('/api/publish', async (c) => {
         }
       }
       
-      // Use rkey from docId if this is an existing draft, otherwise generate new
+      // Use rkey from docId if this is an existing draft, otherwise generate slug from title
       const docId = body.docId;
       let rkey: string;
       if (docId && docId.startsWith('at://')) {
         rkey = docId.split('/').pop()!;
       } else {
-        rkey = Math.random().toString(36).substring(2, 15);
+        // Use client-supplied slug if provided, otherwise generate from title
+        const candidateSlug = body.slug ? String(body.slug).trim() : slugify(title);
+        rkey = candidateSlug || Math.random().toString(36).substring(2, 15);
+
+        // Validate as AT Protocol rkey
+        if (!isValidRkey(rkey)) {
+          rkey = Math.random().toString(36).substring(2, 15);
+        }
       }
 
      // Ensure the user has a default publication record on their PDS
@@ -1932,8 +1958,31 @@ app.post('/api/publish', async (c) => {
        }
      }
 
+     // For new posts with slug-based rkeys, check for collisions
+     if (!isRepublish && !body.confirmOverwrite) {
+       try {
+         const existing = await agent.com.atproto.repo.getRecord({
+           repo: sessionDid,
+           collection: 'site.standard.document',
+           rkey,
+         });
+         if (existing?.data?.value) {
+           // Record already exists at this rkey — ask user to confirm
+           const existingTitle = (existing.data.value as any).title || 'Untitled';
+           return c.json({
+             collision: true,
+             rkey,
+             existingTitle,
+             message: `A post already exists with the URL slug "${rkey}": "${existingTitle}". Overwrite it?`,
+           });
+         }
+       } catch (e: any) {
+         // Record doesn't exist — no collision, proceed normally
+       }
+     }
+
      let res;
-     if (isRepublish) {
+     if (isRepublish || body.confirmOverwrite) {
        // Update existing record on PDS
        res = await agent.com.atproto.repo.putRecord({
          repo: sessionDid,

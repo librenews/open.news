@@ -597,11 +597,20 @@ export function EditorPage() {
         return parts.join('');
       }
 
+      // Client-side slug generator (mirrors server-side slugify)
+      function clientSlugify(text) {
+        return text
+          .toLowerCase()
+          .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/(^-|-$)/g, '')
+          .substring(0, 64)
+          .replace(/-$/, '');
+      }
+
       window.publishDraft = async function() {
          const btn = document.getElementById('publish-btn');
          const defaultTxt = btn.innerText;
-         btn.innerText = 'Publishing...';
-         btn.disabled = true;
          
          // Extract title from first heading in the document
          var editorJson = window.editor.getJSON();
@@ -618,38 +627,117 @@ export function EditorPage() {
          
          if (title === 'Untitled') {
            title = window.prompt('No heading found. Enter a title for your post:') || 'Untitled';
-           if (title === 'Untitled') {
-             btn.innerText = defaultTxt;
-             btn.disabled = false;
-             return;
-           }
+           if (title === 'Untitled') return;
          }
 
          // Get the docId from the URL or use EDIT_URI for editing published posts
          var publishDocId = window.EDIT_URI || new URLSearchParams(window.location.search).get('doc');
 
-         try {
+         // For edits of already-published posts, skip the slug dialog
+         var isEditMode = !!window.EDIT_URI;
+         if (isEditMode) {
+           btn.innerText = 'Publishing...';
+           btn.disabled = true;
+           try {
+             const res = await fetch('/api/publish', {
+               method: 'POST',
+               headers: { 'Content-Type': 'application/json' },
+               body: JSON.stringify({ title, docId: publishDocId, document: editorJson })
+             });
+             const data = await res.json();
+             if (data.success) {
+               try { window.localStorage.removeItem('longform_draft'); } catch(e) {}
+               const parts = data.uri.split('/');
+               window.location.href = '/post/' + parts[2] + '/' + parts[4];
+             } else {
+               alert('Failed to publish: ' + data.error);
+             }
+           } catch (e) {
+             alert('Network error during publishing.');
+           }
+           btn.innerText = defaultTxt;
+           btn.disabled = false;
+           return;
+         }
+
+         // Show slug dialog for new posts
+         var autoSlug = clientSlugify(title);
+         var slug = window.prompt(
+           'URL slug for your post:\n\n' +
+           'Title: ' + title + '\n' +
+           'URL: /post/you/' + autoSlug + '\n\n' +
+           'Edit the slug below or press OK to use the default:',
+           autoSlug
+         );
+         if (slug === null) return; // cancelled
+         slug = slug.trim() || autoSlug;
+
+         // Validate slug
+         if (!/^[A-Za-z0-9._~:-]+$/.test(slug) || slug === '.' || slug === '..') {
+           alert('Invalid slug. Use only letters, numbers, dashes, dots, underscores, colons, or tildes.');
+           return;
+         }
+
+         btn.innerText = 'Publishing...';
+         btn.disabled = true;
+
+         async function doPublish(overrideSlug, confirmOverwrite) {
+           const payload = {
+             title: title,
+             docId: publishDocId,
+             document: editorJson,
+             slug: overrideSlug
+           };
+           if (confirmOverwrite) payload.confirmOverwrite = true;
+
            const res = await fetch('/api/publish', {
              method: 'POST',
              headers: { 'Content-Type': 'application/json' },
-             body: JSON.stringify({
-               title: title,
-               docId: publishDocId,
-               document: editorJson
-             })
+             body: JSON.stringify(payload)
            });
-           const data = await res.json();
+           return await res.json();
+         }
+
+         try {
+           var data = await doPublish(slug, false);
+
+           // Handle collision
+           if (data.collision) {
+             var action = window.confirm(data.message + '\n\nPress OK to overwrite, or Cancel to choose a different slug.');
+             if (action) {
+               // User confirmed overwrite
+               data = await doPublish(slug, true);
+             } else {
+               // Let user pick a new slug
+               var newSlug = window.prompt('Enter a different slug:', slug + '-2');
+               if (!newSlug || newSlug === slug) {
+                 btn.innerText = defaultTxt;
+                 btn.disabled = false;
+                 return;
+               }
+               data = await doPublish(newSlug.trim(), false);
+               // Handle second collision (unlikely but possible)
+               if (data.collision) {
+                 if (window.confirm(data.message + '\n\nOverwrite?')) {
+                   data = await doPublish(newSlug.trim(), true);
+                 } else {
+                   btn.innerText = defaultTxt;
+                   btn.disabled = false;
+                   return;
+                 }
+               }
+             }
+           }
+
            if (data.success) {
              try { window.localStorage.removeItem('longform_draft'); } catch(e) {}
              window.editor.commands.setContent('');
-             
-             // Redirect to the newly published post
              const parts = data.uri.split('/');
              const authorDid = parts[2];
              const rkey = parts[4];
              window.location.href = '/post/' + authorDid + '/' + rkey;
-           } else {
-             alert('Failed to publish: ' + data.error);
+           } else if (!data.collision) {
+             alert('Failed to publish: ' + (data.error || 'Unknown error'));
            }
          } catch (e) {
              alert('Network error during publishing.');

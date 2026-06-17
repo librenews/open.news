@@ -25,6 +25,7 @@ import { HoldingPage } from './views/holdingPage.js';
 import { Layout } from './views/layout.js';
 import { PrivacyPage } from './views/privacy.js';
 import { TosPage } from './views/tos.js';
+import { StandardSitePage } from './views/standardSite.js';
 
 const app = new Hono();
 
@@ -42,6 +43,15 @@ app.route('/', authRouter);
 app.route('/', articlesRouter);
 app.route('/', sourcesRouter);
 app.route('/api/conversations', conversationsRouter);
+
+// ─── Standard.site well-known ────────────────────────────────────────────────
+
+const OPEN_NEWS_DID = 'did:plc:beyhbfl42eoum6pd7ojnzih6';
+const PUBLICATION_URI = `at://${OPEN_NEWS_DID}/site.standard.publication/self`;
+
+app.get('/.well-known/site.standard.publication', (c) => {
+  return c.text(PUBLICATION_URI);
+});
 
 // ─── SSE Stream ──────────────────────────────────────────────────────────────
 
@@ -136,6 +146,11 @@ app.get('/privacy', async (c) => {
     user = await getUserById(userId);
   }
   return c.html((<PrivacyPage user={user} />) as unknown as string);
+});
+
+// GET /standard-site
+app.get('/standard-site', (c) => {
+  return c.html((<StandardSitePage />) as unknown as string);
 });
 
 // GET /tos
