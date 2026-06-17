@@ -23,7 +23,7 @@ import { authRouter, getSession, getLongformAuthClient } from './routes/auth.js'
 import { Agent, BskyAgent } from '@atproto/api';
 import { serializeTiptapToLeaflet } from './lib/leafletExporter.js';
 import { resolvePds } from '../lib/pds.js';
-import { getCachedRecordMulti, getCachedProfile } from '../lib/pdsCache.js';
+import { getCachedRecordMulti, getCachedProfile, getCachedProfiles } from '../lib/pdsCache.js';
 import { announcePublication, getLongformBot } from './bot.js';
 import { Server as HocuspocusServer } from '@hocuspocus/server';
 import { hocuspocusDb } from './lib/hocuspocusDb.js';
@@ -151,6 +151,11 @@ async function fetchUserProfile(did: string) {
   return { displayName: p.displayName, avatar: p.avatar, handle: p.handle };
 }
 
+// ── Feed-level cache for anonymous latest view ─────────────────────────────
+const LF_FEED_TTL_MS = 2 * 60 * 1000; // 2 minutes
+let lfFeedCache: { html: string; ts: number } | null = null;
+let lfFeedPromise: Promise<string> | null = null;
+
 // ── Sidebar cache (tags + popular posts are identical for all users) ─────────
 const LF_SIDEBAR_TTL_MS = 5 * 60 * 1000; // 5 minutes
 let lfSidebarCache: { data: { popularPosts: any[]; trendingTags: { tag: string; count: number }[] }; ts: number } | null = null;
@@ -183,12 +188,8 @@ async function fetchLongformSidebar(): Promise<{ popularPosts: any[]; trendingTa
           LIMIT 5
         `);
 
-        const popDids = [...new Set(popRows.map((r: any) => r.author_did))];
-        const popProfileMap = new Map<string, any>();
-        await Promise.all(popDids.map(async (did) => {
-          const p = await fetchUserProfile(did as string);
-          popProfileMap.set(did as string, p);
-        }));
+        const popDids = [...new Set(popRows.map((r: any) => r.author_did))] as string[];
+        const popProfileMap = await getCachedProfiles(popDids);
 
         popularPosts = popRows.map((r: any) => {
           const p = popProfileMap.get(r.author_did) || { displayName: r.author_did, avatar: '', handle: r.author_did };
@@ -438,6 +439,12 @@ app.get('/', async (c) => {
 
   // Home page — show indexed longform articles
   const view = (c.req.query('view') || 'latest') as 'latest' | 'foryou' | 'following';
+
+  // Fast path: serve cached HTML for anonymous latest view
+  if (!sessionDid && view === 'latest' && lfFeedCache && Date.now() - lfFeedCache.ts < LF_FEED_TTL_MS) {
+    return c.html(lfFeedCache.html);
+  }
+
   const profile = sessionDid ? await fetchUserProfile(sessionDid) : null;
 
   // For the "following" tab, fetch the user's subscriptions
@@ -503,9 +510,7 @@ app.get('/', async (c) => {
          COALESCE(
            s.raw_record->'coverImage'->'ref'->>'$link',
            s.raw_record->'images'->0->'image'->'ref'->>'$link',
-           s.raw_record->'images'->0->'ref'->>'$link',
-           CASE WHEN s.uri LIKE '%/site.standard.document/%' OR s.uri LIKE '%/pub.leaflet.document/%'
-             THEN jsonb_path_query_first(s.raw_record, '$.content.pages[0].blocks[*].block ? (@."$type" == "pub.leaflet.blocks.image").image.ref."$link"') #>>'{}' ELSE NULL END
+           s.raw_record->'images'->0->'ref'->>'$link'
          ) AS image_cid,
          CASE WHEN s.raw_record->>'site' LIKE 'at://%site.standard.publication%'
            THEN s.raw_record->>'site'
@@ -517,6 +522,7 @@ app.get('/', async (c) => {
        WHERE s.word_count > 100
          AND s.language = 'eng'
          AND s.suppressed = false
+         AND s.published_at > NOW() - INTERVAL '30 days'
        ORDER BY split_part(s.uri, '/', 5), s.published_at DESC NULLS LAST
      ) sub ORDER BY published_at DESC NULLS LAST
      LIMIT 40`;
@@ -525,15 +531,11 @@ app.get('/', async (c) => {
   const { rows } = await db.query(queryText, queryParams);
 
   // Batch fetch author profiles (deduplicate DIDs)
-  const uniqueDids = [...new Set(rows.map((r: any) => r.author_did))];
-  const profileMap = new Map<string, { displayName: string; avatar: string; handle: string }>();
-  await Promise.all(uniqueDids.map(async (did) => {
-    const p = await fetchUserProfile(did as string);
-    profileMap.set(did as string, p);
-  }));
+  const uniqueDids = [...new Set(rows.map((r: any) => r.author_did))] as string[];
+  const profileMap = await getCachedProfiles(uniqueDids);
 
   const stories: LongformStory[] = rows.map((r: any) => {
-    const p = profileMap.get(r.author_did) || { displayName: r.author_did, avatar: '', handle: r.author_did };
+    const p = profileMap.get(r.author_did) || { displayName: r.author_did, avatar: '', handle: r.author_did, did: r.author_did };
     const rkey = r.uri.split('/').pop();
     const collection = r.collection;
 
@@ -570,7 +572,14 @@ app.get('/', async (c) => {
 
   const { popularPosts, trendingTags } = sidebarData;
   const feedToken = sessionDid ? await getOrCreateFeedToken(sessionDid) : null;
-  return c.html((<HomePage stories={stories} topics={topics} view={view} profile={profile} domain={config.LONGFORM_DOMAIN} hasSubscriptions={hasSubscriptions} popularPosts={popularPosts} feedToken={feedToken} trendingTags={trendingTags} />) as unknown as string);
+  const renderedHtml = (<HomePage stories={stories} topics={topics} view={view} profile={profile} domain={config.LONGFORM_DOMAIN} hasSubscriptions={hasSubscriptions} popularPosts={popularPosts} feedToken={feedToken} trendingTags={trendingTags} />) as unknown as string;
+
+  // Cache anonymous latest view for fast subsequent loads
+  if (!sessionDid && view === 'latest') {
+    lfFeedCache = { html: renderedHtml, ts: Date.now() };
+  }
+
+  return c.html(renderedHtml);
 });
 
 // --- Tag page ---
