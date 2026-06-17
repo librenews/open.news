@@ -297,6 +297,15 @@ export function ReaderPage(doc: LeafletDocument, authorDid: string, profile: any
         </div>
       </header>
       
+      ${(() => {
+        const d = doc as any;
+        const cid = d.coverImage?.ref?.$link
+          || d.images?.[0]?.image?.ref?.$link
+          || d.images?.[0]?.ref?.$link
+          || null;
+        return cid ? html`<div style="margin-bottom: 2rem; border-radius: 12px; overflow: hidden;"><img src="https://cdn.bsky.app/img/feed_fullsize/plain/${authorDid}/${cid}@jpeg" alt="" loading="lazy" style="width: 100%; height: auto; max-height: 480px; object-fit: cover; display: block;" /></div>` : '';
+      })()}
+
       <div class="content markdown-body" style="font-size: 18px; line-height: 1.6;">
         ${isMarkdownString 
           ? raw(sanitizeArticleHtml(marked.parse(rawMarkdown, { async: false }) as string))

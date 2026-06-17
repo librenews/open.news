@@ -858,7 +858,12 @@ app.get('/read/:did/:rkey', async (c) => {
             s.word_count,
             COALESCE(s.raw_record->>'content', s.raw_record->>'textContent') AS text_content,
             s.raw_record->'content' AS content_json,
-            s.raw_record->'tags' AS tags_json
+            s.raw_record->'tags' AS tags_json,
+            COALESCE(
+              s.raw_record->'coverImage'->'ref'->>'$link',
+              s.raw_record->'images'->0->'image'->'ref'->>'$link',
+              s.raw_record->'images'->0->'ref'->>'$link'
+            ) AS cover_cid
      FROM site_standard_articles s WHERE s.uri = $1`,
     [uri]
   );
@@ -936,6 +941,8 @@ app.get('/read/:did/:rkey', async (c) => {
           </div>
 
           ${showTitle ? h`<h1 style="font-size: 1.5rem; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 1rem; line-height: 1.3;">${post.title}</h1>` : ''}
+
+          ${post.cover_cid ? h`<div class="bl-post-cover" style="margin-bottom: 1.25rem;"><img src="https://cdn.bsky.app/img/feed_fullsize/plain/${did}/${post.cover_cid}@jpeg" alt="" loading="lazy" /></div>` : ''}
 
           <div class="bl-post-body" style="font-size: 0.92rem;">
             ${raw(renderedBody)}
