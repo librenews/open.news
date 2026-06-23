@@ -38,25 +38,51 @@ export function escapeXml(str: string): string {
 export function getPostImageUrl(embed: any, authorDid: string): string | null {
   if (!embed) return null;
 
-  // Handle app.bsky.embed.images
-  if (embed.$type === 'app.bsky.embed.images' || Array.isArray(embed.images)) {
+  // 1. Direct thumbnail strings on the embed root (e.g. app.bsky.embed.video#view)
+  if (typeof embed.thumbnail === 'string' && embed.thumbnail.startsWith('http')) {
+    return embed.thumbnail;
+  }
+  if (embed.thumbnail?.ref?.$link || embed.thumbnail?.ref?.['$link']) {
+    const cid = embed.thumbnail.ref.$link || embed.thumbnail.ref['$link'];
+    return `https://cdn.bsky.app/img/feed_fullsize/plain/${authorDid}/${cid}@jpeg`;
+  }
+
+  // 2. Handle app.bsky.embed.images or images array
+  if (embed.$type === 'app.bsky.embed.images' || embed.$type === 'app.bsky.embed.images#view' || Array.isArray(embed.images)) {
     const firstImg = embed.images?.[0];
-    const cid = firstImg?.image?.ref?.$link || firstImg?.image?.ref?.['$link'] || firstImg?.ref?.$link;
-    if (cid) {
-      return `https://cdn.bsky.app/img/feed_fullsize/plain/${authorDid}/${cid}@jpeg`;
+    if (firstImg) {
+      if (typeof firstImg.fullsize === 'string' && firstImg.fullsize.startsWith('http')) {
+        return firstImg.fullsize;
+      }
+      if (typeof firstImg.thumb === 'string' && firstImg.thumb.startsWith('http')) {
+        return firstImg.thumb;
+      }
+      const cid = firstImg.image?.ref?.$link || firstImg.image?.ref?.['$link'] || firstImg.ref?.$link;
+      if (cid) {
+        return `https://cdn.bsky.app/img/feed_fullsize/plain/${authorDid}/${cid}@jpeg`;
+      }
     }
   }
 
-  // Handle app.bsky.embed.external
+  // 3. Handle app.bsky.embed.external or external view
   const external = embed.external;
   if (external) {
+    if (typeof external.thumb === 'string' && external.thumb.startsWith('http')) {
+      return external.thumb;
+    }
     const cid = external.thumb?.ref?.$link || external.thumb?.ref?.['$link'];
     if (cid) {
       return `https://cdn.bsky.app/img/feed_fullsize/plain/${authorDid}/${cid}@jpeg`;
     }
   }
 
-  // Handle app.bsky.embed.recordWithMedia
+  // 4. Handle video thumbnail blobs on record (app.bsky.embed.video)
+  if (embed.video?.thumbnail?.ref?.$link || embed.video?.thumbnail?.ref?.['$link']) {
+    const cid = embed.video.thumbnail.ref.$link || embed.video.thumbnail.ref['$link'];
+    return `https://cdn.bsky.app/img/feed_fullsize/plain/${authorDid}/${cid}@jpeg`;
+  }
+
+  // 5. Handle app.bsky.embed.recordWithMedia
   if (embed.media) {
     return getPostImageUrl(embed.media, authorDid);
   }

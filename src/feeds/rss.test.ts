@@ -149,6 +149,43 @@ describe('rss feed utility functions', () => {
       const url = getPostImageUrl(embed, 'did:plc:foo');
       expect(url).toBe('https://cdn.bsky.app/img/feed_fullsize/plain/did:plc:foo/thumb123@jpeg');
     });
+
+    it('should extract direct string thumbnail url from external view', () => {
+      const embed = {
+        $type: 'app.bsky.embed.external#view',
+        external: {
+          uri: 'https://example.com',
+          thumb: 'https://cdn.bsky.app/img/feed_thumbnail/plain/did:plc:foo/thumb123'
+        }
+      };
+      const url = getPostImageUrl(embed, 'did:plc:foo');
+      expect(url).toBe('https://cdn.bsky.app/img/feed_thumbnail/plain/did:plc:foo/thumb123');
+    });
+
+    it('should extract direct string fullsize/thumbnail url from image view', () => {
+      const embed = {
+        $type: 'app.bsky.embed.images#view',
+        images: [
+          {
+            fullsize: 'https://cdn.bsky.app/img/feed_fullsize/plain/did:plc:foo/img123',
+            thumb: 'https://cdn.bsky.app/img/feed_thumbnail/plain/did:plc:foo/img123',
+            alt: 'alt'
+          }
+        ]
+      };
+      const url = getPostImageUrl(embed, 'did:plc:foo');
+      expect(url).toBe('https://cdn.bsky.app/img/feed_fullsize/plain/did:plc:foo/img123');
+    });
+
+    it('should extract direct string thumbnail url from video view', () => {
+      const embed = {
+        $type: 'app.bsky.embed.video#view',
+        playlist: 'https://video.bsky.app/playlist.m3u8',
+        thumbnail: 'https://video.bsky.app/thumb123'
+      };
+      const url = getPostImageUrl(embed, 'did:plc:foo');
+      expect(url).toBe('https://video.bsky.app/thumb123');
+    });
   });
 
   describe('generateRssFeed', () => {
