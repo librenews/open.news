@@ -103,6 +103,8 @@ function renderLayout(user: FeedUser | null, content: string, title = 'feeds.soc
     <div class="max-w-4xl mx-auto px-6 py-3 flex items-center justify-between">
       <a href="/" class="text-lg font-extrabold bg-gradient-to-r from-indigo-600 to-violet-600 bg-clip-text text-transparent no-underline tracking-tight">feeds.social</a>
       <div class="flex items-center gap-3">
+        <a href="/user-feeds" class="text-xs font-semibold text-slate-500 hover:text-indigo-600 transition-colors no-underline">User Feeds</a>
+        <span class="text-xs text-slate-400">·</span>
         ${user ? `
           <a href="/my-feeds" class="text-xs font-semibold text-slate-500 hover:text-indigo-600 transition-colors no-underline">My Feeds</a>
           <span class="text-xs text-slate-400">·</span>
@@ -493,9 +495,15 @@ app.get('/my-feeds', async (c) => {
             </div>
           </div>
           <div class="flex items-center gap-2 shrink-0">
+            <a href="/feed/${f.uuid}.html" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-600 text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors no-underline">
+              HTML
+            </a>
+            <a href="/feed/${f.uuid}.rss" class="bg-amber-50 hover:bg-amber-100 text-amber-700 text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors no-underline">
+              RSS
+            </a>
             ${bskyAppUrl ? `
-              <a href="${bskyAppUrl}" target="_blank" rel="noopener" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-600 text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors no-underline">
-                Open ↗
+              <a href="${bskyAppUrl}" target="_blank" rel="noopener" class="bg-slate-50 hover:bg-slate-100 text-slate-600 text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors no-underline">
+                Bluesky ↗
               </a>
             ` : ''}
             <button @click="confirmDelete = true" class="bg-slate-50 hover:bg-red-50 text-slate-400 hover:text-red-500 p-1.5 rounded-lg transition-colors cursor-pointer" title="Delete feed">
@@ -1057,6 +1065,108 @@ const handleUserRequest = async (c: any) => {
 };
 
 app.get('/user/:handleOrDidAndExt', handleUserRequest);
+
+app.get('/user-feeds', async (c) => {
+  const userId = c.get('userId');
+  const user = userId ? await getFeedUserById(userId) : null;
+  const q = c.req.query('q') || '';
+
+  let resultsHtml = '';
+  if (q) {
+    try {
+      const agent = await getSearchAgent();
+      const res = await agent.app.bsky.actor.searchActors({ q, limit: 20 });
+      const actors = res.data.actors || [];
+
+      if (actors.length > 0) {
+        resultsHtml = `
+          <div class="fade-in space-y-4">
+            <h2 class="text-sm font-semibold text-slate-500 mb-2">Search Results</h2>
+            ${actors.map(actor => {
+              const displayName = actor.displayName || actor.handle;
+              const bio = actor.description ? `<p class="text-xs text-slate-500 mt-1 max-w-xl leading-relaxed">${escapeHtml(actor.description)}</p>` : '';
+              const avatar = actor.avatar
+                ? `<img src="${escapeHtml(actor.avatar)}" class="w-12 h-12 rounded-full shrink-0 border border-slate-200" alt="">`
+                : `<div class="w-12 h-12 rounded-full bg-gradient-to-tr from-indigo-500 to-violet-500 text-white flex items-center justify-center text-lg font-bold shrink-0">${displayName[0].toUpperCase()}</div>`;
+
+              return `
+                <div class="bg-white rounded-xl border border-slate-200 p-5 flex items-start justify-between gap-4 transition-all hover:shadow-sm">
+                  <div class="flex gap-3 min-w-0">
+                    ${avatar}
+                    <div class="min-w-0">
+                      <h3 class="text-sm font-bold text-slate-800 truncate">${escapeHtml(displayName)}</h3>
+                      <p class="text-xs text-slate-400">@${escapeHtml(actor.handle)}</p>
+                      ${bio}
+                    </div>
+                  </div>
+                  <div class="flex items-center gap-2 shrink-0">
+                    <a href="/user/${actor.handle}.html" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-600 text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors no-underline">
+                      HTML
+                    </a>
+                    <a href="/user/${actor.handle}.rss" class="bg-amber-50 hover:bg-amber-100 text-amber-700 text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors no-underline">
+                      RSS
+                    </a>
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        `;
+      } else {
+        resultsHtml = `
+          <div class="text-center py-12">
+            <p class="text-slate-400 text-sm">No users found for "<strong>${escapeHtml(q)}</strong>". Try another handle or name.</p>
+          </div>
+        `;
+      }
+    } catch (err: any) {
+      logger.error({ err, q }, 'User search failed');
+      resultsHtml = `
+        <div class="bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-700 text-center">
+          Failed to search users: ${escapeHtml(err.message)}
+        </div>
+      `;
+    }
+  }
+
+  const content = `
+    <div class="max-w-3xl mx-auto px-6 pt-10 pb-12">
+      <div class="text-center mb-8">
+        <h1 class="text-3xl font-extrabold text-slate-900 mb-2">User Feeds</h1>
+        <p class="text-sm text-slate-500 max-w-md mx-auto">
+          Search for any Bluesky user to access their combined RSS and HTML feed (posts + standard.site blogs).
+        </p>
+      </div>
+
+      <!-- Search bar -->
+      <form action="/user-feeds" method="GET" class="max-w-2xl mx-auto mb-10">
+        <div class="relative flex items-center bg-white rounded-2xl border border-slate-200 shadow-md overflow-hidden">
+          <svg class="w-5 h-5 text-slate-400 ml-5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+          </svg>
+          <input
+            type="text"
+            name="q"
+            value="${escapeHtml(q)}"
+            placeholder="Search by name, handle, or DID..."
+            class="flex-1 px-4 py-4 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none bg-transparent"
+            autofocus
+          >
+          <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs px-5 py-2.5 rounded-xl mr-2 transition-all cursor-pointer">
+            Search
+          </button>
+        </div>
+      </form>
+
+      <!-- Results -->
+      <div id="user-results" class="space-y-4">
+        ${resultsHtml}
+      </div>
+    </div>
+  `;
+
+  return c.html(renderLayout(user, content, 'Search User Feeds — feeds.social'));
+});
 
 // RSS Cloud pleaseNotify registration endpoint
 app.post('/pleaseNotify', async (c) => {
