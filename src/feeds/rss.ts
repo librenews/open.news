@@ -397,9 +397,12 @@ export function generateRssFeed(opts: RssFeedOptions): string {
       ? `      <source:markdown><![CDATA[${item.markdown}]]></source:markdown>`
       : '';
 
+    const titleTag = item.title
+      ? `      <title>${escapeXml(item.title)}</title>\n`
+      : '';
+
     return `    <item>
-      <title>${escapeXml(item.title)}</title>
-      <link>${escapeXml(item.link)}</link>
+${titleTag}      <link>${escapeXml(item.link)}</link>
       <description><![CDATA[${item.description}]]></description>
       <dc:creator>${escapeXml(item.authorName)}</dc:creator>
 ${item.authorUri ? `      <author>${escapeXml(item.authorUri)}</author>` : ''}

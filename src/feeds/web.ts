@@ -887,7 +887,7 @@ const handleFeedRequest = async (c: any) => {
     const imageUrl = getPostImageUrl(m.embed, m.post_did);
 
     return {
-      title: m.post_text.substring(0, 80).replace(/\n/g, ' ') + (m.post_text.length > 80 ? '...' : ''),
+      title: '',
       link: postUrl,
       description: desc,
       authorName: profile.displayName || profile.handle,
@@ -1016,9 +1016,7 @@ const handleUserRequest = async (c: any) => {
 
     const imageUrl = getPostImageUrl(post.embed, actor.did);
 
-    const title = post.record.text.length > 80
-      ? post.record.text.substring(0, 80).replace(/\n/g, ' ') + '...'
-      : '';
+    const title = '';
 
     feedItems.push({
       title,
