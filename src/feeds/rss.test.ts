@@ -3,7 +3,9 @@ import {
   leafletToMarkdown,
   applyMarkdownFacets,
   getPostImageUrl,
-  generateRssFeed
+  generateRssFeed,
+  formatEmbedHtml,
+  formatEmbedMarkdown
 } from './rss.js';
 
 describe('rss feed utility functions', () => {
@@ -185,6 +187,65 @@ describe('rss feed utility functions', () => {
       };
       const url = getPostImageUrl(embed, 'did:plc:foo');
       expect(url).toBe('https://video.bsky.app/thumb123');
+    });
+  });
+
+  describe('embed formatting helpers', () => {
+    const mockExternal = {
+      $type: 'app.bsky.embed.external#view',
+      external: {
+        uri: 'https://www.npr.org/obits/123',
+        title: 'NPR Article Title',
+        description: 'NPR Article Description Snippet',
+        thumb: 'https://cdn.bsky.app/img/thumb.jpg'
+      }
+    };
+
+    const mockQuote = {
+      $type: 'app.bsky.embed.record#view',
+      record: {
+        $type: 'app.bsky.embed.record#viewRecord',
+        author: {
+          did: 'did:plc:quoted',
+          handle: 'quoted.bsky.social',
+          displayName: 'Quoted User'
+        },
+        value: {
+          text: 'Quoted post content'
+        }
+      }
+    };
+
+    describe('formatEmbedHtml', () => {
+      it('should format external link cards correctly', () => {
+        const html = formatEmbedHtml(mockExternal, 'did:plc:author');
+        expect(html).toContain('href="https://www.npr.org/obits/123"');
+        expect(html).toContain('NPR Article Title');
+        expect(html).toContain('NPR Article Description Snippet');
+        expect(html).toContain('src="https://cdn.bsky.app/img/thumb.jpg"');
+        expect(html).toContain('npr.org');
+      });
+
+      it('should format quote posts correctly', () => {
+        const html = formatEmbedHtml(mockQuote, 'did:plc:author');
+        expect(html).toContain('<strong>Quoted User</strong>');
+        expect(html).toContain('@quoted.bsky.social');
+        expect(html).toContain('Quoted post content');
+      });
+    });
+
+    describe('formatEmbedMarkdown', () => {
+      it('should format external link cards correctly', () => {
+        const md = formatEmbedMarkdown(mockExternal, 'did:plc:author');
+        expect(md).toContain('[NPR Article Title](https://www.npr.org/obits/123)');
+        expect(md).toContain('> NPR Article Description Snippet');
+      });
+
+      it('should format quote posts correctly', () => {
+        const md = formatEmbedMarkdown(mockQuote, 'did:plc:author');
+        expect(md).toContain('> **Quoted User** (@quoted.bsky.social)');
+        expect(md).toContain('> Quoted post content');
+      });
     });
   });
 

@@ -12,7 +12,7 @@ import { embedText } from '../track/embedClient.js';
 import { getCachedProfile, getCachedProfiles } from '../lib/pdsCache.js';
 import { isLeafletContent, renderLeafletHtml, renderContent } from '../blogs/lib/contentRenderer.js';
 import { registerSubscriber } from './rssCloud.js';
-import { generateRssFeed, leafletToMarkdown, postToHtml, getPostImageUrl, escapeXml } from './rss.js';
+import { generateRssFeed, leafletToMarkdown, postToHtml, getPostImageUrl, escapeXml, formatEmbedHtml, formatEmbedMarkdown } from './rss.js';
 import type { RssFeedItem } from './rss.js';
 
 type Variables = { userId: bigint };
@@ -878,12 +878,13 @@ const handleFeedRequest = async (c: any) => {
     const rkey = m.post_uri.split('/').pop() || '';
     const postUrl = `https://bsky.app/profile/${profile.handle}/post/${rkey}`;
     const descriptionHtml = postToHtml(m.post_text, m.facets);
+    const embedHtml = formatEmbedHtml(m.embed, m.post_did);
+    const desc = descriptionHtml + embedHtml;
+
+    const embedMarkdown = formatEmbedMarkdown(m.embed, m.post_did);
+    const markdown = m.post_text + embedMarkdown;
 
     const imageUrl = getPostImageUrl(m.embed, m.post_did);
-    let desc = descriptionHtml;
-    if (imageUrl) {
-      desc += `<br /><br /><img src="${escapeXml(imageUrl)}" style="max-width: 100%; border-radius: 8px;" />`;
-    }
 
     return {
       title: m.post_text.substring(0, 80).replace(/\n/g, ' ') + (m.post_text.length > 80 ? '...' : ''),
@@ -894,7 +895,7 @@ const handleFeedRequest = async (c: any) => {
       pubDate: m.matched_at.toISOString(),
       guid: m.post_uri,
       imageUrl,
-      markdown: m.post_text
+      markdown
     };
   });
 
@@ -1007,12 +1008,13 @@ const handleUserRequest = async (c: any) => {
     const rkey = post.uri.split('/').pop() || '';
     const postUrl = `https://bsky.app/profile/${actor.handle}/post/${rkey}`;
     const descriptionHtml = postToHtml(post.record.text, post.record.facets);
+    const embedHtml = formatEmbedHtml(post.embed, actor.did);
+    const desc = descriptionHtml + embedHtml;
+
+    const embedMarkdown = formatEmbedMarkdown(post.embed, actor.did);
+    const markdown = post.record.text + embedMarkdown;
 
     const imageUrl = getPostImageUrl(post.embed, actor.did);
-    let desc = descriptionHtml;
-    if (imageUrl) {
-      desc += `<br /><br /><img src="${escapeXml(imageUrl)}" style="max-width: 100%; border-radius: 8px;" />`;
-    }
 
     const title = post.record.text.length > 80
       ? post.record.text.substring(0, 80).replace(/\n/g, ' ') + '...'
@@ -1027,7 +1029,7 @@ const handleUserRequest = async (c: any) => {
       pubDate: post.record.createdAt,
       guid: post.uri,
       imageUrl,
-      markdown: post.record.text
+      markdown
     });
   }
 

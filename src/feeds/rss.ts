@@ -197,6 +197,169 @@ export function leafletToMarkdown(content: any, authorDid: string): string {
 }
 
 /**
+ * Format a Bluesky post's embed payload (images, external link card, video, quote post) into HTML.
+ */
+export function formatEmbedHtml(embed: any, authorDid: string): string {
+  if (!embed) return '';
+  let html = '';
+
+  const type = embed.$type || '';
+
+  // 1. Images
+  if (type === 'app.bsky.embed.images' || type === 'app.bsky.embed.images#view' || Array.isArray(embed.images)) {
+    const images = embed.images || [];
+    for (const img of images) {
+      const src = img.fullsize || img.thumb || (img.image?.ref?.$link ? `https://cdn.bsky.app/img/feed_fullsize/plain/${authorDid}/${img.image.ref.$link}@jpeg` : '');
+      if (src) {
+        const alt = img.alt || '';
+        html += `<br /><br /><img src="${escapeXml(src)}" alt="${escapeXml(alt)}" style="max-width: 100%; border-radius: 8px;" />`;
+      }
+    }
+  }
+
+  // 2. External Card
+  const external = embed.external;
+  if (external) {
+    const uri = external.uri || '';
+    const title = external.title || '';
+    const desc = external.description || '';
+    const thumbUrl = typeof external.thumb === 'string' && external.thumb.startsWith('http')
+      ? external.thumb
+      : (external.thumb?.ref?.$link ? `https://cdn.bsky.app/img/feed_fullsize/plain/${authorDid}/${external.thumb.ref.$link}@jpeg` : '');
+
+    let host = '';
+    try {
+      host = new URL(uri).hostname;
+    } catch {}
+
+    html += `<br /><br />
+<div style="border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; max-width: 550px; background-color: #ffffff; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+  <a href="${escapeXml(uri)}" target="_blank" rel="noopener" style="text-decoration: none; color: inherit; display: block;">
+    ${thumbUrl ? `<img src="${escapeXml(thumbUrl)}" style="width: 100%; height: auto; max-height: 250px; object-fit: cover; border-bottom: 1px solid #e2e8f0;" />` : ''}
+    <div style="padding: 12px;">
+      <div style="font-weight: bold; font-size: 14px; line-height: 1.4; color: #0f172a; margin-bottom: 4px;">${escapeXml(title)}</div>
+      ${desc ? `<div style="font-size: 12px; line-height: 1.5; color: #64748b; margin-bottom: 6px;">${escapeXml(desc)}</div>` : ''}
+      ${host ? `<div style="font-size: 11px; color: #94a3b8; font-weight: 500; text-transform: lowercase;">${escapeXml(host)}</div>` : ''}
+    </div>
+  </a>
+</div>`;
+  }
+
+  // 3. Video
+  if (type === 'app.bsky.embed.video' || type === 'app.bsky.embed.video#view') {
+    const playlist = embed.playlist || '';
+    const thumbUrl = typeof embed.thumbnail === 'string' && embed.thumbnail.startsWith('http')
+      ? embed.thumbnail
+      : (embed.thumbnail?.ref?.$link ? `https://cdn.bsky.app/img/feed_fullsize/plain/${authorDid}/${embed.thumbnail.ref.$link}@jpeg` : '');
+    
+    html += `<br /><br />
+<div style="position: relative; max-width: 550px; border-radius: 12px; overflow: hidden; background-color: #000;">
+  <a href="${escapeXml(playlist || thumbUrl || '#')}" target="_blank" rel="noopener" style="display: block;">
+    ${thumbUrl ? `<img src="${escapeXml(thumbUrl)}" style="width: 100%; height: auto; opacity: 0.8;" />` : ''}
+    <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 48px; height: 48px; background: rgba(0,0,0,0.7); border-radius: 50%; display: flex; align-items: center; justify-content: center;">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" style="margin-left: 3px;"><path d="M8 5v14l11-7z" fill="#fff"/></svg>
+    </div>
+  </a>
+</div>`;
+  }
+
+  // 4. Quoted post (record)
+  const record = embed.record;
+  if (record) {
+    const text = record.value?.text || record.record?.text || '';
+    const author = record.author || {};
+    const displayName = author.displayName || author.handle || '';
+    const handle = author.handle ? `@${author.handle}` : '';
+    
+    if (text) {
+      html += `<br /><br />
+<div style="border-left: 3px solid #cbd5e1; padding-left: 12px; margin-left: 4px; color: #475569;">
+  <strong>${escapeXml(displayName)}</strong> ${handle ? `<span style="font-size: 12px; color: #94a3b8;">${escapeXml(handle)}</span>` : ''}
+  <p style="margin: 4px 0 0 0; font-size: 13px; line-height: 1.5;">${escapeXml(text)}</p>
+</div>`;
+    }
+  }
+
+  // 5. recordWithMedia
+  if (embed.media) {
+    html += formatEmbedHtml(embed.media, authorDid);
+  }
+  if (embed.record?.record) {
+    html += formatEmbedHtml({ record: embed.record }, authorDid);
+  }
+
+  return html;
+}
+
+/**
+ * Format a Bluesky post's embed payload into Markdown.
+ */
+export function formatEmbedMarkdown(embed: any, authorDid: string): string {
+  if (!embed) return '';
+  let md = '';
+
+  const type = embed.$type || '';
+
+  // 1. Images
+  if (type === 'app.bsky.embed.images' || type === 'app.bsky.embed.images#view' || Array.isArray(embed.images)) {
+    const images = embed.images || [];
+    for (const img of images) {
+      const src = img.fullsize || img.thumb || (img.image?.ref?.$link ? `https://cdn.bsky.app/img/feed_fullsize/plain/${authorDid}/${img.image.ref.$link}@jpeg` : '');
+      if (src) {
+        const alt = img.alt || '';
+        md += `\n\n![${alt}](${src})`;
+      }
+    }
+  }
+
+  // 2. External Card
+  const external = embed.external;
+  if (external) {
+    const uri = external.uri || '';
+    const title = external.title || '';
+    const desc = external.description || '';
+    
+    md += `\n\n[${title || uri}](${uri})`;
+    if (desc) {
+      md += `\n> ${desc}`;
+    }
+  }
+
+  // 3. Video
+  if (type === 'app.bsky.embed.video' || type === 'app.bsky.embed.video#view') {
+    const playlist = embed.playlist || '';
+    const thumbUrl = typeof embed.thumbnail === 'string' && embed.thumbnail.startsWith('http')
+      ? embed.thumbnail
+      : (embed.thumbnail?.ref?.$link ? `https://cdn.bsky.app/img/feed_fullsize/plain/${authorDid}/${embed.thumbnail.ref.$link}@jpeg` : '');
+    
+    md += `\n\n[Watch Video](${playlist || thumbUrl || '#'})`;
+  }
+
+  // 4. Quoted post (record)
+  const record = embed.record;
+  if (record) {
+    const text = record.value?.text || record.record?.text || '';
+    const author = record.author || {};
+    const displayName = author.displayName || author.handle || 'User';
+    const handle = author.handle ? `@${author.handle}` : '';
+    
+    if (text) {
+      md += `\n\n> **${displayName}** (${handle})\n> ${text.replace(/\n/g, '\n> ')}`;
+    }
+  }
+
+  // 5. recordWithMedia
+  if (embed.media) {
+    md += formatEmbedMarkdown(embed.media, authorDid);
+  }
+  if (embed.record?.record) {
+    md += formatEmbedMarkdown({ record: embed.record }, authorDid);
+  }
+
+  return md;
+}
+
+/**
  * Format a Bluesky post (text + facets) to HTML for RSS description.
  */
 export function postToHtml(text: string, facets?: any[]): string {
