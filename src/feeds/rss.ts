@@ -443,7 +443,7 @@ ${markdownElement}
     <language>${opts.language || 'en'}</language>
     <lastBuildDate>${new Date().toUTCString()}</lastBuildDate>
     <generator>feeds.social RSS</generator>
-    <docs>https://www.rssboard.org/rss-specification</docs>
+    <docs>http://cyber.law.harvard.edu/rss/rss.html</docs>
     <ttl>5</ttl>${cloudTag}${channelImage}
 ${itemsXml}
   </channel>
