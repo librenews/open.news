@@ -7,6 +7,7 @@ import { embedTexts, checkEmbedHealth } from './embedClient.js';
 import { logEmbeddings } from './embedLogger.js';
 import { logModeration } from '../db/queries/moderation.js';
 import { enqueueJob } from '../web/jobEnqueue.js';
+import { notifyRssCloudSubscribers } from '../feeds/rssCloud.js';
 
 const STREAM_KEY = 'track:posts';
 const GROUP_NAME = 'track-workers';
@@ -230,10 +231,19 @@ async function processMessages(redis: Redis): Promise<void> {
       for (const trackId of matchedTrackIds) {
         await insertTrackMatch(trackId, post.uri, post.did, post.text, post.facets, post.embed);
         
+        // Broadcast RSS Cloud notifications for custom feeds
+        const track = cachedTracks.find(t => Number(t.id) === trackId);
+        if (track && track.uuid) {
+          const feedsBaseUrl = process.env.FEEDS_BASE_URL ?? 'http://localhost:4300';
+          const feedUrl = `${feedsBaseUrl}/feed/${track.uuid}.rss`;
+          notifyRssCloudSubscribers(feedUrl).catch((err) => {
+            logger.error({ err, feedUrl }, 'RSS Cloud notification failed');
+          });
+        }
+
         // Broadcast webhook alerts
         const activeWhs = webhooks.get(trackId);
         if (activeWhs) {
-          const track = cachedTracks.find(t => Number(t.id) === trackId);
           if (track) {
             for (const wh of activeWhs) {
               enqueueJob('deliverWebhook', {

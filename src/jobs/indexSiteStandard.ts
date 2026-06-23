@@ -11,6 +11,7 @@ import { verifyDocument } from '../lib/verification.js';
 import { chunkText } from '../lib/chunking.js';
 import { embedTexts, getEmbedDimension } from '../track/embedClient.js';
 import { enqueueJob } from '../web/jobEnqueue.js';
+import { isActorSubscribed, notifyRssCloudSubscribers } from '../feeds/rssCloud.js';
 
 interface IndexSiteStandardData {
   postUri: string;
@@ -230,6 +231,20 @@ export async function indexSiteStandardJob(job: Job<IndexSiteStandardData>) {
 
     // 6. Save core metadata to Postgres
     await upsertSiteStandardArticle(postUri, did, authorHandle, title, description, publishedAt, site, path, record, language, wordCount, suppressed);
+    
+    // Trigger RSS Cloud notifications for user feed subscribers
+    if (isActorSubscribed(did)) {
+      const feedsBaseUrl = process.env.FEEDS_BASE_URL ?? 'http://localhost:4300';
+      const feedUrls = [`${feedsBaseUrl}/user/${did}.rss`];
+      if (authorHandle && authorHandle !== did) {
+        feedUrls.push(`${feedsBaseUrl}/user/${authorHandle}.rss`);
+      }
+      for (const feedUrl of feedUrls) {
+        notifyRssCloudSubscribers(feedUrl).catch((err) => {
+          logger.error({ err, feedUrl }, 'RSS Cloud user feed notification failed');
+        });
+      }
+    }
     
     // 3. Index to OpenSearch
     const os = getOsClient();

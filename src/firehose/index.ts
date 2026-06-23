@@ -9,10 +9,11 @@ import { logger } from '../lib/logger.js';
 import { enqueueJob } from '../web/jobEnqueue.js';
 import { xaddPost } from '../lib/redis.js';
 import { logModeration } from '../db/queries/moderation.js';
-import { warmRecord, invalidateRecord } from '../lib/pdsCache.js';
+import { warmRecord, invalidateRecord, getCachedProfile } from '../lib/pdsCache.js';
 import { refreshGeotaggedDids, geotagFromAccount, getGeoForDid } from '../nearby/geoCache.js';
 import { getNearbyBotDid } from '../nearby/bot.js';
 import { verifyPublication } from '../lib/verification.js';
+import { isActorSubscribed, notifyRssCloudSubscribers } from '../feeds/rssCloud.js';
 
 const CURSOR_PERSIST_INTERVAL_MS = 30_000;
 const DID_REFRESH_INTERVAL_MS = 60_000;
@@ -315,6 +316,22 @@ function handleEvent(event: JetstreamEvent): void {
   if (commit.collection !== 'app.bsky.feed.post' || !commit.record) return;
 
   const post = commit.record;
+
+  // Trigger RSS Cloud notifications for user feed subscribers
+  if (isActorSubscribed(did)) {
+    const feedsBaseUrl = process.env.FEEDS_BASE_URL ?? 'http://localhost:4300';
+    const feedUrls = [`${feedsBaseUrl}/user/${did}.rss`];
+    getCachedProfile(did).then((profile) => {
+      if (profile?.handle && profile.handle !== did) {
+        feedUrls.push(`${feedsBaseUrl}/user/${profile.handle}.rss`);
+      }
+      for (const feedUrl of feedUrls) {
+        notifyRssCloudSubscribers(feedUrl).catch(() => {});
+      }
+    }).catch(() => {
+      notifyRssCloudSubscribers(feedUrls[0]).catch(() => {});
+    });
+  }
 
   // Push every post to Redis stream for track matching (fire-and-forget)
   const langs = Array.isArray(post.langs) ? post.langs.join(',') : '';
