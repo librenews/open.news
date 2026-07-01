@@ -601,7 +601,7 @@ export function EditorPage() {
       function clientSlugify(text) {
         return text
           .toLowerCase()
-          .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+          .normalize('NFD').replace(/[\\u0300-\\u036f]/g, '')
           .replace(/[^a-z0-9]+/g, '-')
           .replace(/(^-|-$)/g, '')
           .substring(0, 64)
@@ -663,9 +663,9 @@ export function EditorPage() {
          // Show slug dialog for new posts
          var autoSlug = clientSlugify(title);
          var slug = window.prompt(
-           'URL slug for your post:\n\n' +
-           'Title: ' + title + '\n' +
-           'URL: /post/you/' + autoSlug + '\n\n' +
+           'URL slug for your post:\\n\\n' +
+           'Title: ' + title + '\\n' +
+           'URL: /post/you/' + autoSlug + '\\n\\n' +
            'Edit the slug below or press OK to use the default:',
            autoSlug
          );
@@ -703,7 +703,7 @@ export function EditorPage() {
 
            // Handle collision
            if (data.collision) {
-             var action = window.confirm(data.message + '\n\nPress OK to overwrite, or Cancel to choose a different slug.');
+             var action = window.confirm(data.message + '\\n\\nPress OK to overwrite, or Cancel to choose a different slug.');
              if (action) {
                // User confirmed overwrite
                data = await doPublish(slug, true);
@@ -718,7 +718,7 @@ export function EditorPage() {
                data = await doPublish(newSlug.trim(), false);
                // Handle second collision (unlikely but possible)
                if (data.collision) {
-                 if (window.confirm(data.message + '\n\nOverwrite?')) {
+                 if (window.confirm(data.message + '\\n\\nOverwrite?')) {
                    data = await doPublish(newSlug.trim(), true);
                  } else {
                    btn.innerText = defaultTxt;
