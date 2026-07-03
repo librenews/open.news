@@ -27,12 +27,12 @@ export function buildBlobUrl(did: string, cid: string): string {
 
 /**
  * Download a video from a URL, extract audio as 16kHz mono WAV.
- * Returns the path to the extracted audio file, or null if failed.
+ * Returns the path to the extracted audio file. Throws an error on failure.
  */
 export async function downloadAndExtractAudio(
   videoUrl: string,
   filePrefix: string
-): Promise<string | null> {
+): Promise<string> {
   let videoPath: string | null = null;
   let audioPath: string | null = null;
 
@@ -44,37 +44,46 @@ export async function downloadAndExtractAudio(
 
     // Download video blob via PDS getBlob endpoint
     logger.debug({ url: videoUrl, path: videoPath }, 'Downloading video blob');
-    await execFileP('curl', [
-      '-sL',                    // silent, follow redirects
-      '--max-time', '60',       // 60s total timeout
-      '--max-filesize', '104857600', // 100MB max
-      '-o', videoPath,
-      videoUrl,
-    ], { timeout: DOWNLOAD_TIMEOUT_MS });
+    try {
+      await execFileP('curl', [
+        '-sL',                    // silent, follow redirects
+        '--max-time', '60',       // 60s total timeout
+        '--max-filesize', '104857600', // 100MB max
+        '-o', videoPath,
+        videoUrl,
+      ], { timeout: DOWNLOAD_TIMEOUT_MS });
+    } catch (err: any) {
+      throw new Error(`Curl download failed: ${err.message || err}`);
+    }
 
     // Verify the file exists and has content
+    let fileInfo;
     try {
-      const fileInfo = await stat(videoPath);
-      if (fileInfo.size < 1000) {
-        logger.warn({ url: videoUrl, size: fileInfo.size }, 'Downloaded file too small, likely an error response');
-        return null;
-      }
+      fileInfo = await stat(videoPath);
     } catch {
-      logger.warn({ url: videoUrl }, 'Downloaded file not found');
-      return null;
+      throw new Error('Downloaded file not found on disk');
+    }
+
+    if (fileInfo.size < 1000) {
+      // Read a bit of the file to see if it is a JSON error from PDS
+      throw new Error(`Downloaded file too small (${fileInfo.size} bytes), likely PDS error`);
     }
 
     // Extract audio with ffmpeg: 16kHz mono WAV (optimal for Whisper)
     logger.debug({ input: videoPath, output: audioPath }, 'Extracting audio');
-    await execFileP('ffmpeg', [
-      '-i', videoPath,
-      '-ar', '16000',           // 16kHz sample rate (Whisper optimal)
-      '-ac', '1',               // mono
-      '-f', 'wav',              // WAV format
-      '-y',                     // overwrite output
-      '-loglevel', 'error',     // suppress noise
-      audioPath,
-    ], { timeout: FFMPEG_TIMEOUT_MS });
+    try {
+      await execFileP('ffmpeg', [
+        '-i', videoPath,
+        '-ar', '16000',           // 16kHz sample rate (Whisper optimal)
+        '-ac', '1',               // mono
+        '-f', 'wav',              // WAV format
+        '-y',                     // overwrite output
+        '-loglevel', 'error',     // suppress noise
+        audioPath,
+      ], { timeout: FFMPEG_TIMEOUT_MS });
+    } catch (err: any) {
+      throw new Error(`ffmpeg audio extraction failed: ${err.message || err}`);
+    }
 
     // Clean up the video file immediately (we only need the audio)
     cleanupTempFile(videoPath);
@@ -83,12 +92,12 @@ export async function downloadAndExtractAudio(
     logger.debug({ audioPath }, 'Audio extracted successfully');
     return audioPath;
 
-  } catch (err) {
-    logger.error({ err, videoUrl }, 'Failed to download/extract audio');
+  } catch (err: any) {
+    logger.error({ err: err.message || err, videoUrl }, 'Failed to download/extract audio');
     // Clean up on failure
     if (videoPath) cleanupTempFile(videoPath);
     if (audioPath) cleanupTempFile(audioPath);
-    return null;
+    throw err;
   }
 }
 
