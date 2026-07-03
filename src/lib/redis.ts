@@ -26,3 +26,21 @@ export function xaddPost(did: string, text: string, uri: string, timeUs: string,
   r.xadd('track:posts', 'MAXLEN', '~', 250000, '*', 'did', did, 'text', text, 'uri', uri, 'ts', timeUs, 'langs', langs, 'facets', facets, 'embed', embed)
     .catch((err: Error) => logger.warn({ err }, 'Redis XADD failed'));
 }
+
+/**
+ * Fire-and-forget push to media items Redis stream.
+ * Used by the firehose to enqueue detected video/audio for processing.
+ */
+export function xaddMedia(
+  uri: string, did: string, rkey: string, cid: string,
+  mediaType: string, sourceUrl: string, postText: string,
+  altText: string, aspectRatio: string, langs: string, timeUs: string
+): void {
+  const r = getRedis();
+  r.xadd('media:items', 'MAXLEN', '~', 50000, '*',
+    'uri', uri, 'did', did, 'rkey', rkey, 'cid', cid,
+    'mediaType', mediaType, 'sourceUrl', sourceUrl,
+    'postText', postText, 'altText', altText,
+    'aspectRatio', aspectRatio, 'langs', langs, 'ts', timeUs
+  ).catch((err: Error) => logger.warn({ err }, 'Redis XADD media failed'));
+}

@@ -7,7 +7,7 @@ import { normalizeArticleUrl, extractUrlsFromPost } from '../lib/urls.js';
 import { config } from '../lib/config.js';
 import { logger } from '../lib/logger.js';
 import { enqueueJob } from '../web/jobEnqueue.js';
-import { xaddPost } from '../lib/redis.js';
+import { xaddPost, xaddMedia } from '../lib/redis.js';
 import { logModeration } from '../db/queries/moderation.js';
 import { warmRecord, invalidateRecord, getCachedProfile } from '../lib/pdsCache.js';
 import { refreshGeotaggedDids, geotagFromAccount, getGeoForDid } from '../nearby/geoCache.js';
@@ -455,6 +455,48 @@ function handleEvent(event: JetstreamEvent): void {
             getVerifiedSiteOrigins().catch(() => {});
           }
         } catch {}
+      }
+    }
+  }
+
+  // ── Video embed detection — index all native Bluesky video ─────────────────
+  {
+    const embed = post.embed as Record<string, unknown> | undefined;
+    if (embed) {
+      let videoCid: string | undefined;
+      let videoAltText = '';
+      let videoAspectRatio = '';
+
+      // Direct video embed: { $type: 'app.bsky.embed.video', video: { ref: { $link }, ... }, ... }
+      if (embed.$type === 'app.bsky.embed.video') {
+        const video = embed.video as Record<string, unknown> | undefined;
+        videoCid = (video?.ref as Record<string, string> | undefined)?.$link;
+        videoAltText = (embed.alt as string) ?? '';
+        const ar = embed.aspectRatio as Record<string, number> | undefined;
+        if (ar?.width && ar?.height) videoAspectRatio = `${ar.width}:${ar.height}`;
+      }
+
+      // Nested in recordWithMedia: { $type: 'app.bsky.embed.recordWithMedia', media: { $type: 'app.bsky.embed.video', ... } }
+      if (embed.$type === 'app.bsky.embed.recordWithMedia') {
+        const media = embed.media as Record<string, unknown> | undefined;
+        if (media?.$type === 'app.bsky.embed.video') {
+          const video = media.video as Record<string, unknown> | undefined;
+          videoCid = (video?.ref as Record<string, string> | undefined)?.$link;
+          videoAltText = (media.alt as string) ?? '';
+          const ar = media.aspectRatio as Record<string, number> | undefined;
+          if (ar?.width && ar?.height) videoAspectRatio = `${ar.width}:${ar.height}`;
+        }
+      }
+
+      if (videoCid) {
+        // Build the CDN URL for the video blob
+        const sourceUrl = `https://video.bsky.app/watch/${did}/${videoCid}/video.mp4`;
+        xaddMedia(
+          postUri, did, commit.rkey ?? '', videoCid,
+          'video', sourceUrl, String(post.text ?? ''),
+          videoAltText, videoAspectRatio, langs,
+          String(event.time_us ?? Date.now() * 1000)
+        );
       }
     }
   }
