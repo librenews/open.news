@@ -158,13 +158,30 @@ async function processMediaItem(mediaId: number, fields: Record<string, string>)
     );
     stats.processed++;
 
-  } catch (err) {
-    logger.error({ err, uri, mediaId }, 'Failed to process media item');
-    await db.query(
-      'UPDATE media_items SET status = $1, error = $2 WHERE id = $3',
-      ['failed', String(err), mediaId]
-    ).catch(() => {});
-    stats.failed++;
+  } catch (err: any) {
+    const errMsg = String(err);
+    if (errMsg.includes('does not contain any stream')) {
+      logger.info({ uri, mediaId }, 'Video has no audio stream (silent), marking as done');
+      await db.query(
+        'UPDATE media_items SET status = $1, error = $2, processed_at = NOW() WHERE id = $3',
+        ['done', 'silent', mediaId]
+      ).catch(() => {});
+      stats.processed++;
+    } else if (errMsg.includes('Downloaded file too small') || errMsg.includes('not found on disk')) {
+      logger.warn({ uri, mediaId }, 'Blob download failed/not found, marking as skipped');
+      await db.query(
+        'UPDATE media_items SET status = $1, error = $2 WHERE id = $3',
+        ['skipped', errMsg, mediaId]
+      ).catch(() => {});
+      stats.skipped++;
+    } else {
+      logger.error({ err, uri, mediaId }, 'Failed to process media item');
+      await db.query(
+        'UPDATE media_items SET status = $1, error = $2 WHERE id = $3',
+        ['failed', errMsg, mediaId]
+      ).catch(() => {});
+      stats.failed++;
+    }
   } finally {
     // Always clean up temp audio file
     if (audioPath) {
