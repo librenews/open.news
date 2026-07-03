@@ -400,3 +400,46 @@ export async function ensureMediaIndex(): Promise<void> {
   });
   logger.info('OpenSearch media index created');
 }
+
+/**
+ * Search media content by transcript, post text, or alt text using full-text search.
+ */
+export async function searchMediaContent(query: string, limit = 20, cursor?: string) {
+  const os = getOsClient();
+  const must: any[] = [
+    {
+      multi_match: {
+        query: query,
+        fields: ['transcript^3', 'post_text^1.5', 'alt_text'],
+        type: 'most_fields',
+      }
+    }
+  ];
+
+  const filter: any[] = [];
+  if (cursor) {
+    filter.push({
+      range: {
+        created_at: { lt: cursor }
+      }
+    });
+  }
+
+  const res = await os.search({
+    index: MEDIA_INDEX,
+    body: {
+      size: limit,
+      query: {
+        bool: {
+          must: must,
+          ...(filter.length > 0 ? { filter } : {}),
+        }
+      },
+      sort: [
+        { created_at: { order: 'desc' } }
+      ]
+    }
+  });
+
+  return res.body.hits?.hits ?? [];
+}
