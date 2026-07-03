@@ -58,6 +58,7 @@ export interface CustomFeed {
   bsky_uri: string | null;
   seed_uris: string[];       // JSON array of AT-URIs
   is_public: boolean;
+  feed_type: string;
   created_at: Date;
   updated_at: Date;
 }
@@ -68,10 +69,11 @@ export async function createCustomFeed(params: {
   query: string;
   description?: string | null;
   seed_uris: string[];
+  feed_type?: string;
 }): Promise<CustomFeed> {
   const { rows } = await pool.query<CustomFeed>(
-    `INSERT INTO custom_feeds (owner_id, name, query, description, seed_uris)
-     VALUES ($1, $2, $3, $4, $5)
+    `INSERT INTO custom_feeds (owner_id, name, query, description, seed_uris, feed_type)
+     VALUES ($1, $2, $3, $4, $5, $6)
      RETURNING *`,
     [
       params.owner_id ?? null,
@@ -79,6 +81,7 @@ export async function createCustomFeed(params: {
       params.query,
       params.description ?? null,
       JSON.stringify(params.seed_uris),
+      params.feed_type ?? 'text',
     ]
   );
   return rows[0]!;

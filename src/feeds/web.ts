@@ -6,7 +6,7 @@ import { logger } from '../lib/logger.js';
 import { feedsAuthRouter, getOAuthClient, getAgent } from './auth.js';
 import { getFeedUserById, createCustomFeed, getCustomFeedByUuid, getCustomFeedsByOwner, updateCustomFeedBskyUri, deleteCustomFeed } from './db.js';
 import type { FeedUser, CustomFeed } from './db.js';
-import { upsertTrackQuery } from '../track/opensearch.js';
+import { upsertTrackQuery, searchMediaContent } from '../track/opensearch.js';
 import { db } from '../db/client.js';
 import { embedText } from '../track/embedClient.js';
 import { getCachedProfile, getCachedProfiles } from '../lib/pdsCache.js';
@@ -134,16 +134,200 @@ function renderLayout(user: FeedUser | null, content: string, title = 'feeds.soc
 
 // ─── Home / Search ──────────────────────────────────────────────────────────
 
+// ─── Home / Search ──────────────────────────────────────────────────────────
+
+function renderVideoCard(hit: any, profiles: Map<string, any>): string {
+  const source = hit._source;
+  const did = source.did;
+  const profile = profiles.get(did) || { handle: did, displayName: did, avatar: '' };
+  
+  const text = (source.post_text ?? '').slice(0, 280);
+  const transcript = source.transcript || '';
+  const date = source.created_at
+    ? new Date(source.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+    : '';
+  const rkey = source.uri.split('/').pop() || '';
+  const postUrl = `https://bsky.app/profile/${profile.handle}/post/${rkey}`;
+
+  const hasAudio = transcript !== 'silent' && transcript !== '';
+
+  return `
+    <div class="bg-white rounded-2xl border border-slate-200 p-5 hover:border-indigo-300 transition-all hover:shadow-sm fade-in mb-4">
+      <div class="flex items-start gap-4">
+        <!-- Author Profile -->
+        ${profile.avatar ? `<img src="${escapeHtml(profile.avatar)}" class="w-10 h-10 rounded-full shrink-0" alt="">` : '<div class="w-10 h-10 rounded-full bg-slate-200 shrink-0 flex items-center justify-center font-bold text-slate-400">?</div>'}
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center justify-between mb-2">
+            <div>
+              <span class="text-sm font-bold text-slate-800">${escapeHtml(profile.displayName || profile.handle)}</span>
+              <span class="text-xs text-slate-400 ml-1">@${escapeHtml(profile.handle)}</span>
+            </div>
+            <span class="text-[11px] text-slate-400">${date}</span>
+          </div>
+
+          <!-- Post text -->
+          ${text ? `<p class="text-sm text-slate-600 mb-3 leading-relaxed">${escapeHtml(text)}</p>` : ''}
+
+          <!-- Video Player (direct PDS stream) -->
+          ${source.source_url ? `
+            <div class="mb-4 rounded-xl overflow-hidden bg-black aspect-video max-w-md border border-slate-100 shadow-inner">
+              <video src="${escapeHtml(source.source_url)}" controls preload="none" class="w-full h-full object-contain"></video>
+            </div>
+          ` : ''}
+
+          <!-- Transcript Block -->
+          ${hasAudio ? `
+            <div class="bg-indigo-50/50 border border-indigo-100 rounded-xl p-3.5 mb-2">
+              <div class="flex items-center justify-between mb-2 text-[10px] text-indigo-500 font-bold uppercase tracking-wider">
+                <span>🎤 Transcript (${source.language ?? 'en'})</span>
+                ${source.duration_ms ? `<span>⏱ ${Math.round(source.duration_ms / 1000)}s</span>` : ''}
+              </div>
+              <p class="text-xs text-slate-700 italic leading-relaxed">"${escapeHtml(transcript)}"</p>
+            </div>
+          ` : `
+            <div class="bg-slate-50 border border-slate-100 rounded-xl p-2.5 mb-2 text-center text-xs text-slate-400">
+              🔇 Silent video / No audio stream detected
+            </div>
+          `}
+
+          <!-- Footer Actions -->
+          <div class="flex items-center justify-between mt-3 text-xs">
+            <a href="${postUrl}" target="_blank" rel="noopener" class="text-indigo-600 hover:text-indigo-700 font-semibold no-underline flex items-center gap-1">
+              View on Bluesky ↗
+            </a>
+            ${source.alt_text ? `<span class="text-[11px] text-slate-400 max-w-xs truncate" title="${escapeHtml(source.alt_text)}">Alt: "${escapeHtml(source.alt_text)}"</span>` : ''}
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+async function getTrendingTerms(limit = 8): Promise<string[]> {
+  try {
+    const { rows } = await db.query<{ word: string }>(`
+      SELECT word, count(*) as count
+      FROM (
+        SELECT regexp_replace(regexp_split_to_table(lower(text), '\\s+'), '[^a-z]', '', 'g') as word
+        FROM media_transcripts
+        WHERE created_at > NOW() - INTERVAL '48 hours'
+      ) words
+      WHERE length(word) > 4
+        AND word NOT IN (
+          'about', 'above', 'after', 'again', 'against', 'along', 'among', 'around', 
+          'because', 'before', 'being', 'below', 'between', 'could', 'didnt', 'doesnt', 
+          'doing', 'during', 'either', 'first', 'going', 'great', 'havent', 'having', 
+          'house', 'inside', 'might', 'never', 'other', 'people', 'really', 'should', 
+          'since', 'their', 'there', 'these', 'thing', 'think', 'those', 'through', 
+          'under', 'until', 'where', 'which', 'while', 'would', 'years', 'youre', 
+          'about', 'every', 'would', 'something', 'about', 'right', 'doing', 'where', 
+          'about', 'wants', 'being', 'better', 'where', 'another'
+        )
+      GROUP BY word
+      ORDER BY count DESC
+      LIMIT $1
+    `, [limit]);
+    return rows.map(r => r.word);
+  } catch (err) {
+    logger.error({ err }, 'Failed to fetch trending video terms');
+    return [];
+  }
+}
+
+async function renderVideoEmptyState(): Promise<string> {
+  const trending = await getTrendingTerms(6);
+  
+  // Fetch latest 5 non-silent videos to display as a discovery feed
+  let hits: any[] = [];
+  let profiles = new Map<string, any>();
+  try {
+    const os = getOsClient();
+    const latestRes = await os.search({
+      index: MEDIA_INDEX,
+      body: {
+        size: 5,
+        query: {
+          bool: {
+            must_not: [
+              { term: { transcript: 'silent' } }
+            ]
+          }
+        },
+        sort: [
+          { created_at: { order: 'desc' } }
+        ]
+      }
+    });
+    hits = latestRes.body.hits?.hits ?? [];
+    const authorDids = [...new Set(hits.map((h: any) => h._source.did))] as string[];
+    profiles = await getCachedProfiles(authorDids);
+  } catch (err) {
+    logger.warn({ err }, 'Failed to fetch discovery feed');
+  }
+
+  const categories = [
+    { name: 'Politics', query: 'election trump harris biden senate vote government', emoji: '🏛️', bg: 'bg-red-50 hover:bg-red-100 text-red-700 border-red-200' },
+    { name: 'Tech & AI', query: 'ai technology software robot computer developer coding coding chatgpt nvidia', emoji: '💻', bg: 'bg-sky-50 hover:bg-sky-100 text-sky-700 border-sky-200' },
+    { name: 'Finance & Business', query: 'inflation stocks business economy finance dollars crypto bitcoin money tax', emoji: '📈', bg: 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200' },
+    { name: 'Science & Nature', query: 'science nature space nasa planet trail hiking animal bird climate weather', emoji: '🌿', bg: 'bg-lime-50 hover:bg-lime-100 text-lime-700 border-lime-200' },
+    { name: 'Entertainment', query: 'game gaming nintendo pokemon anime music song movie show actor', emoji: '🎮', bg: 'bg-purple-50 hover:bg-purple-100 text-purple-700 border-purple-200' },
+    { name: 'Humor & Memes', query: 'funny meme joke comedy laugh fail dog cat puppy', emoji: '✨', bg: 'bg-amber-50 hover:bg-amber-100 text-amber-700 border-amber-200' },
+  ];
+
+  return `
+    <div class="space-y-12">
+      <!-- Browse by Smart Category -->
+      <div>
+        <h2 class="text-sm font-bold text-slate-400 uppercase tracking-wider mb-4 text-center">Smart Categories</h2>
+        <div class="grid grid-cols-2 md:grid-cols-3 gap-4 max-w-3xl mx-auto">
+          ${categories.map(cat => `
+            <a href="/?q=${encodeURIComponent(cat.query)}&type=video&category_name=${encodeURIComponent(cat.name)}" class="${cat.bg} border rounded-2xl p-4 text-center no-underline transition-all hover:scale-[1.02] active:scale-[0.98] shadow-sm flex flex-col items-center justify-center gap-1">
+              <span class="text-2xl">${cat.emoji}</span>
+              <span class="text-sm font-bold">${cat.name}</span>
+            </a>
+          `).join('')}
+        </div>
+      </div>
+
+      <!-- Trending Topics -->
+      ${trending.length > 0 ? `
+      <div>
+        <h2 class="text-sm font-bold text-slate-400 uppercase tracking-wider mb-4 text-center">📈 Trending in Videos</h2>
+        <div class="flex flex-wrap gap-2 justify-center max-w-2xl mx-auto">
+          ${trending.map(term => `
+            <a href="/?q=${encodeURIComponent(term)}&type=video" class="bg-indigo-50/50 hover:bg-indigo-100/80 text-indigo-700 border border-indigo-100/60 rounded-xl px-4 py-2 text-sm font-semibold transition-all no-underline">
+              #${escapeHtml(term)}
+            </a>
+          `).join('')}
+        </div>
+      </div>
+      ` : ''}
+
+      <!-- Discovery Feed (Latest Videos) -->
+      ${hits.length > 0 ? `
+      <div>
+        <h2 class="text-sm font-bold text-slate-400 uppercase tracking-wider mb-6 text-center">📺 Freshly Transcribed</h2>
+        <div class="space-y-4 max-w-2xl mx-auto">
+          ${hits.map((h: any) => renderVideoCard(h, profiles)).join('')}
+        </div>
+      </div>
+      ` : ''}
+    </div>
+  `;
+}
+
 app.get('/', async (c) => {
   const userId = c.get('userId');
   const user = userId ? await getFeedUserById(userId) : null;
   const q = c.req.query('q') || '';
+  const type = c.req.query('type') || 'text'; // 'text' or 'video'
+  const categoryName = c.req.query('category_name') || '';
 
   const content = `
     <div class="max-w-4xl mx-auto px-6 ${q ? 'pt-8' : 'pt-16'} pb-12">
       ${!q ? `
       <!-- Hero -->
-      <div class="text-center mb-12">
+      <div class="text-center mb-8">
         <h1 class="text-4xl md:text-5xl font-extrabold text-slate-900 mb-4 leading-tight">
           Create a <span class="bg-gradient-to-r from-indigo-600 to-violet-500 bg-clip-text text-transparent">custom feed</span><br>from any topic
         </h1>
@@ -153,8 +337,19 @@ app.get('/', async (c) => {
       </div>
       ` : ''}
 
+      <!-- Tabs -->
+      <div class="flex items-center justify-center gap-2 mb-8">
+        <a href="/?q=${encodeURIComponent(q)}&type=text" class="px-4 py-2 rounded-xl text-sm font-semibold transition-all ${type === 'text' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100'} no-underline">
+          📝 All Posts
+        </a>
+        <a href="/?q=${encodeURIComponent(q)}&type=video" class="px-4 py-2 rounded-xl text-sm font-semibold transition-all ${type === 'video' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100'} no-underline">
+          🎥 Videos (Beta)
+        </a>
+      </div>
+
       <!-- Search bar -->
       <form action="/" method="GET" class="max-w-2xl mx-auto mb-12" id="search-form">
+        <input type="hidden" name="type" value="${escapeHtml(type)}">
         <div class="relative group">
           <div class="absolute inset-0 bg-gradient-to-r from-indigo-500/20 to-violet-500/20 rounded-2xl blur-xl group-hover:blur-2xl transition-all opacity-0 group-hover:opacity-100"></div>
           <div class="relative flex items-center bg-white rounded-2xl border border-slate-200 shadow-lg shadow-slate-200/50 overflow-hidden transition-shadow group-hover:shadow-xl">
@@ -165,7 +360,7 @@ app.get('/', async (c) => {
               type="text"
               name="q"
               value="${escapeHtml(q)}"
-              placeholder="climate change, AI regulation, local sports..."
+              placeholder="${type === 'video' ? 'Search speech spoken in videos...' : 'climate change, AI regulation, local sports...'}"
               autofocus
               class="flex-1 px-4 py-4 text-base text-slate-800 placeholder:text-slate-400 focus:outline-none bg-transparent"
               id="search-input"
@@ -179,51 +374,104 @@ app.get('/', async (c) => {
 
       <!-- Results (rendered server-side if q is present) -->
       <div id="results">
-        ${q ? '' : renderEmptyState()}
+        ${q ? '' : (type === 'video' ? '<!-- video-empty-state-placeholder -->' : renderEmptyState())}
       </div>
     </div>
   `;
 
   if (!q) {
+    if (type === 'video') {
+      try {
+        const videoEmptyState = await renderVideoEmptyState();
+        const videoContent = content.replace('<!-- video-empty-state-placeholder -->', videoEmptyState);
+        return c.html(renderLayout(user, videoContent, 'Video Search — feeds.social'));
+      } catch (err) {
+        logger.error({ err }, 'Failed to render video empty state');
+        return c.html(renderLayout(user, content.replace('<!-- video-empty-state-placeholder -->', ''), 'Video Search — feeds.social'));
+      }
+    }
     return c.html(renderLayout(user, content, 'feeds.social — Create Custom Bluesky Feeds'));
   }
 
-  // Run search against Bluesky
+  // Run search
   try {
-    const posts = await searchBskyPosts(q, 20);
+    let resultsHtml = '';
+    if (type === 'video') {
+      const hits = await searchMediaContent(q, 20);
+      const authorDids = [...new Set(hits.map((h: any) => h._source.did))] as string[];
+      const profiles = await getCachedProfiles(authorDids);
 
-    const resultsHtml = posts.length > 0 ? `
-      <div class="fade-in">
-        <div class="flex items-center justify-between mb-6">
-          <p class="text-sm text-slate-500">${posts.length} posts for "<strong>${escapeHtml(q)}</strong>"</p>
-          <button
-            hx-post="/api/feeds/create"
-            hx-vals='${JSON.stringify({ query: q, name: q })}'
-            hx-target="#create-result"
-            hx-swap="innerHTML"
-            hx-indicator="#create-spinner"
-            class="bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white text-sm font-bold px-5 py-2.5 rounded-xl transition-all cursor-pointer shadow-sm hover:shadow-md flex items-center gap-2"
-          >
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"></path></svg>
-            Create Feed
-          </button>
-        </div>
-        <div id="create-result" class="mb-4"></div>
-        <div id="create-spinner" class="htmx-indicator mb-4">
-          <div class="bg-indigo-50 border border-indigo-200 rounded-xl p-4 text-sm text-indigo-700 flex items-center gap-3">
-            <div class="w-4 h-4 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin"></div>
-            Creating your feed…
+      const heading = categoryName
+        ? `Category: <strong>${escapeHtml(categoryName)}</strong>`
+        : `Search: "<strong>${escapeHtml(q)}</strong>"`;
+
+      resultsHtml = hits.length > 0 ? `
+        <div class="fade-in">
+          <div class="flex items-center justify-between mb-6">
+            <p class="text-sm text-slate-500">${hits.length} videos matching ${heading}</p>
+            <button
+              hx-post="/api/feeds/create"
+              hx-vals='${JSON.stringify({ query: q, name: categoryName || q, feed_type: 'video' })}'
+              hx-target="#create-result"
+              hx-swap="innerHTML"
+              hx-indicator="#create-spinner"
+              class="bg-gradient-to-r from-indigo-500 to-violet-500 hover:from-indigo-600 hover:to-violet-600 text-white text-sm font-bold px-5 py-2.5 rounded-xl transition-all cursor-pointer shadow-sm hover:shadow-md flex items-center gap-2"
+            >
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"></path></svg>
+              Create Video Feed
+            </button>
+          </div>
+          <div id="create-result" class="mb-4"></div>
+          <div id="create-spinner" class="htmx-indicator mb-4">
+            <div class="bg-indigo-50 border border-indigo-200 rounded-xl p-4 text-sm text-indigo-700 flex items-center gap-3">
+              <div class="w-4 h-4 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin"></div>
+              Creating your video feed…
+            </div>
+          </div>
+          <div class="space-y-4">
+            ${hits.map((h: any) => renderVideoCard(h, profiles)).join('')}
           </div>
         </div>
-        <div class="space-y-3">
-          ${posts.map(p => renderPostCard(p)).join('')}
+      ` : `
+        <div class="fade-in text-center py-12">
+          <p class="text-slate-400 text-sm">No videos found for "<strong>${escapeHtml(q)}</strong>". Try a different search.</p>
         </div>
-      </div>
-    ` : `
-      <div class="fade-in text-center py-12">
-        <p class="text-slate-400 text-sm">No posts found for "<strong>${escapeHtml(q)}</strong>". Try a different query.</p>
-      </div>
-    `;
+      `;
+    } else {
+      const posts = await searchBskyPosts(q, 20);
+      resultsHtml = posts.length > 0 ? `
+        <div class="fade-in">
+          <div class="flex items-center justify-between mb-6">
+            <p class="text-sm text-slate-500">${posts.length} posts for "<strong>${escapeHtml(q)}</strong>"</p>
+            <button
+              hx-post="/api/feeds/create"
+              hx-vals='${JSON.stringify({ query: q, name: q, feed_type: 'text' })}'
+              hx-target="#create-result"
+              hx-swap="innerHTML"
+              hx-indicator="#create-spinner"
+              class="bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white text-sm font-bold px-5 py-2.5 rounded-xl transition-all cursor-pointer shadow-sm hover:shadow-md flex items-center gap-2"
+            >
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"></path></svg>
+              Create Feed
+            </button>
+          </div>
+          <div id="create-result" class="mb-4"></div>
+          <div id="create-spinner" class="htmx-indicator mb-4">
+            <div class="bg-indigo-50 border border-indigo-200 rounded-xl p-4 text-sm text-indigo-700 flex items-center gap-3">
+              <div class="w-4 h-4 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin"></div>
+              Creating your feed…
+            </div>
+          </div>
+          <div class="space-y-3">
+            ${posts.map(p => renderPostCard(p)).join('')}
+          </div>
+        </div>
+      ` : `
+        <div class="fade-in text-center py-12">
+          <p class="text-slate-400 text-sm">No posts found for "<strong>${escapeHtml(q)}</strong>". Try a different query.</p>
+        </div>
+      `;
+    }
 
     const fullContent = content.replace('<div id="results">\n        \n      </div>', `<div id="results">${resultsHtml}</div>`);
     return c.html(renderLayout(user, fullContent, `${q} — feeds.social`));
@@ -327,66 +575,86 @@ app.post('/api/feeds/create', async (c) => {
   const body = await c.req.parseBody();
   const query = String(body.query || '').trim();
   const name = String(body.name || query).trim();
+  const feedType = String(body.feed_type || 'text').trim();
 
   if (!query) {
     return c.html('<div class="bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-700">Please provide a search query.</div>');
   }
 
   try {
-    // 1. Search Bluesky for seed post URIs
-    const posts = await searchBskyPosts(query, 30);
-    const seedUris = posts.map(p => p.uri);
+    let seedUris: string[] = [];
+    if (feedType === 'video') {
+      // Search media content index for seed posts
+      const hits = await searchMediaContent(query, 30);
+      seedUris = hits.map((h: any) => h._source.uri);
+    } else {
+      // Search standard Bluesky posts
+      const posts = await searchBskyPosts(query, 30);
+      seedUris = posts.map(p => p.uri);
+    }
 
     // 2. Create custom_feeds row
     const feed = await createCustomFeed({
       owner_id: user?.id ?? null,
       name,
       query,
-      description: `Custom feed: ${name}`,
+      description: `Custom ${feedType === 'video' ? 'video ' : ''}feed: ${name}`,
       seed_uris: seedUris,
+      feed_type: feedType,
     });
 
-    // 3. Create a corresponding track row so the worker starts percolating
-    const keywords = query.split(/\s+/).filter(k => k.length > 2);
-    let osQueryId = '';
-    try {
-      // Use a dedicated percolate doc ID prefix to keep them identifiable
-      osQueryId = await upsertTrackQuery(feed.id, keywords);
-    } catch (err) {
-      logger.warn({ err, feedId: feed.id }, 'OpenSearch percolate upsert failed (non-fatal)');
-    }
+    let trackId: number | null = null;
 
-    // Create a linked track row for the worker to pick up
-    const { rows: trackRows } = await db.query(
-      `INSERT INTO tracks (user_id, name, keywords, os_query_id, query, threshold, uuid)
-       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
-      [
-        1, // system user in track_users
-        name,
-        keywords,
-        osQueryId,
-        query,
-        0.70,
-        feed.uuid, // same UUID so feed skeleton can resolve
-      ]
-    );
-
-    // 4. Embed the query for semantic matching
-    try {
-      const embedding = await embedText(query);
-      if (embedding && trackRows[0]) {
-        await db.query(
-          'UPDATE tracks SET query_embedding = $1 WHERE id = $2',
-          [JSON.stringify(embedding), trackRows[0].id]
-        );
+    // 3. Create a corresponding track row so the worker starts percolating (only for text feeds)
+    if (feedType !== 'video') {
+      const keywords = query.split(/\s+/).filter(k => k.length > 2);
+      let osQueryId = '';
+      try {
+        // Use a dedicated percolate doc ID prefix to keep them identifiable
+        osQueryId = await upsertTrackQuery(feed.id, keywords);
+      } catch (err) {
+        logger.warn({ err, feedId: feed.id }, 'OpenSearch percolate upsert failed (non-fatal)');
       }
-    } catch (err) {
-      logger.warn({ err }, 'Embed failed (non-fatal)');
+
+      // Create a linked track row for the worker to pick up
+      const { rows: trackRows } = await db.query(
+        `INSERT INTO tracks (user_id, name, keywords, os_query_id, query, threshold, uuid)
+         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
+        [
+          1, // system user in track_users
+          name,
+          keywords,
+          osQueryId,
+          query,
+          0.70,
+          feed.uuid, // same UUID so feed skeleton can resolve
+        ]
+      );
+      if (trackRows[0]) {
+        trackId = trackRows[0].id;
+      }
+
+      // 4. Embed the query for semantic matching
+      try {
+        const embedding = await embedText(query);
+        if (embedding && trackId) {
+          await db.query(
+            'UPDATE tracks SET query_embedding = $1 WHERE id = $2',
+            [JSON.stringify(embedding), trackId]
+          );
+        }
+      } catch (err) {
+        logger.warn({ err }, 'Embed failed (non-fatal)');
+      }
     }
 
     // 5. Publish to Bluesky PDS
     let bskyUri = '';
     let publishedHandle = process.env.FEEDS_BSKY_HANDLE ?? process.env.BSKY_BOT_DID ?? process.env.TRACK_BSKY_HANDLE ?? 'feeds.social';
+    const feedDescription = feedType === 'video'
+      ? `Custom video feed searching: "${name}"`
+      : `Custom feed: ${name}`;
+
     try {
       if (user) {
         // Signed-in user: publish to THEIR PDS so the feed shows "By @theirhandle"
@@ -398,7 +666,7 @@ app.post('/api/feeds/create', async (c) => {
           record: {
             did: FEEDS_DID,
             displayName: name.length > 24 ? name.slice(0, 24) : name,
-            description: `Custom feed: ${name}`,
+            description: feedDescription,
             createdAt: new Date().toISOString(),
           },
         });
@@ -419,7 +687,7 @@ app.post('/api/feeds/create', async (c) => {
             record: {
               did: FEEDS_DID,
               displayName: name.length > 24 ? name.slice(0, 24) : name,
-              description: `Custom feed: ${name}`,
+              description: feedDescription,
               createdAt: new Date().toISOString(),
             },
           });
@@ -429,8 +697,8 @@ app.post('/api/feeds/create', async (c) => {
 
       if (bskyUri) {
         await updateCustomFeedBskyUri(feed.id, bskyUri);
-        if (trackRows[0]) {
-          await db.query('UPDATE tracks SET feed_published = true WHERE id = $1', [trackRows[0].id]);
+        if (trackId) {
+          await db.query('UPDATE tracks SET feed_published = true WHERE id = $1', [trackId]);
         }
       }
     } catch (err) {
@@ -452,7 +720,7 @@ app.post('/api/feeds/create', async (c) => {
           </div>
           <div>
             <p class="text-sm font-bold text-emerald-800 mb-1">Feed created: ${escapeHtml(name)}</p>
-            <p class="text-xs text-emerald-600 mb-3">Seeded with ${seedUris.length} posts. New matches will be added automatically.</p>
+            <p class="text-xs text-emerald-600 mb-3">${feedType === 'video' ? 'Dynamic video search feed created.' : `Seeded with ${seedUris.length} posts. New matches will be added automatically.`}</p>
             ${bskyAppUrl ? `
               <a href="${bskyAppUrl}" target="_blank" rel="noopener" class="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold px-5 py-2.5 rounded-xl transition-all no-underline shadow-sm hover:shadow-md">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
@@ -621,6 +889,24 @@ app.get('/xrpc/app.bsky.feed.getFeedSkeleton', async (c) => {
 
   if (!feed && trackCheck.length === 0) {
     return c.json({ error: 'UnknownFeed', message: 'Feed not found' }, 404);
+  }
+
+  // Handle video search feeds dynamically via OpenSearch
+  if (feed && feed.feed_type === 'video') {
+    try {
+      const hits = await searchMediaContent(feed.query, limit, cursor);
+      if (hits.length > 0) {
+        const lastDoc = hits[hits.length - 1]._source;
+        return c.json({
+          cursor: lastDoc.created_at,
+          feed: hits.map((h: any) => ({ post: h._source.uri })),
+        });
+      }
+      return c.json({ feed: [] });
+    } catch (err) {
+      logger.error({ err, uuid: rkey }, 'Failed to resolve video feed skeleton');
+      return c.json({ feed: [] });
+    }
   }
 
   // Extract requester DID from Authorization header (JWT)
