@@ -144,7 +144,7 @@ async def process_audio(req: ProcessRequest):
             waveform = waveform[:, :max_samples]
 
         inputs = clap_processor(
-            audios=waveform.squeeze().numpy(),
+            audio=waveform.squeeze().numpy(),
             sampling_rate=48000,
             return_tensors="pt",
         ).to("cpu")
