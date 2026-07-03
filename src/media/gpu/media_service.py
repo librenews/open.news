@@ -36,20 +36,20 @@ async def load_models():
 
     logger.info(f"Loading models on device: {DEVICE}")
 
-    # Load faster-whisper
+# Load faster-whisper
     from faster_whisper import WhisperModel
-    logger.info("Loading faster-whisper large-v3-turbo (int8)...")
+    logger.info("Loading faster-whisper medium (int8)...")
     whisper_model = WhisperModel(
-        "large-v3-turbo",
+        "medium",
         device=DEVICE,
         compute_type="int8" if DEVICE == "cuda" else "int8",
     )
     logger.info("faster-whisper loaded")
 
-    # Load CLAP
+    # Load CLAP on CPU to save GPU VRAM (CLAP uses ~1.5GB)
     from transformers import ClapModel, ClapProcessor
-    logger.info("Loading CLAP model...")
-    clap_model = ClapModel.from_pretrained("laion/larger_clap_music_and_speech").to(DEVICE)
+    logger.info("Loading CLAP model on CPU...")
+    clap_model = ClapModel.from_pretrained("laion/larger_clap_music_and_speech").to("cpu")
     clap_processor = ClapProcessor.from_pretrained("laion/larger_clap_music_and_speech")
     clap_model.eval()
     logger.info("CLAP loaded")
@@ -79,7 +79,7 @@ class TranscriptResult(BaseModel):
     language_probability: float
     segments: list[TranscriptSegment]
     duration_s: float
-    model: str = "whisper-large-v3-turbo"
+    model: str = "whisper-medium"
 
 
 class ProcessResponse(BaseModel):
@@ -147,7 +147,7 @@ async def process_audio(req: ProcessRequest):
             audios=waveform.squeeze().numpy(),
             sampling_rate=48000,
             return_tensors="pt",
-        ).to(DEVICE)
+        ).to("cpu")
 
         with torch.no_grad():
             audio_embed = clap_model.get_audio_features(**inputs)
