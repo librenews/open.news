@@ -42,6 +42,7 @@ export async function ensureIndex(): Promise<void> {
 export const ARTICLE_INDEX = 'article_chunks';
 export const SITE_STANDARD_INDEX = 'site_standard_docs';
 export const SITE_STANDARD_CHUNKS_INDEX = 'site_standard_chunks';
+export const MEDIA_INDEX = 'media_content';
 
 /** Ensure the articles index exists with knn vector mapping. */
 export async function ensureArticleIndex(): Promise<void> {
@@ -356,4 +357,46 @@ export async function getRelatedArticles(uri: string, limit: number = 3) {
     }
   });
   return res.body.hits?.hits || [];
+}
+
+/** Ensure the media content index exists with vector mapping for audio embeddings. */
+export async function ensureMediaIndex(): Promise<void> {
+  const os = getOsClient();
+  const exists = await os.indices.exists({ index: MEDIA_INDEX });
+  if (exists.body) return;
+
+  await os.indices.create({
+    index: MEDIA_INDEX,
+    body: {
+      settings: {
+        index: {
+          knn: true
+        }
+      },
+      mappings: {
+        properties: {
+          uri: { type: 'keyword' },
+          did: { type: 'keyword' },
+          media_type: { type: 'keyword' },
+          source_url: { type: 'keyword' },
+          alt_text: { type: 'text', analyzer: 'standard' },
+          post_text: { type: 'text', analyzer: 'standard' },
+          transcript: { type: 'text', analyzer: 'standard' },
+          language: { type: 'keyword' },
+          duration_ms: { type: 'integer' },
+          created_at: { type: 'date' },
+          audio_embedding: {
+            type: 'knn_vector',
+            dimension: 512, // CLAP audio embedding is 512 dimensions
+            method: {
+              name: 'hnsw',
+              space_type: 'cosinesimil',
+              engine: 'nmslib'
+            }
+          },
+        },
+      },
+    },
+  });
+  logger.info('OpenSearch media index created');
 }

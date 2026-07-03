@@ -14,6 +14,7 @@ import { logger } from '../lib/logger.js';
 import { config } from '../lib/config.js';
 import { downloadAndExtractAudio, buildBlobUrl, cleanupTempFile } from './download.js';
 import { processAudio, checkHealth } from './mediaClient.js';
+import { ensureMediaIndex, getOsClient, MEDIA_INDEX } from '../track/opensearch.js';
 
 const STREAM_KEY = 'media:items';
 const GROUP_NAME = 'media-workers';
@@ -151,6 +152,34 @@ async function processMediaItem(mediaId: number, fields: Record<string, string>)
       );
     }
 
+    // Index in OpenSearch
+    try {
+      const os = getOsClient();
+      const document: Record<string, any> = {
+        uri,
+        did: fields.did,
+        media_type: mediaType,
+        source_url: sourceUrl || null,
+        alt_text: fields.altText || null,
+        post_text: fields.postText || null,
+        transcript: result.transcript?.text || null,
+        language: result.transcript?.language || null,
+        duration_ms: result.audio_features?.duration_s ? Math.round(result.audio_features.duration_s * 1000) : null,
+        created_at: new Date().toISOString(),
+      };
+      if (result.embedding) {
+        document.audio_embedding = result.embedding;
+      }
+      await os.index({
+        index: MEDIA_INDEX,
+        id: uri,
+        body: document,
+      });
+      logger.debug({ uri }, 'Indexed media item in OpenSearch');
+    } catch (err) {
+      logger.error({ err, uri }, 'Failed to index media item in OpenSearch (non-fatal)');
+    }
+
     // Mark as done
     await db.query(
       'UPDATE media_items SET status = $1, processed_at = NOW() WHERE id = $2',
@@ -249,6 +278,13 @@ async function start() {
   logger.info('Media worker starting...');
 
   await ensureConsumerGroup();
+
+  // Ensure OpenSearch media content index exists
+  try {
+    await ensureMediaIndex();
+  } catch (err) {
+    logger.error({ err }, 'Failed to ensure OpenSearch media index');
+  }
 
   // Check if GPU service is available (non-blocking)
   try {
