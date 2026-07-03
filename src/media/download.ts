@@ -1,13 +1,13 @@
 /**
  * Media download utilities.
  *
- * Downloads video blobs from Bluesky CDN and extracts audio
- * using ffmpeg for GPU processing.
+ * Downloads video blobs from Bluesky PDS via com.atproto.sync.getBlob
+ * and extracts audio using ffmpeg for GPU processing.
  */
 
 import { execFile } from 'child_process';
 import { promisify } from 'util';
-import { mkdtemp, unlink, access } from 'fs/promises';
+import { mkdtemp, unlink, access, stat } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { logger } from '../lib/logger.js';
@@ -16,6 +16,14 @@ const execFileP = promisify(execFile);
 
 const DOWNLOAD_TIMEOUT_MS = 60_000; // 60s timeout for video download
 const FFMPEG_TIMEOUT_MS = 120_000;  // 120s timeout for audio extraction
+
+/**
+ * Build the PDS blob download URL for a Bluesky video.
+ * Uses bsky.social as a proxy (it forwards getBlob to the correct PDS).
+ */
+export function buildBlobUrl(did: string, cid: string): string {
+  return `https://bsky.social/xrpc/com.atproto.sync.getBlob?did=${encodeURIComponent(did)}&cid=${encodeURIComponent(cid)}`;
+}
 
 /**
  * Download a video from a URL, extract audio as 16kHz mono WAV.
@@ -34,8 +42,8 @@ export async function downloadAndExtractAudio(
     videoPath = join(tempDir, `${filePrefix}.mp4`);
     audioPath = join(tempDir, `${filePrefix}.wav`);
 
-    // Download video using curl (more reliable than fetch for large files)
-    logger.debug({ url: videoUrl, path: videoPath }, 'Downloading video');
+    // Download video blob via PDS getBlob endpoint
+    logger.debug({ url: videoUrl, path: videoPath }, 'Downloading video blob');
     await execFileP('curl', [
       '-sL',                    // silent, follow redirects
       '--max-time', '60',       // 60s total timeout
@@ -44,11 +52,15 @@ export async function downloadAndExtractAudio(
       videoUrl,
     ], { timeout: DOWNLOAD_TIMEOUT_MS });
 
-    // Verify the file exists and is non-empty
+    // Verify the file exists and has content
     try {
-      await access(videoPath);
+      const fileInfo = await stat(videoPath);
+      if (fileInfo.size < 1000) {
+        logger.warn({ url: videoUrl, size: fileInfo.size }, 'Downloaded file too small, likely an error response');
+        return null;
+      }
     } catch {
-      logger.warn({ url: videoUrl }, 'Downloaded file not found or empty');
+      logger.warn({ url: videoUrl }, 'Downloaded file not found');
       return null;
     }
 

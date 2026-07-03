@@ -489,8 +489,8 @@ function handleEvent(event: JetstreamEvent): void {
       }
 
       if (videoCid) {
-        // Build the CDN URL for the video blob
-        const sourceUrl = `https://video.bsky.app/watch/${did}/${videoCid}/video.mp4`;
+        // Build the PDS blob URL (bsky.social proxies to the correct PDS)
+        const sourceUrl = `https://bsky.social/xrpc/com.atproto.sync.getBlob?did=${encodeURIComponent(did)}&cid=${encodeURIComponent(videoCid)}`;
         xaddMedia(
           postUri, did, commit.rkey ?? '', videoCid,
           'video', sourceUrl, String(post.text ?? ''),

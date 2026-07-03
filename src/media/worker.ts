@@ -12,7 +12,7 @@ import { getRedis } from '../lib/redis.js';
 import { db } from '../db/client.js';
 import { logger } from '../lib/logger.js';
 import { config } from '../lib/config.js';
-import { downloadAndExtractAudio, cleanupTempFile } from './download.js';
+import { downloadAndExtractAudio, buildBlobUrl, cleanupTempFile } from './download.js';
 import { processAudio, checkHealth } from './mediaClient.js';
 
 const STREAM_KEY = 'media:items';
@@ -76,8 +76,17 @@ async function processMediaItem(mediaId: number, fields: Record<string, string>)
     await db.query('UPDATE media_items SET status = $1 WHERE id = $2', ['downloading', mediaId]);
 
     // Download video and extract audio
-    if (mediaType === 'video' && sourceUrl) {
-      audioPath = await downloadAndExtractAudio(sourceUrl, `media_${mediaId}`);
+    if (mediaType === 'video') {
+      // Use sourceUrl if it's a valid getBlob URL, otherwise rebuild from DID+CID
+      let downloadUrl = sourceUrl;
+      if (!downloadUrl || !downloadUrl.includes('getBlob')) {
+        if (fields.did && fields.cid) {
+          downloadUrl = buildBlobUrl(fields.did, fields.cid);
+        }
+      }
+      if (downloadUrl) {
+        audioPath = await downloadAndExtractAudio(downloadUrl, `media_${mediaId}`);
+      }
     }
 
     if (!audioPath) {
