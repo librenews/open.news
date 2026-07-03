@@ -151,6 +151,8 @@ async def process_audio(req: ProcessRequest):
 
         with torch.no_grad():
             audio_embed = clap_model.get_audio_features(**inputs)
+            if hasattr(audio_embed, "pooler_output"):
+                audio_embed = audio_embed.pooler_output
 
         # L2 normalize
         audio_embed = audio_embed / audio_embed.norm(dim=-1, keepdim=True)
