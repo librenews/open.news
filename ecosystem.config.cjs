@@ -173,10 +173,10 @@ module.exports = {
     },
     {
       name: 'media-gpu',
-      script: '.venv/bin/uvicorn',
+      script: '/home/opennews/open-news/src/media/gpu/.venv/bin/uvicorn',
       args: 'media_service:app --host 0.0.0.0 --port 8101',
       cwd: '/home/opennews/open-news/src/media/gpu',
-      interpreter: '.venv/bin/python3',
+      interpreter: '/home/opennews/open-news/src/media/gpu/.venv/bin/python3',
       interpreter_args: '-u',
       instances: 1, autorestart: true, watch: false,
       max_memory_restart: '8G',
