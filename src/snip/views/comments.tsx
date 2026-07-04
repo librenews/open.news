@@ -68,7 +68,7 @@ export function CommentsPage({
             <a href="/" class="text-indigo-400 hover:text-indigo-300 transition-colors no-underline">← Back to Home</a>
             <span>ID: ${item.id}</span>
           </div>
-          ${renderVideoCard(item)}
+          ${renderVideoCard(item, true)}
         </div>
 
         <!-- Comments Header -->
