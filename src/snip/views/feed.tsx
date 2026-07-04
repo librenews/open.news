@@ -34,7 +34,9 @@ export function renderVideoCard(item: VideoItem, showTranscript = false) {
     : item.source_url;
 
   const posterUrl = item.thumbnail_cid && item.did
-    ? `https://bsky.social/xrpc/com.atproto.sync.getBlob?did=${encodeURIComponent(item.did)}&cid=${encodeURIComponent(item.thumbnail_cid)}`
+    ? (item.thumbnail_cid.startsWith('http')
+        ? item.thumbnail_cid
+        : `https://bsky.social/xrpc/com.atproto.sync.getBlob?did=${encodeURIComponent(item.did)}&cid=${encodeURIComponent(item.thumbnail_cid)}`)
     : undefined;
 
   return html`
