@@ -34,13 +34,15 @@ export function xaddPost(did: string, text: string, uri: string, timeUs: string,
 export function xaddMedia(
   uri: string, did: string, rkey: string, cid: string,
   mediaType: string, sourceUrl: string, postText: string,
-  altText: string, aspectRatio: string, langs: string, timeUs: string
+  altText: string, aspectRatio: string, langs: string, timeUs: string,
+  thumbnailCid: string = ''
 ): void {
   const r = getRedis();
   r.xadd('media:items', 'MAXLEN', '~', 50000, '*',
     'uri', uri, 'did', did, 'rkey', rkey, 'cid', cid,
     'mediaType', mediaType, 'sourceUrl', sourceUrl,
     'postText', postText, 'altText', altText,
-    'aspectRatio', aspectRatio, 'langs', langs, 'ts', timeUs
+    'aspectRatio', aspectRatio, 'langs', langs, 'ts', timeUs,
+    'thumbnailCid', thumbnailCid
   ).catch((err: Error) => logger.warn({ err }, 'Redis XADD media failed'));
 }

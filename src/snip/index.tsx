@@ -33,6 +33,7 @@ async function enrichMediaItems(rows: any[]): Promise<VideoItem[]> {
       did: r.did,
       rkey: r.rkey,
       cid: r.cid || null,
+      thumbnail_cid: r.thumbnail_cid || null,
       source_url: r.source_url,
       alt_text: r.alt_text,
       aspect_ratio: r.aspect_ratio,

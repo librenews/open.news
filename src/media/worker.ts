@@ -52,15 +52,17 @@ async function insertMediaItem(fields: Record<string, string>): Promise<number |
   try {
     const langs = fields.langs ? fields.langs.split(',').filter(Boolean) : [];
     const { rows } = await db.query<{ id: number }>(
-      `INSERT INTO media_items (uri, did, rkey, cid, media_type, source_url, alt_text, aspect_ratio, post_text, post_langs, firehose_ts, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'pending')
-       ON CONFLICT (uri) DO NOTHING
+      `INSERT INTO media_items (uri, did, rkey, cid, media_type, source_url, alt_text, aspect_ratio, post_text, post_langs, firehose_ts, status, thumbnail_cid)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'pending', $12)
+       ON CONFLICT (uri) DO UPDATE SET
+         thumbnail_cid = EXCLUDED.thumbnail_cid
        RETURNING id`,
       [
         fields.uri, fields.did, fields.rkey, fields.cid || null,
         fields.mediaType, fields.sourceUrl || null, fields.altText || null,
         fields.aspectRatio || null, fields.postText || null,
         langs.length > 0 ? langs : null, fields.ts ? BigInt(fields.ts) : null,
+        fields.thumbnailCid || null
       ]
     );
     return rows[0]?.id ?? null;

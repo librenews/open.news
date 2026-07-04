@@ -495,6 +495,7 @@ async function handleEvent(event: JetstreamEvent): Promise<void> {
     const embed = post.embed as Record<string, unknown> | undefined;
     if (embed) {
       let videoCid: string | undefined;
+      let thumbnailCid = '';
       let videoAltText = '';
       let videoAspectRatio = '';
 
@@ -502,6 +503,8 @@ async function handleEvent(event: JetstreamEvent): Promise<void> {
       if (embed.$type === 'app.bsky.embed.video') {
         const video = embed.video as Record<string, unknown> | undefined;
         videoCid = (video?.ref as Record<string, string> | undefined)?.$link;
+        const thumb = embed.thumbnail as Record<string, unknown> | undefined;
+        thumbnailCid = (thumb?.ref as Record<string, string> | undefined)?.$link ?? '';
         videoAltText = (embed.alt as string) ?? '';
         const ar = embed.aspectRatio as Record<string, number> | undefined;
         if (ar?.width && ar?.height) videoAspectRatio = `${ar.width}:${ar.height}`;
@@ -513,6 +516,8 @@ async function handleEvent(event: JetstreamEvent): Promise<void> {
         if (media?.$type === 'app.bsky.embed.video') {
           const video = media.video as Record<string, unknown> | undefined;
           videoCid = (video?.ref as Record<string, string> | undefined)?.$link;
+          const thumb = media.thumbnail as Record<string, unknown> | undefined;
+          thumbnailCid = (thumb?.ref as Record<string, string> | undefined)?.$link ?? '';
           videoAltText = (media.alt as string) ?? '';
           const ar = media.aspectRatio as Record<string, number> | undefined;
           if (ar?.width && ar?.height) videoAspectRatio = `${ar.width}:${ar.height}`;
@@ -549,7 +554,8 @@ async function handleEvent(event: JetstreamEvent): Promise<void> {
               postUri, did, commit.rkey ?? '', videoCid,
               'video', sourceUrl, String(post.text ?? ''),
               videoAltText, videoAspectRatio, langs,
-              String(event.time_us ?? Date.now() * 1000)
+              String(event.time_us ?? Date.now() * 1000),
+              thumbnailCid
             );
           }
         }

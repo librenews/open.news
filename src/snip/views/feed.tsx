@@ -6,6 +6,7 @@ export interface VideoItem {
   did: string;
   rkey: string;
   cid: string | null;
+  thumbnail_cid: string | null;
   source_url: string;
   alt_text: string | null;
   aspect_ratio: string | null;
@@ -31,6 +32,10 @@ export function renderVideoCard(item: VideoItem, showTranscript = false) {
   const videoSrc = item.cid && item.did
     ? `/video/proxy/${encodeURIComponent(item.did)}/${encodeURIComponent(item.cid)}`
     : item.source_url;
+
+  const posterUrl = item.thumbnail_cid && item.did
+    ? `https://bsky.social/xrpc/com.atproto.sync.getBlob?did=${encodeURIComponent(item.did)}&cid=${encodeURIComponent(item.thumbnail_cid)}`
+    : undefined;
 
   return html`
     <div class="video-card rounded-2xl p-5 fade-in">
@@ -59,7 +64,13 @@ export function renderVideoCard(item: VideoItem, showTranscript = false) {
           <!-- HTML5 Video Player -->
           ${videoSrc ? html`
             <div class="mb-4 rounded-xl overflow-hidden bg-black aspect-video max-w-lg border border-slate-800/80 shadow-2xl relative">
-              <video src="${escapeHtml(videoSrc)}" controls preload="metadata" class="w-full h-full object-contain"></video>
+              <video 
+                src="${escapeHtml(videoSrc)}" 
+                controls 
+                preload="metadata" 
+                ${posterUrl ? html`poster="${escapeHtml(posterUrl)}"` : ''} 
+                class="w-full h-full object-contain"
+              ></video>
             </div>
           ` : ''}
 
