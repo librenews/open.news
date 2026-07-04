@@ -59,7 +59,7 @@ export function renderVideoCard(item: VideoItem) {
           <!-- HTML5 Video Player -->
           ${videoSrc ? html`
             <div class="mb-4 rounded-xl overflow-hidden bg-black aspect-video max-w-lg border border-slate-800/80 shadow-2xl relative">
-              <video src="${escapeHtml(videoSrc)}" controls preload="none" class="w-full h-full object-contain"></video>
+              <video src="${escapeHtml(videoSrc)}" controls preload="metadata" class="w-full h-full object-contain"></video>
             </div>
           ` : ''}
 
