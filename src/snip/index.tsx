@@ -10,9 +10,12 @@ import { AuthorPage, type AuthorProfile } from './views/author.js';
 import { LeaderboardPage, type CreatorRow } from './views/leaderboard.js';
 import { CommentsPage } from './views/comments.js';
 import { AtpAgent } from '@atproto/api';
+import { snipAuthRouter, getSessionUser } from './auth.js';
 
 const app = new Hono();
 const SNIP_PORT = parseInt(process.env.SNIP_PORT ?? '5100', 10);
+
+app.route('/', snipAuthRouter);
 
 // Helper: Escape XML
 function escapeXml(s: string): string {
@@ -193,8 +196,9 @@ app.get('/', async (c) => {
     logger.error({ err }, 'Failed to fetch homepage items');
   }
 
+  const session = await getSessionUser(c);
   const pageHtml = FeedPage({ items, type, q, category: categoryName, trending });
-  return c.html(SnipLayout({ title: 'Snip — High Signal ATProto Videos', children: pageHtml, q, type }));
+  return c.html(SnipLayout({ title: 'Snip — High Signal ATProto Videos', children: pageHtml, q, type, session }));
 });
 
 // ── Leaderboard (Top Creators) ────────────────────────────────────────────────
@@ -234,8 +238,9 @@ app.get('/leaderboard', async (c) => {
     logger.error({ err }, 'Failed to load leaderboard');
   }
 
+  const session = await getSessionUser(c);
   const pageHtml = LeaderboardPage({ creators });
-  return c.html(SnipLayout({ title: 'Top Video Creators — Snip', children: pageHtml, activeTab: 'leaderboard' }));
+  return c.html(SnipLayout({ title: 'Top Video Creators — Snip', children: pageHtml, activeTab: 'leaderboard', session }));
 });
 
 // ── Author Profile Page ───────────────────────────────────────────────────────
@@ -282,8 +287,9 @@ app.get('/profile/:did', async (c) => {
     logger.error({ err, did }, 'Failed to fetch author profile');
   }
 
+  const session = await getSessionUser(c);
   const pageHtml = AuthorPage({ profile, items, stats });
-  return c.html(SnipLayout({ title: `${profile.displayName || profile.handle} — Profile`, children: pageHtml }));
+  return c.html(SnipLayout({ title: `${profile.displayName || profile.handle} — Profile`, children: pageHtml, session }));
 });
 
 // ── Post Details & Comment Threads ────────────────────────────────────────────
@@ -339,8 +345,9 @@ app.get('/post/:uri', async (c) => {
     return c.text('Post not found in Snip database', 404);
   }
 
+  const session = await getSessionUser(c);
   const pageHtml = CommentsPage({ item, thread, related });
-  return c.html(SnipLayout({ title: `Discussion on @${item.author_handle}'s post — Snip`, children: pageHtml }));
+  return c.html(SnipLayout({ title: `Discussion on @${item.author_handle}'s post — Snip`, children: pageHtml, session }));
 });
 
 // ── RSS Feeds ────────────────────────────────────────────────────────────────
