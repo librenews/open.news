@@ -43,6 +43,11 @@ export function SnipLayout({
         <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
         ${headExtra}
         <style>
+          html, body {
+            overflow-x: hidden;
+            max-width: 100%;
+            width: 100%;
+          }
           body {
             font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             background-color: #020617;
@@ -86,7 +91,7 @@ export function SnipLayout({
             </a>
 
             <!-- Search -->
-            <form action="/" method="GET" class="flex-1 max-w-lg relative group">
+            <form action="/" method="GET" class="hidden md:block flex-1 max-w-lg relative group">
               <input type="hidden" name="type" value="${escapeHtml(type)}">
               <div class="absolute inset-0 bg-gradient-to-r from-indigo-500/10 to-purple-500/10 rounded-xl blur-lg opacity-0 group-focus-within:opacity-100 transition-opacity"></div>
               <div class="relative flex items-center bg-slate-900/60 border border-slate-800 focus-within:border-indigo-500/50 rounded-xl overflow-hidden transition-all shadow-inner">
@@ -128,8 +133,27 @@ export function SnipLayout({
           </div>
         </header>
 
+        <!-- Mobile Search Bar (Only visible on mobile screens) -->
+        <div class="block md:hidden px-6 pt-6 max-w-lg mx-auto w-full">
+          <form action="/" method="GET" class="relative group">
+            <input type="hidden" name="type" value="${escapeHtml(type)}">
+            <div class="relative flex items-center bg-slate-900/60 border border-slate-800 focus-within:border-indigo-500/50 rounded-xl overflow-hidden transition-all shadow-inner">
+              <svg class="w-4 h-4 text-slate-500 ml-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+              </svg>
+              <input
+                type="text"
+                name="q"
+                value="${escapeHtml(q)}"
+                placeholder="Search transcripts..."
+                class="w-full px-3 py-2.5 text-xs text-slate-200 placeholder:text-slate-500 focus:outline-none bg-transparent"
+              />
+            </div>
+          </form>
+        </div>
+
         <!-- Main Workspace -->
-        <main class="flex-1 max-w-6xl w-full mx-auto px-6 py-8">
+        <main class="flex-1 max-w-6xl w-full mx-auto px-6 py-6 md:py-8">
           ${children}
         </main>
 
