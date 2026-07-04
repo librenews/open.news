@@ -184,5 +184,17 @@ module.exports = {
       error_file: '/var/log/opennews/media-gpu-error.log',
       out_file: '/var/log/opennews/media-gpu-out.log',
     },
+    {
+      name: 'snip',
+      script: 'node',
+      args: '--import tsx/esm src/snip/index.tsx',
+      cwd: '/home/opennews/open-news',
+      instances: 1, autorestart: true, watch: false,
+      max_memory_restart: '256M',
+      env: { ...envVars, SNIP_PORT: '5100' },
+      error_file: '/var/log/opennews/snip-error.log',
+      out_file: '/var/log/opennews/snip-out.log',
+    },
   ],
 };
+

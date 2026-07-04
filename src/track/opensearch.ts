@@ -443,3 +443,66 @@ export async function searchMediaContent(query: string, limit = 20, cursor?: str
 
   return res.body.hits?.hits ?? [];
 }
+
+/**
+ * Find related videos using vector search (CLAP similarity) or fallback text match.
+ */
+export async function getRelatedVideos(mediaUri: string, embedding?: number[], transcript?: string, limit = 4) {
+  const os = getOsClient();
+  try {
+    if (embedding && embedding.length === 512) {
+      const res = await os.search({
+        index: MEDIA_INDEX,
+        body: {
+          size: limit + 2, // fetch slightly more so we can filter out original uri
+          query: {
+            knn: {
+              audio_embedding: {
+                vector: embedding,
+                k: limit + 2
+              }
+            }
+          }
+        }
+      });
+      const hits = res.body.hits?.hits ?? [];
+      return hits
+        .filter((h: any) => h._source.uri && h._source.uri !== mediaUri)
+        .slice(0, limit);
+    }
+  } catch (err) {
+    logger.debug({ err, mediaUri }, 'Vector similarity search failed, falling back to text matching');
+  }
+
+  // Fallback to text similarity using transcript
+  if (transcript && transcript.length > 5 && transcript !== 'silent') {
+    try {
+      const res = await os.search({
+        index: MEDIA_INDEX,
+        body: {
+          size: limit + 2,
+          query: {
+            bool: {
+              must: [
+                {
+                  multi_match: {
+                    query: transcript,
+                    fields: ['transcript^2', 'post_text'],
+                  }
+                }
+              ],
+              must_not: [
+                { term: { uri: mediaUri } }
+              ]
+            }
+          }
+        }
+      });
+      return res.body.hits?.hits ?? [];
+    } catch (err) {
+      logger.error({ err }, 'Fallback related search failed');
+    }
+  }
+
+  return [];
+}

@@ -19,6 +19,10 @@ const CURSOR_PERSIST_INTERVAL_MS = 30_000;
 const DID_REFRESH_INTERVAL_MS = 60_000;
 const BOT_DID = config.BSKY_BOT_DID;
 
+// Regular expression to flag adult content/NSFW search terms
+const ADULT_KEYWORDS = /\b(porn|sex|xxx|nsfw|nude|naked|erotic|hentai|blowjob|cuckold|milf|dilf|orgasm|masturbat|penis|vagina|boobs|tits|asshole|clitoris|fuck|cock|dick|fetish|bdsm|r18|r-18)\b/i;
+
+
 let currentCursor: bigint | null = null;
 let watchedDids: Set<string> = new Set();
 let ws: WebSocket | null = null;
@@ -212,6 +216,11 @@ function handleEvent(event: JetstreamEvent): void {
     if ((commit.collection === 'app.bsky.feed.like' || commit.collection === 'app.bsky.feed.repost' || commit.collection === 'site.standard.graph.recommend') && postUri) {
       db.query('DELETE FROM article_interactions WHERE record_uri = $1', [postUri])
         .catch(err => logger.debug({ err, postUri }, 'Failed to delete interaction record'));
+
+      if (commit.collection !== 'site.standard.graph.recommend') {
+        db.query('DELETE FROM media_interactions WHERE record_uri = $1', [postUri])
+          .catch(err => logger.debug({ err, postUri }, 'Failed to delete media interaction record'));
+      }
     }
     // Clean up deleted longform documents from index
     const longformDeleteCollections = ['site.standard.document', 'pub.leaflet.document', 'com.whtwnd.blog.entry'];
@@ -223,20 +232,32 @@ function handleEvent(event: JetstreamEvent): void {
     return;
   }
 
-  // ── Like / Repost tracking on longform articles ────────────────────────────
+  // ── Like / Repost tracking on longform and media articles ───────────────────
   const interactionCollections = ['app.bsky.feed.like', 'app.bsky.feed.repost'];
   if (interactionCollections.includes(commit.collection) && commit.record) {
     const subject = commit.record.subject as { uri?: string } | undefined;
     if (subject?.uri && typeof subject.uri === 'string') {
-      // Check if the subject is a longform document
+      const interactionType = commit.collection === 'app.bsky.feed.like' ? 'like' : 'repost';
+
+      // 1. Longform documents
       const longformPatterns = ['/site.standard.document/', '/pub.leaflet.document/'];
       if (longformPatterns.some(p => subject.uri!.includes(p))) {
-        const interactionType = commit.collection === 'app.bsky.feed.like' ? 'like' : 'repost';
         db.query(
           `INSERT INTO article_interactions (article_uri, actor_did, interaction_type, record_uri)
            VALUES ($1, $2, $3, $4) ON CONFLICT (article_uri, actor_did, interaction_type) DO NOTHING`,
           [subject.uri, did, interactionType, postUri]
         ).catch(err => logger.debug({ err }, 'Failed to track article interaction'));
+      }
+
+      // 2. Media (video) items
+      if (subject.uri.includes('/app.bsky.feed.post/')) {
+        db.query(
+          `INSERT INTO media_interactions (media_uri, actor_did, interaction_type, record_uri)
+           SELECT $1, $2, $3, $4
+           WHERE EXISTS (SELECT 1 FROM media_items WHERE uri = $1)
+           ON CONFLICT (media_uri, actor_did, interaction_type) DO NOTHING`,
+          [subject.uri, did, interactionType, postUri]
+        ).catch(err => logger.debug({ err }, 'Failed to track media interaction'));
       }
     }
   }
@@ -489,14 +510,25 @@ function handleEvent(event: JetstreamEvent): void {
       }
 
       if (videoCid) {
-        // Build the PDS blob URL (bsky.social proxies to the correct PDS)
-        const sourceUrl = `https://bsky.social/xrpc/com.atproto.sync.getBlob?did=${encodeURIComponent(did)}&cid=${encodeURIComponent(videoCid)}`;
-        xaddMedia(
-          postUri, did, commit.rkey ?? '', videoCid,
-          'video', sourceUrl, String(post.text ?? ''),
-          videoAltText, videoAspectRatio, langs,
-          String(event.time_us ?? Date.now() * 1000)
+        // Adult / NSFW filtering (Self-labels & keywords)
+        const postLabels = (post as any).labels?.values || [];
+        const isSelfLabeledAdult = postLabels.some((l: any) =>
+          ['porn', 'sexual', 'nudity', 'nsfw', 'explicit', 'erotic'].includes(String(l.val || '').toLowerCase())
         );
+        const containsAdultKeywords = ADULT_KEYWORDS.test(String(post.text ?? '')) || ADULT_KEYWORDS.test(videoAltText);
+
+        if (isSelfLabeledAdult || containsAdultKeywords) {
+          logger.info({ uri: postUri }, 'Skipped NSFW video from firehose ingestion');
+        } else {
+          // Build the PDS blob URL (bsky.social proxies to the correct PDS)
+          const sourceUrl = `https://bsky.social/xrpc/com.atproto.sync.getBlob?did=${encodeURIComponent(did)}&cid=${encodeURIComponent(videoCid)}`;
+          xaddMedia(
+            postUri, did, commit.rkey ?? '', videoCid,
+            'video', sourceUrl, String(post.text ?? ''),
+            videoAltText, videoAspectRatio, langs,
+            String(event.time_us ?? Date.now() * 1000)
+          );
+        }
       }
     }
   }

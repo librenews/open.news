@@ -18,6 +18,10 @@ import { ensureMediaIndex, getOsClient, MEDIA_INDEX } from '../track/opensearch.
 
 const STREAM_KEY = 'media:items';
 const GROUP_NAME = 'media-workers';
+
+// Regex to catch adult words in spoken audio
+const ADULT_KEYWORDS = /\b(porn|sex|xxx|nsfw|nude|naked|erotic|hentai|blowjob|cuckold|milf|dilf|orgasm|masturbat|penis|vagina|boobs|tits|asshole|clitoris|fuck|cock|dick|fetish|bdsm|r18|r-18)\b/i;
+
 const CONSUMER_NAME = `worker-${process.pid}`;
 const BATCH_SIZE = 8;
 const BLOCK_MS = 5000;
@@ -106,6 +110,22 @@ async function processMediaItem(mediaId: number, fields: Record<string, string>)
     // Send to GPU service
     stats.gpuCalls++;
     const result = await processAudio(audioPath);
+
+    // NSFW Check on transcription
+    if (result.transcript && result.transcript.text) {
+      if (ADULT_KEYWORDS.test(result.transcript.text)) {
+        logger.info({ mediaId }, 'Marking media item as NSFW based on transcript');
+        await db.query(
+          'UPDATE media_items SET status = $1, error = $2, processed_at = NOW() WHERE id = $3',
+          ['skipped', 'nsfw', mediaId]
+        );
+        stats.skipped++;
+        if (audioPath) {
+          cleanupTempFile(audioPath).catch(() => {});
+        }
+        return;
+      }
+    }
 
     // Store transcript
     if (result.transcript) {
