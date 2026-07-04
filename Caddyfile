@@ -25,3 +25,7 @@ weblog.social {
 nearby.at {
     reverse_proxy localhost:4700
 }
+
+snip.social {
+    reverse_proxy localhost:5100
+}
