@@ -65,12 +65,24 @@ export function renderVideoCard(item: VideoItem) {
 
           <!-- Transcript Bubble -->
           ${hasAudio ? html`
-            <div class="bg-indigo-950/20 border border-indigo-900/30 rounded-xl p-4 mb-3">
+            <div class="bg-indigo-950/20 border border-indigo-900/30 rounded-xl p-4 mb-3" x-data="{ expanded: false }">
               <div class="flex items-center justify-between text-[10px] text-indigo-400/90 font-bold uppercase tracking-wider mb-1.5 select-none">
                 <span>🎤 Whisper Transcript (${item.language ?? 'en'})</span>
                 ${item.duration_ms ? html`<span>⏱ ${Math.round(item.duration_ms / 1000)}s</span>` : ''}
               </div>
-              <p class="text-xs text-slate-300 italic leading-relaxed">"${escapeHtml(item.transcript || '')}"</p>
+              <p class="text-xs text-slate-300 italic leading-relaxed">
+                <span x-show="!expanded">"${escapeHtml(item.transcript?.slice(0, 140) || '')}${item.transcript && item.transcript.length > 140 ? '...' : ''}"</span>
+                <span x-show="expanded" x-cloak>"${escapeHtml(item.transcript || '')}"</span>
+              </p>
+              ${item.transcript && item.transcript.length > 140 ? html`
+                <button 
+                  @click="expanded = !expanded" 
+                  class="mt-2 text-[10px] font-extrabold text-indigo-400 hover:text-indigo-300 transition-colors uppercase tracking-wider focus:outline-none cursor-pointer flex items-center gap-1 select-none"
+                >
+                  <span x-show="!expanded">📖 Show full transcript</span>
+                  <span x-show="expanded" x-cloak>📕 Hide transcript</span>
+                </button>
+              ` : ''}
             </div>
           ` : html`
             <div class="bg-slate-900/30 border border-slate-800/40 rounded-xl p-3 mb-3 text-center text-xs text-slate-500 select-none">
