@@ -5,6 +5,7 @@ export interface VideoItem {
   uri: string;
   did: string;
   rkey: string;
+  cid: string | null;
   source_url: string;
   alt_text: string | null;
   aspect_ratio: string | null;
@@ -26,6 +27,10 @@ export function renderVideoCard(item: VideoItem) {
   const authorUrl = `/profile/${encodeURIComponent(item.did)}`;
   const dateStr = new Date(item.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
   const hasAudio = item.transcript && item.transcript !== 'silent';
+
+  const videoSrc = item.cid && item.did
+    ? `/video/proxy/${encodeURIComponent(item.did)}/${encodeURIComponent(item.cid)}`
+    : item.source_url;
 
   return html`
     <div class="video-card rounded-2xl p-5 fade-in">
@@ -52,9 +57,9 @@ export function renderVideoCard(item: VideoItem) {
           ${item.post_text ? html`<p class="text-sm text-slate-300 leading-relaxed mb-3">${escapeHtml(item.post_text)}</p>` : ''}
 
           <!-- HTML5 Video Player -->
-          ${item.source_url ? html`
+          ${videoSrc ? html`
             <div class="mb-4 rounded-xl overflow-hidden bg-black aspect-video max-w-lg border border-slate-800/80 shadow-2xl relative">
-              <video src="${escapeHtml(item.source_url)}" controls preload="none" class="w-full h-full object-contain"></video>
+              <video src="${escapeHtml(videoSrc)}" controls preload="none" class="w-full h-full object-contain"></video>
             </div>
           ` : ''}
 

@@ -32,6 +32,7 @@ async function enrichMediaItems(rows: any[]): Promise<VideoItem[]> {
       uri: r.uri,
       did: r.did,
       rkey: r.rkey,
+      cid: r.cid || null,
       source_url: r.source_url,
       alt_text: r.alt_text,
       aspect_ratio: r.aspect_ratio,
@@ -80,6 +81,42 @@ async function getTrendingTerms(limit = 8): Promise<string[]> {
     return [];
   }
 }
+
+// ── Video Stream Proxy (Supports Range Requests & iOS/Safari) ─────────────────
+app.get('/video/proxy/:did/:cid', async (c) => {
+  const did = c.req.param('did');
+  const cid = c.req.param('cid');
+  const targetUrl = `https://bsky.social/xrpc/com.atproto.sync.getBlob?did=${encodeURIComponent(did)}&cid=${encodeURIComponent(cid)}`;
+  
+  const requestHeaders: Record<string, string> = {};
+  const range = c.req.header('range');
+  if (range) {
+    requestHeaders['Range'] = range;
+  }
+  
+  try {
+    const res = await fetch(targetUrl, { headers: requestHeaders });
+    
+    // Set response status
+    c.status(res.status as any);
+    
+    // Set headers
+    c.header('Content-Type', 'video/mp4');
+    c.header('Accept-Ranges', 'bytes');
+    c.header('Cache-Control', 'public, max-age=86400');
+    
+    const contentLength = res.headers.get('content-length');
+    if (contentLength) c.header('Content-Length', contentLength);
+    
+    const contentRange = res.headers.get('content-range');
+    if (contentRange) c.header('Content-Range', contentRange);
+    
+    return c.body(res.body);
+  } catch (err) {
+    logger.error({ err, did, cid }, 'Video proxy streaming failed');
+    return c.text('Proxy error', 500);
+  }
+});
 
 // ── Health Check ─────────────────────────────────────────────────────────────
 app.get('/health', async (c) => {

@@ -191,7 +191,7 @@ interface JetstreamEvent {
   };
 }
 
-function handleEvent(event: JetstreamEvent): void {
+async function handleEvent(event: JetstreamEvent): Promise<void> {
   if (event.kind !== 'commit') return;
 
   const { commit, did } = event;
@@ -518,16 +518,30 @@ function handleEvent(event: JetstreamEvent): void {
         const containsAdultKeywords = ADULT_KEYWORDS.test(String(post.text ?? '')) || ADULT_KEYWORDS.test(videoAltText);
 
         if (isSelfLabeledAdult || containsAdultKeywords) {
-          logger.info({ uri: postUri }, 'Skipped NSFW video from firehose ingestion');
+          logger.info({ uri: postUri }, 'Skipped NSFW video from firehose ingestion (post text/labels)');
         } else {
-          // Build the PDS blob URL (bsky.social proxies to the correct PDS)
-          const sourceUrl = `https://bsky.social/xrpc/com.atproto.sync.getBlob?did=${encodeURIComponent(did)}&cid=${encodeURIComponent(videoCid)}`;
-          xaddMedia(
-            postUri, did, commit.rkey ?? '', videoCid,
-            'video', sourceUrl, String(post.text ?? ''),
-            videoAltText, videoAspectRatio, langs,
-            String(event.time_us ?? Date.now() * 1000)
-          );
+          // Check creator profile bio/display name for adult terms (spam bots)
+          let isNsfwProfile = false;
+          try {
+            const profile = await getCachedProfile(did);
+            if (profile) {
+              const profileText = `${profile.displayName ?? ''} ${profile.description ?? ''}`.toLowerCase();
+              isNsfwProfile = /\b(porn|sex|xxx|nsfw|nude|naked|erotic|onlyfans|only fans|linktree|18\+|adult|kink|twink|fetish|fuck|cock|dick)\b/i.test(profileText);
+            }
+          } catch {}
+
+          if (isNsfwProfile) {
+            logger.info({ uri: postUri }, 'Skipped NSFW video from firehose ingestion (profile bio/name)');
+          } else {
+            // Build the PDS blob URL (bsky.social proxies to the correct PDS)
+            const sourceUrl = `https://bsky.social/xrpc/com.atproto.sync.getBlob?did=${encodeURIComponent(did)}&cid=${encodeURIComponent(videoCid)}`;
+            xaddMedia(
+              postUri, did, commit.rkey ?? '', videoCid,
+              'video', sourceUrl, String(post.text ?? ''),
+              videoAltText, videoAspectRatio, langs,
+              String(event.time_us ?? Date.now() * 1000)
+            );
+          }
         }
       }
     }
