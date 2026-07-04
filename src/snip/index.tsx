@@ -148,7 +148,7 @@ app.get('/', async (c) => {
           LEFT JOIN media_transcripts mt ON mt.media_id = mi.id
           LEFT JOIN (SELECT media_uri, count(*) as count FROM media_interactions WHERE interaction_type = 'like' GROUP BY media_uri) likes ON likes.media_uri = mi.uri
           LEFT JOIN (SELECT media_uri, count(*) as count FROM media_interactions WHERE interaction_type = 'repost' GROUP BY media_uri) reposts ON reposts.media_uri = mi.uri
-          WHERE mi.uri = ANY($1) AND mi.status = 'done' AND mi.error IS NULL
+          WHERE mi.uri = ANY($1) AND mi.status = 'done' AND mi.error IS NULL AND mt.language = 'en'
         `, [postUris]);
         items = await enrichMediaItems(rows);
       }

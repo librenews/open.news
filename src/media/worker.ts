@@ -70,6 +70,46 @@ async function insertMediaItem(fields: Record<string, string>): Promise<number |
   }
 }
 
+/** Fetch live post/profile moderation labels from Bluesky to catch NSFW content. */
+async function fetchLiveModerationLabels(postUri: string, authorDid: string): Promise<boolean> {
+  try {
+    // 1. Check live post details & labels
+    const postUrl = `https://public.api.bsky.app/xrpc/app.bsky.feed.getPostThread?uri=${encodeURIComponent(postUri)}&depth=0`;
+    const postRes = await fetch(postUrl);
+    if (postRes.ok) {
+      const data = await postRes.json() as any;
+      const postVal = data?.thread?.post;
+      
+      const postLabels = postVal?.labels || [];
+      const hasNsfwPostLabel = postLabels.some((l: any) =>
+        ['porn', 'sexual', 'nudity', 'nsfw', 'explicit', 'erotic', 'underwear', 'sexual-figurative'].includes(String(l.val || '').toLowerCase())
+      );
+      if (hasNsfwPostLabel) return true;
+    }
+
+    // 2. Check live author profile details & labels
+    const profileUrl = `https://public.api.bsky.app/xrpc/app.bsky.actor.getProfile?actor=${encodeURIComponent(authorDid)}`;
+    const profileRes = await fetch(profileUrl);
+    if (profileRes.ok) {
+      const profile = await profileRes.json() as any;
+      
+      const authorLabels = profile?.labels || [];
+      const hasNsfwAuthorLabel = authorLabels.some((l: any) =>
+        ['porn', 'sexual', 'nudity', 'nsfw', 'explicit', 'erotic', 'underwear'].includes(String(l.val || '').toLowerCase())
+      );
+      if (hasNsfwAuthorLabel) return true;
+
+      // Double check profile bio and display name for adult spam keywords
+      const profileText = `${profile.displayName ?? ''} ${profile.description ?? ''}`.toLowerCase();
+      const isNsfwProfile = /\b(porn|sex|xxx|nsfw|nude|naked|erotic|onlyfans|only fans|linktree|18\+|adult|kink|twink|fetish|fuck|cock|dick)\b/i.test(profileText);
+      if (isNsfwProfile) return true;
+    }
+  } catch (err) {
+    logger.debug({ err, postUri }, 'Failed to fetch live moderation labels (non-blocking)');
+  }
+  return false;
+}
+
 // ─── Process a single media item ─────────────────────────────────────────────
 
 async function processMediaItem(mediaId: number, fields: Record<string, string>): Promise<void> {
@@ -77,6 +117,20 @@ async function processMediaItem(mediaId: number, fields: Record<string, string>)
   let audioPath: string | null = null;
 
   try {
+    // Fetch live moderation labels to filter NSFW
+    if (fields.did) {
+      const isNsfw = await fetchLiveModerationLabels(uri, fields.did);
+      if (isNsfw) {
+        logger.info({ uri }, 'Skipped NSFW media item in worker based on live labels/profile check');
+        await db.query(
+          'UPDATE media_items SET status = $1, error = $2, processed_at = NOW() WHERE id = $3',
+          ['skipped', 'nsfw', mediaId]
+        );
+        stats.skipped++;
+        return;
+      }
+    }
+
     // Update status to downloading
     await db.query('UPDATE media_items SET status = $1 WHERE id = $2', ['downloading', mediaId]);
 
