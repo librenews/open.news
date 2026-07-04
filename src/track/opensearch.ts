@@ -506,3 +506,17 @@ export async function getRelatedVideos(mediaUri: string, embedding?: number[], t
 
   return [];
 }
+
+/** Remove a media document from the media index. */
+export async function deleteMediaDocument(uri: string): Promise<void> {
+  const os = getOsClient();
+  try {
+    await os.delete({
+      index: MEDIA_INDEX,
+      id: uri,
+      refresh: 'true',
+    });
+  } catch {
+    // Ignore if not found or failed
+  }
+}

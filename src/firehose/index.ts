@@ -14,6 +14,7 @@ import { refreshGeotaggedDids, geotagFromAccount, getGeoForDid } from '../nearby
 import { getNearbyBotDid } from '../nearby/bot.js';
 import { verifyPublication } from '../lib/verification.js';
 import { isActorSubscribed, notifyRssCloudSubscribers } from '../feeds/rssCloud.js';
+import { deleteMediaDocument } from '../track/opensearch.js';
 
 const CURSOR_PERSIST_INTERVAL_MS = 30_000;
 const DID_REFRESH_INTERVAL_MS = 60_000;
@@ -210,6 +211,15 @@ async function handleEvent(event: JetstreamEvent): Promise<void> {
         }
       }).catch((err) => {
         logger.error({ err, postUri }, 'Failed to delete moderated post from DB');
+      });
+
+      // Delete from media items (cascades to transcripts and embeddings in PostgreSQL)
+      db.query('DELETE FROM media_items WHERE uri = $1', [postUri])
+        .catch(err => logger.debug({ err, postUri }, 'Failed to delete media item from DB on post deletion'));
+
+      // Delete from OpenSearch
+      deleteMediaDocument(postUri).catch(err => {
+        logger.debug({ err, postUri }, 'Failed to delete media document from OpenSearch on post deletion');
       });
     }
     // Clean up deleted likes/reposts/recommends from our interaction tracking
