@@ -480,8 +480,7 @@ app.get('/', async (c) => {
   let queryParams: any[] = [];
 
   if (view === 'following' && followedPubUris.length > 0) {
-    queryText = `SELECT * FROM (
-       SELECT DISTINCT ON (split_part(s.uri, '/', 5)) s.uri, s.author_did, s.title, s.description, s.published_at, COALESCE(p.url, s.site) as site, s.path, s.word_count,
+    queryText = `SELECT s.uri, s.author_did, s.title, s.description, s.published_at, COALESCE(p.url, s.site) as site, s.path, s.word_count,
          split_part(s.uri, '/', 4) AS collection,
          COALESCE(
            s.raw_record->'coverImage'->'ref'->>'$link',
@@ -500,13 +499,11 @@ app.get('/', async (c) => {
        WHERE s.word_count > 100
          AND s.language = 'eng'
          AND s.raw_record->>'site' = ANY($1)
-       ORDER BY split_part(s.uri, '/', 5), s.published_at DESC NULLS LAST
-     ) sub ORDER BY published_at DESC NULLS LAST
-     LIMIT 40`;
+       ORDER BY s.published_at DESC NULLS LAST
+       LIMIT 40`;
     queryParams = [followedPubUris];
   } else {
-    queryText = `SELECT * FROM (
-       SELECT DISTINCT ON (split_part(s.uri, '/', 5)) s.uri, s.author_did, s.title, s.description, s.published_at, COALESCE(p.url, s.site) as site, s.path, s.word_count,
+    queryText = `SELECT s.uri, s.author_did, s.title, s.description, s.published_at, COALESCE(p.url, s.site) as site, s.path, s.word_count,
          split_part(s.uri, '/', 4) AS collection,
          COALESCE(
            s.raw_record->'coverImage'->'ref'->>'$link',
@@ -524,9 +521,8 @@ app.get('/', async (c) => {
          AND s.language = 'eng'
          AND s.suppressed = false
          AND s.published_at > NOW() - INTERVAL '30 days'
-       ORDER BY split_part(s.uri, '/', 5), s.published_at DESC NULLS LAST
-     ) sub ORDER BY published_at DESC NULLS LAST
-     LIMIT 40`;
+       ORDER BY s.published_at DESC NULLS LAST
+       LIMIT 40`;
   }
 
   const { rows } = await db.query(queryText, queryParams);
@@ -591,8 +587,7 @@ app.get('/tag/:tag', async (c) => {
   const profile = sessionDid ? await fetchUserProfile(sessionDid) : null;
 
   const { rows } = await db.query(
-    `SELECT * FROM (
-       SELECT DISTINCT ON (split_part(s.uri, '/', 5)) s.uri, s.author_did, s.title, s.description, s.published_at, COALESCE(p.url, s.site) as site, s.path, s.word_count,
+    `SELECT s.uri, s.author_did, s.title, s.description, s.published_at, COALESCE(p.url, s.site) as site, s.path, s.word_count,
          split_part(s.uri, '/', 4) AS collection,
          COALESCE(
            s.raw_record->'coverImage'->'ref'->>'$link',
@@ -612,9 +607,8 @@ app.get('/tag/:tag', async (c) => {
          AND s.language = 'eng'
          AND s.suppressed = false
          AND s.raw_record->'tags' ? $1
-       ORDER BY split_part(s.uri, '/', 5), s.published_at DESC NULLS LAST
-     ) sub ORDER BY published_at DESC NULLS LAST
-     LIMIT 40`,
+       ORDER BY s.published_at DESC NULLS LAST
+       LIMIT 40`,
     [tag]
   );
 
@@ -1280,8 +1274,7 @@ app.get('/profile/:identifier', async (c) => {
 
   // Fetch their articles
   const { rows } = await db.query(
-    `SELECT * FROM (
-       SELECT DISTINCT ON (split_part(s.uri, '/', 5)) s.uri, s.author_did, s.title, s.description, s.published_at, COALESCE(p.url, s.site) as site, s.path, s.word_count,
+    `SELECT s.uri, s.author_did, s.title, s.description, s.published_at, COALESCE(p.url, s.site) as site, s.path, s.word_count,
          split_part(s.uri, '/', 4) AS collection,
          COALESCE(
            s.raw_record->'coverImage'->'ref'->>'$link',
@@ -1297,8 +1290,8 @@ app.get('/profile/:identifier', async (c) => {
        FROM site_standard_articles s
        LEFT JOIN site_publications p ON p.uri = s.raw_record->>'site'
        WHERE s.author_did = $1
-       ORDER BY split_part(s.uri, '/', 5), s.published_at DESC
-     ) sub ORDER BY published_at DESC`,
+       ORDER BY s.published_at DESC
+       LIMIT 40`,
     [did]
   );
 

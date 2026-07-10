@@ -268,16 +268,17 @@ app.get('/', async (c) => {
                (COALESCE(c.like_count, 0) + COALESCE(c.share_count, 0) * 2 + 1)::float
                  / POWER(GREATEST(EXTRACT(EPOCH FROM (NOW() - s.published_at)) / 3600.0, 0) + 2, 1.3) AS hotness
         FROM (
-          SELECT article_uri,
-            COUNT(CASE WHEN interaction_type = 'like' THEN 1 END)::int AS like_count,
-            COUNT(CASE WHEN interaction_type IN ('share','repost') THEN 1 END)::int AS share_count
-          FROM article_interactions
-          GROUP BY article_uri
+          SELECT ai.article_uri,
+            COUNT(CASE WHEN ai.interaction_type = 'like' THEN 1 END)::int AS like_count,
+            COUNT(CASE WHEN ai.interaction_type IN ('share','repost') THEN 1 END)::int AS share_count
+          FROM article_interactions ai
+          JOIN site_standard_articles s2 ON s2.uri = ai.article_uri
+          WHERE s2.verified = true
+            AND s2.suppressed IS NOT TRUE
+            AND s2.published_at > NOW() - INTERVAL '14 days'
+          GROUP BY ai.article_uri
         ) c
         JOIN site_standard_articles s ON s.uri = c.article_uri
-        WHERE s.verified = true
-          AND s.suppressed IS NOT TRUE
-          AND s.published_at > NOW() - INTERVAL '14 days'
       ),
       backfill AS (
         SELECT uri, author_did, title, site, path,
