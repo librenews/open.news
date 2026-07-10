@@ -38,40 +38,24 @@ async function main() {
     console.log("article_interactions count:", tableCounts.rows[0].interactions_count);
     console.log("\n");
 
-    // ─── Query 1: Longform Homepage Query ───
-    console.log("Analyzing Query 1: Longform Homepage Query...");
-    const longformExplain = await pool.query(`
-      EXPLAIN (ANALYZE, BUFFERS)
-      SELECT * FROM (
-         SELECT DISTINCT ON (split_part(s.uri, '/', 5)) s.uri, s.author_did, s.title, s.description, s.published_at, COALESCE(p.url, s.site) as site, s.path, s.word_count,
-           split_part(s.uri, '/', 4) AS collection,
-           COALESCE(
-             s.raw_record->'coverImage'->'ref'->>'$link',
-             s.raw_record->'images'->0->'image'->'ref'->>'$link',
-             s.raw_record->'images'->0->'ref'->>'$link'
-           ) AS image_cid,
-           CASE WHEN s.raw_record->>'site' LIKE 'at://%site.standard.publication%'
-             THEN s.raw_record->>'site'
-             ELSE NULL
-           END AS publication_uri,
-           s.raw_record->>'tags' AS tags_json
-         FROM site_standard_articles s
-         LEFT JOIN site_publications p ON p.uri = s.raw_record->>'site'
-         WHERE s.word_count > 100
-           AND s.language = 'eng'
-           AND s.suppressed = false
-           AND s.published_at > NOW() - INTERVAL '30 days'
-         ORDER BY split_part(s.uri, '/', 5), s.published_at DESC NULLS LAST
-       ) sub ORDER BY published_at DESC NULLS LAST
-       LIMIT 40
+    // Check if the optimized index exists
+    const indexCheck = await pool.query(`
+      SELECT indexname, indexdef 
+      FROM pg_indexes 
+      WHERE tablename = 'site_standard_articles' AND indexname = 'idx_site_standard_articles_trending_opt'
     `);
-    console.log("Longform Explain Plan:");
-    console.log("======================");
-    console.log(longformExplain.rows.map(r => r['QUERY PLAN']).join('\n'));
+    console.log("Index Check:");
+    console.log("------------");
+    if (indexCheck.rows.length > 0) {
+      console.log("Index idx_site_standard_articles_trending_opt EXISTS!");
+      console.log("Definition:", indexCheck.rows[0].indexdef);
+    } else {
+      console.log("Index idx_site_standard_articles_trending_opt is MISSING!");
+    }
     console.log("\n");
 
-    // ─── Query 2: Blogs Trending Query ───
-    console.log("Analyzing Query 2: Blogs Trending Query...");
+    // ─── Query 2: Optimized Blogs Trending Query ───
+    console.log("Analyzing Query 2: Optimized Blogs Trending Query...");
     const blogsExplain = await pool.query(`
       EXPLAIN (ANALYZE, BUFFERS)
       WITH interacted AS (
@@ -89,16 +73,17 @@ async function main() {
                (COALESCE(c.like_count, 0) + COALESCE(c.share_count, 0) * 2 + 1)::float
                  / POWER(GREATEST(EXTRACT(EPOCH FROM (NOW() - s.published_at)) / 3600.0, 0) + 2, 1.3) AS hotness
         FROM (
-          SELECT article_uri,
-            COUNT(CASE WHEN interaction_type = 'like' THEN 1 END)::int AS like_count,
-            COUNT(CASE WHEN interaction_type IN ('share','repost') THEN 1 END)::int AS share_count
-          FROM article_interactions
-          GROUP BY article_uri
+          SELECT ai.article_uri,
+            COUNT(CASE WHEN ai.interaction_type = 'like' THEN 1 END)::int AS like_count,
+            COUNT(CASE WHEN ai.interaction_type IN ('share','repost') THEN 1 END)::int AS share_count
+          FROM article_interactions ai
+          JOIN site_standard_articles s2 ON s2.uri = ai.article_uri
+          WHERE s2.verified = true
+            AND s2.suppressed IS NOT TRUE
+            AND s2.published_at > NOW() - INTERVAL '14 days'
+          GROUP BY ai.article_uri
         ) c
         JOIN site_standard_articles s ON s.uri = c.article_uri
-        WHERE s.verified = true
-          AND s.suppressed IS NOT TRUE
-          AND s.published_at > NOW() - INTERVAL '14 days'
       ),
       backfill AS (
         SELECT uri, author_did, title, site, path,
@@ -136,8 +121,8 @@ async function main() {
       ORDER BY hotness DESC
       LIMIT 30 OFFSET 0
     `);
-    console.log("Blogs Explain Plan:");
-    console.log("===================");
+    console.log("Optimized Blogs Explain Plan:");
+    console.log("=============================");
     console.log(blogsExplain.rows.map(r => r['QUERY PLAN']).join('\n'));
     console.log("\n");
 
