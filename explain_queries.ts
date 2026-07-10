@@ -1,8 +1,21 @@
 import pg from 'pg';
-import dotenv from 'dotenv';
+import { readFileSync } from 'fs';
 import { resolve } from 'path';
 
-dotenv.config({ path: resolve(process.cwd(), '.env') });
+// Manually parse .env to avoid external dependencies like dotenv
+const envFile = resolve(process.cwd(), '.env');
+try {
+  const content = readFileSync(envFile, 'utf8');
+  content.split('\n').forEach(line => {
+    line = line.trim();
+    if (!line || line.startsWith('#')) return;
+    const eq = line.indexOf('=');
+    if (eq === -1) return;
+    process.env[line.slice(0, eq).trim()] = line.slice(eq + 1).trim();
+  });
+} catch (e) {
+  console.warn("Could not read .env file, relying on environment variables:", (e as Error).message);
+}
 
 const { Pool } = pg;
 const pool = new Pool({
