@@ -28,7 +28,7 @@ import { OTLPMetricExporter as OTLPMetricExporterProto } from '@opentelemetry/ex
 import { PeriodicExportingMetricReader } from '@opentelemetry/sdk-metrics';
 import { resourceFromAttributes } from '@opentelemetry/resources';
 import { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } from '@opentelemetry/semantic-conventions';
-import { SimpleSpanProcessor, type SpanExporter } from '@opentelemetry/sdk-trace-base';
+import { BatchSpanProcessor, type SpanProcessor, type SpanExporter } from '@opentelemetry/sdk-trace-base';
 import * as os from 'node:os';
 
 const enabled = process.env.OTEL_ENABLED === 'true';
@@ -75,7 +75,7 @@ if (enabled) {
 
   // ── Determine primary trace exporter (first configured backend) ────────
   let primaryTraceExporter: SpanExporter;
-  const additionalSpanProcessors: SimpleSpanProcessor[] = [];
+  const additionalSpanProcessors: SpanProcessor[] = [];
   const metricReaders: PeriodicExportingMetricReader[] = [];
   const backends: string[] = [];
 
@@ -96,7 +96,7 @@ if (enabled) {
     if (!primaryTraceExporter!) {
       primaryTraceExporter = grafanaTraceExporter;
     } else {
-      additionalSpanProcessors.push(new SimpleSpanProcessor(grafanaTraceExporter));
+      additionalSpanProcessors.push(new BatchSpanProcessor(grafanaTraceExporter));
     }
     backends.push(`Grafana(${grafanaEndpoint})`);
   }
@@ -115,7 +115,7 @@ if (enabled) {
     if (!primaryTraceExporter!) {
       primaryTraceExporter = appsignalTraceExporter;
     } else {
-      additionalSpanProcessors.push(new SimpleSpanProcessor(appsignalTraceExporter));
+      additionalSpanProcessors.push(new BatchSpanProcessor(appsignalTraceExporter));
     }
     backends.push(`AppSignal(${appsignalEndpoint})`);
   }
@@ -130,7 +130,17 @@ if (enabled) {
       spanProcessors: additionalSpanProcessors,
       instrumentations: [
         getNodeAutoInstrumentations({
-          '@opentelemetry/instrumentation-http': { enabled: true },
+          '@opentelemetry/instrumentation-http': {
+            enabled: true,
+            ignoreOutgoingRequestHook: (request: any) => {
+              const hostname = request.hostname || request.host || '';
+              return (
+                hostname.includes('grafana.net') ||
+                hostname.includes('appsignal-collector.net') ||
+                hostname.includes('appsignal.com')
+              );
+            },
+          },
           '@opentelemetry/instrumentation-pg': { enabled: true },
           '@opentelemetry/instrumentation-fs': { enabled: false },
         }),
