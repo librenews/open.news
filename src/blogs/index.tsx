@@ -251,7 +251,6 @@ app.get('/', async (c) => {
       rows = r;
     }
   } else if (view === 'trending') {
-    // Hot-ranked verified articles — start from interactions (small set), backfill with recent
     const { rows: r } = await db.query(`
       WITH interacted AS (
         SELECT s.uri, s.author_did, s.title, s.site, s.path,
@@ -267,18 +266,17 @@ app.get('/', async (c) => {
                COALESCE(c.share_count, 0) AS share_count,
                (COALESCE(c.like_count, 0) + COALESCE(c.share_count, 0) * 2 + 1)::float
                  / POWER(GREATEST(EXTRACT(EPOCH FROM (NOW() - s.published_at)) / 3600.0, 0) + 2, 1.3) AS hotness
-        FROM (
-          SELECT ai.article_uri,
-            COUNT(CASE WHEN ai.interaction_type = 'like' THEN 1 END)::int AS like_count,
-            COUNT(CASE WHEN ai.interaction_type IN ('share','repost') THEN 1 END)::int AS share_count
-          FROM article_interactions ai
-          JOIN site_standard_articles s2 ON s2.uri = ai.article_uri
-          WHERE s2.verified = true
-            AND s2.suppressed IS NOT TRUE
-            AND s2.published_at > NOW() - INTERVAL '14 days'
-          GROUP BY ai.article_uri
-        ) c
-        JOIN site_standard_articles s ON s.uri = c.article_uri
+        FROM site_standard_articles s
+        JOIN (
+          SELECT article_uri,
+            COUNT(CASE WHEN interaction_type = 'like' THEN 1 END)::int AS like_count,
+            COUNT(CASE WHEN interaction_type IN ('share','repost') THEN 1 END)::int AS share_count
+          FROM article_interactions
+          GROUP BY article_uri
+        ) c ON s.uri = c.article_uri
+        WHERE s.verified = true
+          AND s.suppressed = false
+          AND s.published_at > NOW() - INTERVAL '14 days'
       ),
       backfill AS (
         SELECT uri, author_did, title, site, path,
@@ -294,7 +292,7 @@ app.get('/', async (c) => {
                1.0 / POWER(GREATEST(EXTRACT(EPOCH FROM (NOW() - published_at)) / 3600.0, 0) + 2, 1.3) AS hotness
         FROM site_standard_articles
         WHERE verified = true
-          AND suppressed IS NOT TRUE
+          AND suppressed = false
           AND published_at > NOW() - INTERVAL '3 days'
           AND uri NOT IN (SELECT uri FROM interacted)
         ORDER BY published_at DESC
@@ -304,17 +302,20 @@ app.get('/', async (c) => {
         SELECT * FROM interacted
         UNION ALL
         SELECT * FROM backfill
+      ),
+      ordered_items AS (
+        SELECT * FROM combined
+        ORDER BY hotness DESC
+        LIMIT $1 OFFSET $2
       )
-      SELECT combined.*,
+      SELECT ordered_items.*,
         COALESCE(ul.user_liked, false) AS user_liked
-      FROM combined
+      FROM ordered_items
       LEFT JOIN LATERAL (
         SELECT true AS user_liked FROM article_interactions
-        WHERE article_uri = combined.uri AND actor_did = $3 AND interaction_type = 'like'
+        WHERE article_uri = ordered_items.uri AND actor_did = $3 AND interaction_type = 'like'
         LIMIT 1
       ) ul ON true
-      ORDER BY hotness DESC
-      LIMIT $1 OFFSET $2
     `, [perPage, offset, session?.did ?? '']);
     rows = r;
   } else {
