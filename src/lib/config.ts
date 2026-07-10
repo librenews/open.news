@@ -1,4 +1,10 @@
 import { z } from 'zod';
+import * as dns from 'node:dns';
+
+if (typeof dns.setDefaultResultOrder === 'function') {
+  dns.setDefaultResultOrder('ipv4first');
+}
+
 
 const schema = z.object({
   // Database
