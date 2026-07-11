@@ -387,18 +387,124 @@ export async function ensureMediaIndex(): Promise<void> {
           created_at: { type: 'date' },
           audio_embedding: {
             type: 'knn_vector',
-            dimension: 512, // CLAP audio embedding is 512 dimensions
+            dimension: 512,
             method: {
               name: 'hnsw',
               space_type: 'cosinesimil',
               engine: 'nmslib'
             }
           },
+          is_news: { type: 'boolean' },
+          story_labels: { type: 'keyword' },
+          story_category: { type: 'keyword' },
+          news_qualified_at: { type: 'date' },
         },
       },
     },
   });
   logger.info('OpenSearch media index created');
+}
+
+/**
+ * Ensure the news fields exist on an already-created media index.
+ * Safe to call repeatedly — put_mapping is additive.
+ */
+export async function ensureNewsFields(): Promise<void> {
+  const os = getOsClient();
+  try {
+    await os.indices.putMapping({
+      index: MEDIA_INDEX,
+      body: {
+        properties: {
+          is_news: { type: 'boolean' },
+          story_labels: { type: 'keyword' },
+          story_category: { type: 'keyword' },
+          news_qualified_at: { type: 'date' },
+        },
+      },
+    });
+    logger.info('News fields ensured on media index');
+  } catch (err) {
+    logger.warn({ err }, 'Failed to add news fields to media index (may already exist)');
+  }
+}
+
+/**
+ * Flag a media document as news-qualified and attach story labels.
+ * Uses partial doc update so existing fields are preserved.
+ */
+export async function flagAsNews(
+  uri: string,
+  storyLabels: string[],
+  storyCategory: string | null
+): Promise<void> {
+  const os = getOsClient();
+  try {
+    await os.update({
+      index: MEDIA_INDEX,
+      id: uri,
+      body: {
+        doc: {
+          is_news: true,
+          story_labels: storyLabels,
+          story_category: storyCategory || undefined,
+          news_qualified_at: new Date().toISOString(),
+        },
+      },
+      retry_on_conflict: 3,
+    });
+  } catch (err) {
+    logger.debug({ err, uri }, 'Failed to flag media as news in OpenSearch (non-fatal)');
+  }
+}
+
+/**
+ * Search only news-qualified media by transcript, post text, or alt text.
+ */
+export async function searchNewsContent(
+  query: string,
+  options: { category?: string; limit?: number; cursor?: string } = {}
+) {
+  const os = getOsClient();
+  const { category, limit = 20, cursor } = options;
+
+  const must: any[] = [
+    {
+      multi_match: {
+        query,
+        fields: ['transcript^3', 'post_text^1.5', 'alt_text'],
+        type: 'most_fields',
+      },
+    },
+  ];
+
+  const filter: any[] = [
+    { term: { is_news: true } },
+  ];
+
+  if (category) {
+    filter.push({ term: { story_category: category } });
+  }
+  if (cursor) {
+    filter.push({ range: { created_at: { lt: cursor } } });
+  }
+
+  const res = await os.search({
+    index: MEDIA_INDEX,
+    body: {
+      size: limit,
+      query: {
+        bool: { must, filter },
+      },
+      sort: [{ _score: { order: 'desc' } }, { created_at: { order: 'desc' } }],
+      _source: [
+        'uri', 'did', 'post_text', 'transcript', 'duration_ms',
+        'created_at', 'story_labels', 'story_category', 'news_qualified_at',
+      ],
+    },
+  });
+
+  return res.body.hits?.hits ?? [];
 }
 
 /**

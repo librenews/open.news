@@ -8,11 +8,13 @@ import { ChannelPage } from './views/channelPage.js';
 import { getUserById, getUserByDid } from '../db/queries/users.js';
 import { getOAuthClient } from '../web/routes/auth.js';
 import { rssFeedRouter } from './rssFeed.js';
+import { searchRouter, renderSearchContent } from './search.js';
 
 const app = new Hono();
 
-// Mount RSS feeds
+// Mount RSS feeds and search
 app.route('/', rssFeedRouter);
+app.route('/', searchRouter);
 
 // ── Video Stream Proxy (Supports Range Requests & iOS/Safari) ─────────────────
 app.get('/video/proxy/:did/:cid', async (c) => {
@@ -70,6 +72,39 @@ async function getActiveChannels(): Promise<{ slug: string; name: string }[]> {
     ];
   }
 }
+
+// ── Search Page ───────────────────────────────────────────────────────────────
+app.get('/search', async (c) => {
+  const q = c.req.query('q') || '';
+  const category = c.req.query('category') || '';
+  const channels = await getActiveChannels();
+
+  const searchContent = await renderSearchContent(q, category);
+
+  const userId = c.get('userId') as bigint | undefined;
+  let user = null;
+  if (userId) {
+    const dbUser = await getUserById(userId);
+    if (dbUser) {
+      user = {
+        handle: dbUser.handle || dbUser.did,
+        displayName: dbUser.displayName || dbUser.handle || dbUser.did,
+        avatarUrl: dbUser.avatarUrl || null,
+      };
+    }
+  }
+
+  const title = q ? `"${q}" — Search — ONN` : 'Search — ONN';
+  return c.html(
+    ChannelLayout({
+      title,
+      children: searchContent,
+      activeChannel: '',
+      channels,
+      user,
+    })
+  );
+});
 
 // ── Channel Page ──────────────────────────────────────────────────────────────
 app.get('/channel/:slug', async (c) => {

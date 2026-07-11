@@ -111,8 +111,19 @@ export function ChannelLayout({
               `)}
             </nav>
 
-            <!-- Right: LIVE + Auth -->
+            <!-- Right: Search + LIVE + Auth -->
             <div class="flex items-center gap-3 shrink-0">
+              <!-- Search -->
+              <a
+                href="/search"
+                class="p-2 rounded-lg hover:bg-slate-800/60 text-slate-400 hover:text-white transition-all"
+                title="Search news"
+              >
+                <svg class="w-4.5 h-4.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"></path>
+                </svg>
+              </a>
+
               <!-- LIVE Indicator -->
               <span class="relative flex items-center gap-1.5 bg-red-950/40 border border-red-900/40 rounded-full px-3 py-1 select-none">
                 <span class="live-dot w-2 h-2 rounded-full bg-red-500 inline-block"></span>

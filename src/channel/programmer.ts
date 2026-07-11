@@ -12,6 +12,7 @@ import { db } from '../db/client.js';
 import { logger } from '../lib/logger.js';
 import { getRankedVideosForChannel, RankedVideo } from './ranking.js';
 import { getCachedProfiles } from '../lib/pdsCache.js';
+import { flagAsNews } from '../track/opensearch.js';
 
 export interface ChannelSegment {
   type: 'video' | 'ad_break' | 'interstitial';
@@ -184,6 +185,19 @@ async function recordNewsQualifications(rankedVideos: RankedVideo[]): Promise<vo
         video.matchConfidence, video.score,
       ]
     );
+  }
+  // Also flag in OpenSearch for search
+  const storyMap = new Map<string, { labels: string[]; category: string | null }>();
+  for (const video of qualified) {
+    const existing = storyMap.get(video.uri);
+    if (existing) {
+      if (!existing.labels.includes(video.storyLabel)) existing.labels.push(video.storyLabel);
+    } else {
+      storyMap.set(video.uri, { labels: [video.storyLabel], category: video.storyCategory });
+    }
+  }
+  for (const [uri, { labels, category }] of storyMap) {
+    flagAsNews(uri, labels, category).catch(() => {});
   }
 
   logger.info({ count: qualified.length }, 'Recorded news qualifications');
