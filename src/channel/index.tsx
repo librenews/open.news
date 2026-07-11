@@ -4,6 +4,7 @@ import { logger } from '../lib/logger.js';
 import { getCurrentLineup, generateLineup, persistLineup } from './programmer.js';
 import { ChannelLayout } from './views/layout.js';
 import { ChannelPage } from './views/channelPage.js';
+import { getUserById } from '../db/queries/users.js';
 
 const app = new Hono();
 
@@ -92,6 +93,18 @@ app.get('/channel/:slug', async (c) => {
     logger.error({ err, slug }, 'Failed to load/generate lineup');
   }
 
+  // Get logged-in user (if any)
+  const userId = c.get('userId') as bigint | undefined;
+  let user: { handle: string; displayName: string | null; avatarUrl: string | null } | null = null;
+  if (userId) {
+    try {
+      const dbUser = await getUserById(userId);
+      if (dbUser) {
+        user = { handle: dbUser.handle, displayName: dbUser.display_name, avatarUrl: dbUser.avatar_url };
+      }
+    } catch { /* non-fatal */ }
+  }
+
   const pageHtml = ChannelPage({
     lineup,
     channelName: currentChannel.name,
@@ -104,6 +117,7 @@ app.get('/channel/:slug', async (c) => {
       children: pageHtml,
       activeChannel: slug,
       channels,
+      user,
     })
   );
 });
