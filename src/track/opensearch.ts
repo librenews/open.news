@@ -478,9 +478,12 @@ export async function searchNewsContent(
     },
   ];
 
-  const filter: any[] = [
-    { term: { is_news: true } },
+  // Boost news-qualified results but don't exclude non-news
+  const should: any[] = [
+    { term: { is_news: { value: true, boost: 2.0 } } },
   ];
+
+  const filter: any[] = [];
 
   if (category) {
     filter.push({ term: { story_category: category } });
@@ -494,7 +497,7 @@ export async function searchNewsContent(
     body: {
       size: limit,
       query: {
-        bool: { must, filter },
+        bool: { must, should, filter },
       },
       sort: [{ _score: { order: 'desc' } }, { created_at: { order: 'desc' } }],
       _source: [
