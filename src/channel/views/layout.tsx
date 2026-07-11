@@ -6,13 +6,19 @@ export function ChannelLayout({
   activeChannel = '',
   channels = [],
   user = null,
+  channelSlug = '',
 }: {
   title: string;
   children: any;
   activeChannel?: string;
   channels?: { slug: string; name: string }[];
   user?: { handle: string; displayName: string | null; avatarUrl: string | null } | null;
+  channelSlug?: string;
 }) {
+
+  const rssFeedUrl = channelSlug && channelSlug !== 'all'
+    ? `/rss/news/${channelSlug}`
+    : '/rss/news';
 
   return html`
     <!DOCTYPE html>
@@ -23,6 +29,7 @@ export function ChannelLayout({
         <title>${title}</title>
         <meta name="description" content="ONN — The Open News Network. Algorithmic video news from the open social web, powered by AT Protocol." />
         <link rel="icon" type="image/svg+xml" href="/static/onn-favicon.svg" />
+        <link rel="alternate" type="application/rss+xml" title="${title} — RSS" href="${rssFeedUrl}" />
         <link rel="preconnect" href="https://fonts.googleapis.com">
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
         <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">

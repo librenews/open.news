@@ -125,6 +125,7 @@ app.get('/channel/:slug', async (c) => {
       activeChannel: slug,
       channels,
       user,
+      channelSlug: slug,
     })
   );
 });

@@ -40,12 +40,30 @@ export function ChannelPage({
 
   const videoSegments = lineup.segments.filter(s => s.type === 'video');
   const totalMinutes = Math.round(lineup.totalDurationMs / 60000);
+  const rssUrl = channelSlug && channelSlug !== 'all'
+    ? `/rss/news/${channelSlug}`
+    : '/rss/news';
 
   return html`
     <div class="fade-in">
       <!-- Channel Header -->
       <div class="mb-6">
-        <h1 class="title-font text-2xl md:text-3xl font-bold text-white">${channelName}</h1>
+        <div class="flex items-center gap-3">
+          <h1 class="title-font text-2xl md:text-3xl font-bold text-white">${channelName}</h1>
+          <a
+            href="${rssUrl}"
+            target="_blank"
+            rel="noopener"
+            title="RSS Feed"
+            class="group flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 hover:border-amber-500/30 transition-all"
+          >
+            <svg class="w-3.5 h-3.5 text-amber-400 group-hover:text-amber-300 transition-colors" viewBox="0 0 24 24" fill="currentColor">
+              <circle cx="6.18" cy="17.82" r="2.18"/>
+              <path d="M4 4.44v2.83c7.03 0 12.73 5.7 12.73 12.73h2.83c0-8.59-6.97-15.56-15.56-15.56zm0 5.66v2.83c3.9 0 7.07 3.17 7.07 7.07h2.83c0-5.47-4.43-9.9-9.9-9.9z"/>
+            </svg>
+            <span class="text-xs font-medium text-amber-400/80 group-hover:text-amber-300 transition-colors hidden sm:inline">RSS</span>
+          </a>
+        </div>
         <p class="text-sm text-slate-400 mt-1">
           ${lineup.storyCount} stories · ${videoSegments.length} clips · ${totalMinutes} minutes
         </p>
