@@ -9,6 +9,7 @@ import { html, raw } from 'hono/html';
 import { searchNewsContent, ensureNewsFields } from '../track/opensearch.js';
 import { logger } from '../lib/logger.js';
 import { getCachedProfiles } from '../lib/pdsCache.js';
+import { db } from '../db/client.js';
 
 export const searchRouter = new Hono();
 
@@ -18,6 +19,8 @@ ensureNewsFields().catch(() => {});
 interface SearchResult {
   uri: string;
   did: string;
+  cid: string | null;
+  thumbnailCid: string | null;
   postText: string | null;
   transcript: string;
   durationMs: number | null;
@@ -34,6 +37,8 @@ function parseHits(hits: any[]): SearchResult[] {
   return hits.map(h => ({
     uri: h._source.uri,
     did: h._source.did,
+    cid: null,
+    thumbnailCid: null,
     postText: h._source.post_text || null,
     transcript: h._source.transcript || '',
     durationMs: h._source.duration_ms || null,
@@ -92,6 +97,23 @@ export async function renderSearchContent(q: string, category: string) {
         r.authorDisplayName = p?.displayName || p?.handle || r.did;
         r.authorAvatar = p?.avatar || null;
       }
+
+      // Fetch video CIDs from database for thumbnails/playback
+      const uris = results.map(r => r.uri).filter(Boolean);
+      if (uris.length > 0) {
+        const { rows: mediaRows } = await db.query<{ uri: string; cid: string | null; thumbnail_cid: string | null }>(
+          'SELECT uri, cid, thumbnail_cid FROM media_items WHERE uri = ANY($1)',
+          [uris]
+        );
+        const cidMap = new Map(mediaRows.map(r => [r.uri, { cid: r.cid, thumbnailCid: r.thumbnail_cid }]));
+        for (const r of results) {
+          const m = cidMap.get(r.uri);
+          if (m) {
+            r.cid = m.cid;
+            r.thumbnailCid = m.thumbnailCid;
+          }
+        }
+      }
     } catch (err) {
       logger.error({ err, q }, 'Search failed');
       error = 'Search temporarily unavailable. Please try again.';
@@ -109,39 +131,67 @@ export async function renderSearchContent(q: string, category: string) {
 
   const escHtml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-  const resultCards = results.map(r => {
+  const resultCards = results.map((r, idx) => {
     const bskyLink = atUriToHttps(r.uri);
     const snippet = r.transcript.length > 200 ? r.transcript.slice(0, 200) + '\u2026' : r.transcript;
     const durationSec = r.durationMs ? Math.round(r.durationMs / 1000) : null;
     const durationStr = durationSec ? `${Math.floor(durationSec / 60)}:${(durationSec % 60).toString().padStart(2, '0')}` : '';
     const timeAgo = getTimeAgo(r.createdAt);
+    const videoUrl = r.did && r.cid ? `/video/proxy/${encodeURIComponent(r.did)}/${encodeURIComponent(r.cid)}` : '';
+    const thumbUrl = r.did && r.thumbnailCid ? `/video/proxy/${encodeURIComponent(r.did)}/${encodeURIComponent(r.thumbnailCid)}` : '';
+    const playerId = `srch-player-${idx}`;
 
     return `
-      <div class="bg-slate-900/50 border border-slate-800/60 rounded-2xl p-5 hover:border-slate-700/60 transition-all group">
-        <div class="flex items-start gap-4">
-          <div class="flex-shrink-0">
-            ${r.authorAvatar
-              ? `<img src="${escHtml(r.authorAvatar)}" class="w-10 h-10 rounded-full ring-2 ring-slate-800" alt="" />`
-              : `<div class="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center text-slate-500 text-sm font-bold">${escHtml((r.authorHandle || '?')[0].toUpperCase())}</div>`
-            }
-          </div>
-          <div class="flex-1 min-w-0">
-            <div class="flex items-center gap-2 mb-1">
-              <span class="text-sm font-semibold text-white truncate">${escHtml(r.authorDisplayName || r.authorHandle || '')}</span>
-              <span class="text-xs text-slate-500">@${escHtml(r.authorHandle || '')}</span>
-              <span class="text-xs text-slate-600">\u00b7</span>
-              <span class="text-xs text-slate-500">${timeAgo}</span>
-              ${durationStr ? `<span class="text-xs text-slate-600 bg-slate-800 px-1.5 py-0.5 rounded">${durationStr}</span>` : ''}
+      <div class="bg-slate-900/50 border border-slate-800/60 rounded-2xl overflow-hidden hover:border-slate-700/60 transition-all" x-data="{ playing: false }">
+        ${videoUrl ? `
+        <!-- Video / Thumbnail -->
+        <div class="relative aspect-video bg-black cursor-pointer" @click="playing = true">
+          ${thumbUrl ? `<img x-show="!playing" src="${escHtml(thumbUrl)}" class="w-full h-full object-cover" alt="" />` : `<div x-show="!playing" class="w-full h-full bg-slate-800 flex items-center justify-center"><svg class="w-12 h-12 text-slate-600" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></div>`}
+          <!-- Play button overlay -->
+          <div x-show="!playing" class="absolute inset-0 flex items-center justify-center bg-black/30 hover:bg-black/20 transition-colors">
+            <div class="w-14 h-14 rounded-full bg-white/90 flex items-center justify-center shadow-xl">
+              <svg class="w-6 h-6 text-slate-900 ml-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
             </div>
-            ${r.postText ? `<p class="text-sm text-slate-300 mb-2">${escHtml(r.postText)}</p>` : ''}
-            <p class="text-xs text-slate-500 italic leading-relaxed">"${escHtml(snippet)}"</p>
-            <div class="flex flex-wrap gap-1.5 mt-3">
-              ${r.storyLabels.map(l =>
-                `<span class="text-xs px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400/80 border border-amber-500/20">${escHtml(l)}</span>`
-              ).join('')}
-              <a href="${escHtml(bskyLink)}" target="_blank" rel="noopener" class="text-xs px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 hover:text-white border border-slate-700 hover:border-slate-600 transition-colors ml-auto">
-                View on Bluesky \u2197
-              </a>
+            ${durationStr ? `<span class="absolute bottom-2 right-2 text-xs bg-black/70 text-white px-1.5 py-0.5 rounded">${durationStr}</span>` : ''}
+          </div>
+          <!-- Inline player -->
+          <template x-if="playing">
+            <video
+              id="${playerId}"
+              src="${escHtml(videoUrl)}"
+              class="w-full h-full"
+              controls
+              autoplay
+              playsinline
+            ></video>
+          </template>
+        </div>
+        ` : ''}
+        <div class="p-4">
+          <div class="flex items-start gap-3">
+            <div class="flex-shrink-0">
+              ${r.authorAvatar
+                ? `<img src="${escHtml(r.authorAvatar)}" class="w-9 h-9 rounded-full ring-2 ring-slate-800" alt="" />`
+                : `<div class="w-9 h-9 rounded-full bg-slate-800 flex items-center justify-center text-slate-500 text-sm font-bold">${escHtml((r.authorHandle || '?')[0].toUpperCase())}</div>`
+              }
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-2 mb-1">
+                <span class="text-sm font-semibold text-white truncate">${escHtml(r.authorDisplayName || r.authorHandle || '')}</span>
+                <span class="text-xs text-slate-500">@${escHtml(r.authorHandle || '')}</span>
+                <span class="text-xs text-slate-600">\u00b7</span>
+                <span class="text-xs text-slate-500">${timeAgo}</span>
+              </div>
+              ${r.postText ? `<p class="text-sm text-slate-300 mb-2">${escHtml(r.postText)}</p>` : ''}
+              <p class="text-xs text-slate-500 italic leading-relaxed">"${escHtml(snippet)}"</p>
+              <div class="flex flex-wrap gap-1.5 mt-3">
+                ${r.storyLabels.map(l =>
+                  `<span class="text-xs px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400/80 border border-amber-500/20">${escHtml(l)}</span>`
+                ).join('')}
+                <a href="${escHtml(bskyLink)}" target="_blank" rel="noopener" class="text-xs px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 hover:text-white border border-slate-700 hover:border-slate-600 transition-colors ml-auto">
+                  View on Bluesky \u2197
+                </a>
+              </div>
             </div>
           </div>
         </div>
