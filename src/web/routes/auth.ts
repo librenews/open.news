@@ -158,7 +158,11 @@ authRouter.get('/oauth/callback', async (c) => {
     setSessionCookie(c, user.id);
     logger.info({ did, handle, userId: user.id }, 'User logged in via OAuth');
 
-    await enqueueJob('syncFollows', { userId: user.id.toString(), userDid: did });
+    try {
+      await enqueueJob('syncFollows', { userId: user.id.toString(), userDid: did });
+    } catch (jobErr) {
+      logger.warn({ jobErr, did }, 'Failed to enqueue syncFollows job (non-fatal)');
+    }
 
     // Redirect to returnTo if set, otherwise default to /chat
     const { getCookie, setCookie: setC } = await import('hono/cookie');
