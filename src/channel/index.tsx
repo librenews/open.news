@@ -3,10 +3,11 @@ import { Agent } from '@atproto/api';
 import { db } from '../db/client.js';
 import { logger } from '../lib/logger.js';
 import { getCurrentLineup, generateLineup, persistLineup } from './programmer.js';
-import { ChannelLayout } from './views/layout.js';
+import { ChannelLayout, type OgMeta } from './views/layout.js';
 import { ChannelPage } from './views/channelPage.js';
 import { getUserById, getUserByDid } from '../db/queries/users.js';
 import { getOAuthClient } from '../web/routes/auth.js';
+import { config } from '../lib/config.js';
 import { rssFeedRouter } from './rssFeed.js';
 import { searchRouter, renderSearchContent } from './search.js';
 
@@ -102,6 +103,11 @@ app.get('/search', async (c) => {
       activeChannel: '',
       channels,
       user,
+      og: {
+        title,
+        description: q ? `Search results for "${q}" on the Open News Network.` : 'Search news video transcripts on ONN.',
+        url: `${config.BASE_URL}/search${q ? `?q=${encodeURIComponent(q)}` : ''}`,
+      },
     })
   );
 });
@@ -153,6 +159,16 @@ app.get('/channel/:slug', async (c) => {
     isLoggedIn: !!user,
   });
 
+  // Build OG metadata from top video in lineup
+  const topVideo = lineup?.segments.find(s => s.type === 'video');
+  const ogImage = topVideo?.did && topVideo?.thumbnailCid
+    ? `${config.BASE_URL}/video/proxy/${encodeURIComponent(topVideo.did)}/${encodeURIComponent(topVideo.thumbnailCid)}`
+    : '';
+  const videoCount = lineup?.segments.filter(s => s.type === 'video').length || 0;
+  const ogDesc = topVideo?.storyLabel
+    ? `Now playing: ${topVideo.storyLabel}${videoCount > 1 ? ` · ${videoCount} clips` : ''} — ONN`
+    : `${currentChannel.name} — Algorithmic video news from the open social web.`;
+
   return c.html(
     ChannelLayout({
       title: `${currentChannel.name} — ONN`,
@@ -161,6 +177,12 @@ app.get('/channel/:slug', async (c) => {
       channels,
       user,
       channelSlug: slug,
+      og: {
+        title: `${currentChannel.name} — ONN`,
+        description: ogDesc,
+        image: ogImage,
+        url: `${config.BASE_URL}/channel/${slug}`,
+      },
     })
   );
 });

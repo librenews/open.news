@@ -1,5 +1,12 @@
 import { html } from 'hono/html';
 
+export interface OgMeta {
+  title?: string;
+  description?: string;
+  image?: string;
+  url?: string;
+}
+
 export function ChannelLayout({
   title,
   children,
@@ -7,6 +14,7 @@ export function ChannelLayout({
   channels = [],
   user = null,
   channelSlug = '',
+  og = {},
 }: {
   title: string;
   children: any;
@@ -14,11 +22,17 @@ export function ChannelLayout({
   channels?: { slug: string; name: string }[];
   user?: { handle: string; displayName: string | null; avatarUrl: string | null } | null;
   channelSlug?: string;
+  og?: OgMeta;
 }) {
 
   const rssFeedUrl = channelSlug && channelSlug !== 'all'
     ? `/rss/news/${channelSlug}`
     : '/rss/news';
+
+  const ogTitle = og.title || title;
+  const ogDesc = og.description || 'Algorithmic video news from the open social web, powered by AT Protocol.';
+  const ogImage = og.image || '';
+  const ogUrl = og.url || '';
 
   return html`
     <!DOCTYPE html>
@@ -27,7 +41,21 @@ export function ChannelLayout({
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <title>${title}</title>
-        <meta name="description" content="ONN — The Open News Network. Algorithmic video news from the open social web, powered by AT Protocol." />
+        <meta name="description" content="${ogDesc}" />
+
+        <!-- Open Graph -->
+        <meta property="og:type" content="website" />
+        <meta property="og:title" content="${ogTitle}" />
+        <meta property="og:description" content="${ogDesc}" />
+        ${ogImage ? html`<meta property="og:image" content="${ogImage}" />` : ''}
+        ${ogUrl ? html`<meta property="og:url" content="${ogUrl}" />` : ''}
+        <meta property="og:site_name" content="ONN — Open News Network" />
+
+        <!-- Twitter Card -->
+        <meta name="twitter:card" content="${ogImage ? 'summary_large_image' : 'summary'}" />
+        <meta name="twitter:title" content="${ogTitle}" />
+        <meta name="twitter:description" content="${ogDesc}" />
+        ${ogImage ? html`<meta name="twitter:image" content="${ogImage}" />` : ''}
         <link rel="icon" type="image/svg+xml" href="/static/onn-favicon.svg" />
         <link rel="alternate" type="application/rss+xml" title="${title} — RSS" href="${rssFeedUrl}" />
         <link rel="preconnect" href="https://fonts.googleapis.com">
