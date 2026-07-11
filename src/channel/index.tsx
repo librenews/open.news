@@ -100,7 +100,7 @@ app.get('/channel/:slug', async (c) => {
 
   return c.html(
     ChannelLayout({
-      title: `${currentChannel.name} — open.news`,
+      title: `${currentChannel.name} — ONN`,
       children: pageHtml,
       activeChannel: slug,
       channels,

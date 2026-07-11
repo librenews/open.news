@@ -19,7 +19,8 @@ export function ChannelLayout({
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <title>${title}</title>
-        <meta name="description" content="open.news — Algorithmic video news from the open social web, powered by AT Protocol." />
+        <meta name="description" content="ONN — The Open News Network. Algorithmic video news from the open social web, powered by AT Protocol." />
+        <link rel="icon" type="image/jpeg" href="/static/onn-favicon.jpg" />
         <link rel="preconnect" href="https://fonts.googleapis.com">
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
         <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -68,8 +69,8 @@ export function ChannelLayout({
           <div class="h-[2px] bg-gradient-to-r from-red-500 to-amber-500"></div>
           <div class="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between gap-6">
             <!-- Logo -->
-            <a href="/" class="title-font text-2xl font-black bg-gradient-to-r from-red-400 via-orange-400 to-amber-400 bg-clip-text text-transparent tracking-tight hover:opacity-95 transition-opacity shrink-0 no-underline">
-              open<span class="text-slate-500">.</span>news
+            <a href="/" class="shrink-0 no-underline hover:opacity-90 transition-opacity">
+              <img src="/static/onn-logo.jpg" alt="ONN — Open News Network" class="h-9 w-auto rounded-sm" />
             </a>
 
             <!-- Channel Tabs -->
@@ -117,7 +118,7 @@ export function ChannelLayout({
 
         <!-- Footer -->
         <footer class="border-t border-slate-900 py-6 text-center text-xs text-slate-600">
-          open.news · Algorithmic news from the open social web · Powered by <a href="https://atproto.com" target="_blank" rel="noopener" class="text-slate-500 hover:text-amber-400 transition-colors no-underline">AT Protocol</a>
+          ONN · The Open News Network · Powered by <a href="https://atproto.com" target="_blank" rel="noopener" class="text-slate-500 hover:text-amber-400 transition-colors no-underline">AT Protocol</a>
         </footer>
       </body>
     </html>
