@@ -12,11 +12,13 @@ export interface ChannelLineup {
 export function ChannelPage({
   lineup,
   channelName,
-  channelSlug
+  channelSlug,
+  isLoggedIn = false,
 }: {
   lineup: ChannelLineup | null;
   channelName: string;
   channelSlug: string;
+  isLoggedIn?: boolean;
 }) {
 
   if (!lineup || !lineup.segments || lineup.segments.length === 0) {
@@ -53,7 +55,7 @@ export function ChannelPage({
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <!-- Player (2/3 width on desktop) -->
         <div class="lg:col-span-2">
-          ${ChannelPlayer({ segments: lineup.segments, channelName })}
+          ${ChannelPlayer({ segments: lineup.segments, channelName, isLoggedIn })}
         </div>
 
         <!-- Program Guide (1/3 width on desktop) -->

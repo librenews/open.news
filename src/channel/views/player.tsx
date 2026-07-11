@@ -22,14 +22,17 @@ export interface PlayerSegment {
 
 export function ChannelPlayer({
   segments,
-  channelName
+  channelName,
+  isLoggedIn = false,
 }: {
   segments: PlayerSegment[];
   channelName: string;
+  isLoggedIn?: boolean;
 }) {
   return html`
     <!-- Lineup data for Alpine -->
     <script id="lineup-data" type="application/json">${raw(JSON.stringify(segments))}</script>
+    <script id="auth-state" type="application/json">${raw(JSON.stringify({ isLoggedIn }))}</script>
 
     <div
       x-data="{
@@ -49,8 +52,11 @@ export function ChannelPlayer({
             this.progress = 0;
             this.currentTime = 0;
             this.duration = 0;
+            this.liked = false;
+            this.reposted = false;
             this.$nextTick(() => this.loadCurrentSegment());
           });
+          this.initAuth();
           this.$nextTick(() => this.loadCurrentSegment());
         },
         get current() { return this.segments[this.currentIndex] || {}; },
@@ -143,6 +149,45 @@ export function ChannelPlayer({
           const m = Math.floor(s / 60);
           const sec = Math.floor(s % 60);
           return m + ':' + (sec < 10 ? '0' : '') + sec;
+        },
+        // ── Like / Repost ──
+        isLoggedIn: false,
+        liked: false,
+        reposted: false,
+        likeLoading: false,
+        repostLoading: false,
+        showLoginPrompt: false,
+        initAuth() {
+          const authData = JSON.parse(document.getElementById('auth-state').textContent);
+          this.isLoggedIn = authData.isLoggedIn;
+        },
+        async doLike() {
+          if (!this.isLoggedIn) { this.showLoginPrompt = true; return; }
+          if (this.liked || this.likeLoading) return;
+          this.likeLoading = true;
+          try {
+            const res = await fetch('/api/like', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ uri: this.current.uri, cid: this.current.cid }),
+            });
+            if (res.ok) this.liked = true;
+          } catch (e) { console.error('Like failed', e); }
+          this.likeLoading = false;
+        },
+        async doRepost() {
+          if (!this.isLoggedIn) { this.showLoginPrompt = true; return; }
+          if (this.reposted || this.repostLoading) return;
+          this.repostLoading = true;
+          try {
+            const res = await fetch('/api/repost', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ uri: this.current.uri, cid: this.current.cid }),
+            });
+            if (res.ok) this.reposted = true;
+          } catch (e) { console.error('Repost failed', e); }
+          this.repostLoading = false;
         },
       }"
       class="w-full"
@@ -290,14 +335,47 @@ export function ChannelPlayer({
               </button>
             </div>
 
-            <!-- Center: Time -->
-            <span class="text-xs text-slate-500 font-medium tabular-nums">
-              <span x-text="fmtTime(currentTime)"></span>
-              <span class="text-slate-700"> / </span>
-              <span x-text="fmtTime(duration)"></span>
-              <span class="text-slate-700 ml-2">·</span>
-              <span class="ml-2">Clip <span x-text="videoIndex"></span>/<span x-text="videoCount"></span></span>
-            </span>
+            <!-- Center: Like / Repost / Time -->
+            <div class="flex items-center gap-3">
+              <!-- Like Button -->
+              <button
+                @click="doLike()"
+                :class="liked ? 'text-rose-400 bg-rose-500/10' : 'text-slate-400 hover:text-rose-400 hover:bg-slate-800/60'"
+                class="flex items-center gap-1 px-2 py-1.5 rounded-lg transition-all text-xs font-medium"
+                :disabled="likeLoading"
+                title="Like on Bluesky"
+              >
+                <svg class="w-4 h-4" :class="liked && 'scale-110'" :fill="liked ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="transition: all 0.2s">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z"></path>
+                </svg>
+                <span x-show="liked">Liked</span>
+              </button>
+              <!-- Repost Button -->
+              <button
+                @click="doRepost()"
+                :class="reposted ? 'text-emerald-400 bg-emerald-500/10' : 'text-slate-400 hover:text-emerald-400 hover:bg-slate-800/60'"
+                class="flex items-center gap-1 px-2 py-1.5 rounded-lg transition-all text-xs font-medium"
+                :disabled="repostLoading"
+                title="Repost on Bluesky"
+              >
+                <svg class="w-4 h-4" :class="reposted && 'scale-110'" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="transition: all 0.2s">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 12c0-1.232-.046-2.453-.138-3.662a4.006 4.006 0 00-3.7-3.7 48.678 48.678 0 00-7.324 0 4.006 4.006 0 00-3.7 3.7c-.017.22-.032.441-.046.662M4.5 12c0 1.232.046 2.453.138 3.662a4.006 4.006 0 003.7 3.7 48.656 48.656 0 007.324 0 4.006 4.006 0 003.7-3.7c.017-.22.032-.441.046-.662"></path>
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M14.25 7.5l2.25-2.25L14.25 3"></path>
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M9.75 16.5l-2.25 2.25 2.25 2.25"></path>
+                </svg>
+                <span x-show="reposted">Reposted</span>
+              </button>
+              <!-- Divider -->
+              <span class="w-px h-4 bg-slate-800"></span>
+              <!-- Time -->
+              <span class="text-xs text-slate-500 font-medium tabular-nums">
+                <span x-text="fmtTime(currentTime)"></span>
+                <span class="text-slate-700"> / </span>
+                <span x-text="fmtTime(duration)"></span>
+                <span class="text-slate-700 ml-1">·</span>
+                <span class="ml-1">Clip <span x-text="videoIndex"></span>/<span x-text="videoCount"></span></span>
+              </span>
+            </div>
 
             <!-- Right: Volume -->
             <div class="flex items-center gap-2">
@@ -331,6 +409,62 @@ export function ChannelPlayer({
             </div>
           </div>
 
+        </div>
+      </div>
+
+      <!-- Login Prompt Modal (shown when non-logged-in user clicks like/repost) -->
+      <div
+        x-show="showLoginPrompt"
+        x-transition:enter="transition ease-out duration-200"
+        x-transition:enter-start="opacity-0"
+        x-transition:enter-end="opacity-100"
+        x-transition:leave="transition ease-in duration-150"
+        x-transition:leave-start="opacity-100"
+        x-transition:leave-end="opacity-0"
+        @click.self="showLoginPrompt = false"
+        @keydown.escape.window="showLoginPrompt = false"
+        class="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm"
+      >
+        <div
+          @click.stop
+          x-transition:enter="transition ease-out duration-200"
+          x-transition:enter-start="opacity-0 scale-95 translate-y-4"
+          x-transition:enter-end="opacity-100 scale-100 translate-y-0"
+          class="bg-slate-900 border border-slate-800 rounded-2xl p-8 w-full max-w-sm shadow-2xl mx-4"
+        >
+          <div class="text-center mb-6">
+            <div class="inline-flex items-center gap-2 mb-3">
+              <svg class="w-6 h-6" style="filter: drop-shadow(0 0 6px rgba(245,158,11,0.4))" viewBox="0 0 64 64" fill="none">
+                <circle cx="32" cy="32" r="5" fill="#f59e0b"/>
+                <path d="M32 20a12 12 0 0 1 0 24a12 12 0 0 1 0-24" stroke="#f59e0b" stroke-width="4" stroke-dasharray="18.85 18.85" stroke-linecap="round"/>
+                <path d="M32 12a20 20 0 0 1 0 40a20 20 0 0 1 0-40" stroke="#f59e0b" stroke-width="3.5" stroke-dasharray="31.42 31.42" stroke-linecap="round"/>
+              </svg>
+              <span class="text-lg font-extrabold text-white" style="font-family: Outfit, sans-serif">ONN</span>
+            </div>
+            <h2 class="text-xl font-bold text-white" style="font-family: Outfit, sans-serif">Sign in to interact</h2>
+            <p class="text-sm text-slate-400 mt-1">Like and repost clips on the Bluesky network</p>
+          </div>
+          <form action="/oauth/login" method="GET">
+            <input type="hidden" name="returnTo" value="/" />
+            <div class="mb-4">
+              <input
+                type="text"
+                name="handle"
+                placeholder="your.bsky.social"
+                required
+                class="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white placeholder:text-slate-500 focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/20 text-sm transition-all"
+              />
+            </div>
+            <button
+              type="submit"
+              class="w-full py-3 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 text-white font-semibold text-sm hover:from-amber-400 hover:to-orange-400 transition-all shadow-lg shadow-amber-500/20"
+            >
+              Continue with Bluesky
+            </button>
+          </form>
+          <button @click="showLoginPrompt = false" class="block w-full text-center text-xs text-slate-600 mt-4 hover:text-slate-400 transition-colors">
+            Maybe later
+          </button>
         </div>
       </div>
     </div>

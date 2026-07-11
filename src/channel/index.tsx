@@ -1,10 +1,12 @@
 import { Hono } from 'hono';
+import { Agent } from '@atproto/api';
 import { db } from '../db/client.js';
 import { logger } from '../lib/logger.js';
 import { getCurrentLineup, generateLineup, persistLineup } from './programmer.js';
 import { ChannelLayout } from './views/layout.js';
 import { ChannelPage } from './views/channelPage.js';
-import { getUserById } from '../db/queries/users.js';
+import { getUserById, getUserByDid } from '../db/queries/users.js';
+import { getOAuthClient } from '../web/routes/auth.js';
 
 const app = new Hono();
 
@@ -109,6 +111,7 @@ app.get('/channel/:slug', async (c) => {
     lineup,
     channelName: currentChannel.name,
     channelSlug: slug,
+    isLoggedIn: !!user,
   });
 
   return c.html(
@@ -135,6 +138,86 @@ app.get('/channel/:slug/lineup.json', async (c) => {
   } catch (err) {
     logger.error({ err, slug }, 'Failed to fetch lineup JSON');
     return c.json({ error: 'Internal server error' }, 500);
+  }
+});
+
+// ── Like / Repost API ─────────────────────────────────────────────────────────
+
+async function getAuthenticatedAgent(c: any): Promise<{ agent: InstanceType<typeof Agent>; did: string } | null> {
+  const userId = c.get('userId') as bigint | undefined;
+  if (!userId) return null;
+  const dbUser = await getUserById(userId);
+  if (!dbUser) return null;
+  try {
+    const client = await getOAuthClient();
+    const oauthSession = await client.restore(dbUser.did);
+    return { agent: new Agent(oauthSession), did: dbUser.did };
+  } catch (err) {
+    logger.error({ err, did: dbUser.did }, 'Failed to restore OAuth session');
+    return null;
+  }
+}
+
+// Parse an AT URI into its components
+function parseAtUri(uri: string): { repo: string; collection: string; rkey: string } | null {
+  const m = uri.match(/^at:\/\/([^\/]+)\/([^\/]+)\/([^\/]+)$/);
+  if (!m) return null;
+  return { repo: m[1], collection: m[2], rkey: m[3] };
+}
+
+app.post('/api/like', async (c) => {
+  const auth = await getAuthenticatedAgent(c);
+  if (!auth) return c.json({ error: 'Unauthorized' }, 401);
+
+  try {
+    const { uri, cid } = await c.req.json();
+    if (!uri) return c.json({ error: 'Missing uri' }, 400);
+
+    const parsed = parseAtUri(uri);
+    if (!parsed) return c.json({ error: 'Invalid AT URI' }, 400);
+
+    const res = await auth.agent.com.atproto.repo.createRecord({
+      repo: auth.did,
+      collection: 'app.bsky.feed.like',
+      record: {
+        $type: 'app.bsky.feed.like',
+        subject: { uri, cid: cid || '' },
+        createdAt: new Date().toISOString(),
+      },
+    });
+
+    return c.json({ success: true, likeUri: res.data.uri });
+  } catch (err) {
+    logger.error({ err }, 'Like failed');
+    return c.json({ error: 'Like failed' }, 500);
+  }
+});
+
+app.post('/api/repost', async (c) => {
+  const auth = await getAuthenticatedAgent(c);
+  if (!auth) return c.json({ error: 'Unauthorized' }, 401);
+
+  try {
+    const { uri, cid } = await c.req.json();
+    if (!uri) return c.json({ error: 'Missing uri' }, 400);
+
+    const parsed = parseAtUri(uri);
+    if (!parsed) return c.json({ error: 'Invalid AT URI' }, 400);
+
+    const res = await auth.agent.com.atproto.repo.createRecord({
+      repo: auth.did,
+      collection: 'app.bsky.feed.repost',
+      record: {
+        $type: 'app.bsky.feed.repost',
+        subject: { uri, cid: cid || '' },
+        createdAt: new Date().toISOString(),
+      },
+    });
+
+    return c.json({ success: true, repostUri: res.data.uri });
+  } catch (err) {
+    logger.error({ err }, 'Repost failed');
+    return c.json({ error: 'Repost failed' }, 500);
   }
 });
 
