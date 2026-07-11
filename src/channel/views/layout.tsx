@@ -20,7 +20,6 @@ export function ChannelLayout({
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <title>${title}</title>
         <meta name="description" content="ONN — The Open News Network. Algorithmic video news from the open social web, powered by AT Protocol." />
-        <link rel="icon" type="image/png" href="/static/onn-favicon.png" />
         <link rel="icon" type="image/svg+xml" href="/static/onn-favicon.svg" />
         <link rel="preconnect" href="https://fonts.googleapis.com">
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
