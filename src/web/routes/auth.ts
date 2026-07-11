@@ -28,13 +28,13 @@ async function getOAuthClient(): Promise<NodeOAuthClient> {
   _oauthClient = new NodeOAuthClient({
     clientMetadata: {
       client_id: config.BSKY_OAUTH_CLIENT_ID,
-      client_name: 'open.news',
+      client_name: 'ONN — Open News Network',
       client_uri: config.BASE_URL,
       redirect_uris: [`${config.BASE_URL}/oauth/callback`],
       grant_types: ['authorization_code', 'refresh_token'],
       response_types: ['code'],
       token_endpoint_auth_method: 'none',
-      scope: 'atproto',
+      scope: 'atproto transition:generic transition:email',
       dpop_bound_access_tokens: true,
     },
     requestLock,
@@ -85,13 +85,13 @@ async function getOAuthClient(): Promise<NodeOAuthClient> {
 authRouter.get('/oauth/client-metadata.json', (c) => {
   return c.json({
     client_id: config.BSKY_OAUTH_CLIENT_ID,
-    client_name: 'open.news',
+    client_name: 'ONN — Open News Network',
     client_uri: config.BASE_URL,
     redirect_uris: [`${config.BASE_URL}/oauth/callback`],
     grant_types: ['authorization_code', 'refresh_token'],
     response_types: ['code'],
     token_endpoint_auth_method: 'none',
-    scope: 'atproto',
+    scope: 'atproto transition:generic transition:email',
     dpop_bound_access_tokens: true,
   });
 });
