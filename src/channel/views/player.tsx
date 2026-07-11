@@ -143,6 +143,9 @@ export function ChannelPlayer({
         prevSegment() {
           if (this.currentIndex > 0) this.currentIndex--;
         },
+        playSegment(index) {
+          if (index >= 0 && index < this.segments.length) this.currentIndex = index;
+        },
         onEnded() { this.isPlaying = false; this.nextSegment(); },
         onTimeUpdate(e) {
           const vid = e.target;
