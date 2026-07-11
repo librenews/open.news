@@ -66,9 +66,6 @@ export function ChannelLayout({
             0%, 100% { transform: scale(1); opacity: 1; }
             50% { transform: scale(1.6); opacity: 0.4; }
           }
-          .live-dot {
-            animation: livePulse 1.8s ease-in-out infinite;
-          }
           .onn-signal {
             filter: drop-shadow(0 0 6px rgba(245, 158, 11, 0.4));
           }
@@ -111,24 +108,30 @@ export function ChannelLayout({
               `)}
             </nav>
 
-            <!-- Right: Search + LIVE + Auth -->
+            <!-- Right: Search + Auth -->
             <div class="flex items-center gap-3 shrink-0">
-              <!-- Search -->
+              <!-- Inline Search Bar -->
+              <form action="/search" method="GET" class="hidden sm:flex items-center relative">
+                <svg class="absolute left-2.5 w-3.5 h-3.5 text-slate-500 pointer-events-none" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"></path>
+                </svg>
+                <input
+                  type="text"
+                  name="q"
+                  placeholder="Search news…"
+                  class="w-40 lg:w-52 pl-8 pr-2 py-1.5 bg-slate-900/80 border border-slate-800 rounded-lg text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-amber-500/40 focus:ring-1 focus:ring-amber-500/20 focus:w-64 transition-all"
+                />
+              </form>
+              <!-- Mobile search icon -->
               <a
                 href="/search"
-                class="p-2 rounded-lg hover:bg-slate-800/60 text-slate-400 hover:text-white transition-all"
+                class="sm:hidden p-2 rounded-lg hover:bg-slate-800/60 text-slate-400 hover:text-white transition-all"
                 title="Search news"
               >
                 <svg class="w-4.5 h-4.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"></path>
                 </svg>
               </a>
-
-              <!-- LIVE Indicator -->
-              <span class="relative flex items-center gap-1.5 bg-red-950/40 border border-red-900/40 rounded-full px-3 py-1 select-none">
-                <span class="live-dot w-2 h-2 rounded-full bg-red-500 inline-block"></span>
-                <span class="text-xs font-bold text-red-400 uppercase tracking-wider">Live</span>
-              </span>
 
               ${user ? html`
                 <!-- Logged-in user menu -->
