@@ -20,7 +20,7 @@ export function ChannelLayout({
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <title>${title}</title>
         <meta name="description" content="ONN — The Open News Network. Algorithmic video news from the open social web, powered by AT Protocol." />
-        <link rel="icon" type="image/jpeg" href="/static/onn-favicon.jpg" />
+        <link rel="icon" type="image/svg+xml" href="/static/onn-favicon.svg" />
         <link rel="preconnect" href="https://fonts.googleapis.com">
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
         <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -60,6 +60,12 @@ export function ChannelLayout({
           .live-dot {
             animation: livePulse 1.8s ease-in-out infinite;
           }
+          .onn-signal {
+            filter: drop-shadow(0 0 6px rgba(245, 158, 11, 0.4));
+          }
+          .onn-signal:hover {
+            filter: drop-shadow(0 0 10px rgba(245, 158, 11, 0.6));
+          }
         </style>
       </head>
       <body class="min-h-full flex flex-col antialiased">
@@ -69,8 +75,17 @@ export function ChannelLayout({
           <div class="h-[2px] bg-gradient-to-r from-red-500 to-amber-500"></div>
           <div class="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between gap-6">
             <!-- Logo -->
-            <a href="/" class="shrink-0 no-underline hover:opacity-90 transition-opacity">
-              <img src="/static/onn-logo.jpg" alt="ONN — Open News Network" class="h-9 w-auto rounded-sm" />
+            <a href="/" class="flex items-center gap-2.5 shrink-0 no-underline group">
+              <svg class="onn-signal w-8 h-8 transition-all" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="32" cy="32" r="5" fill="#f59e0b"/>
+                <path d="M32 20a12 12 0 0 1 0 24a12 12 0 0 1 0-24" stroke="#f59e0b" stroke-width="4" stroke-dasharray="18.85 18.85" stroke-linecap="round"/>
+                <path d="M32 12a20 20 0 0 1 0 40a20 20 0 0 1 0-40" stroke="#f59e0b" stroke-width="3.5" stroke-dasharray="31.42 31.42" stroke-linecap="round"/>
+                <path d="M32 5a27 27 0 0 1 0 54a27 27 0 0 1 0-54" stroke="#f59e0b" stroke-width="3" stroke-dasharray="42.41 42.41" stroke-linecap="round"/>
+              </svg>
+              <div class="flex flex-col leading-none">
+                <span class="title-font text-[22px] font-extrabold tracking-tight text-white group-hover:text-amber-50 transition-colors">ONN</span>
+                <span class="text-[9px] font-semibold tracking-[0.15em] text-slate-500 uppercase">Open News Network</span>
+              </div>
             </a>
 
             <!-- Channel Tabs -->
