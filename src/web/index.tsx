@@ -19,6 +19,7 @@ import { getArticlesForUser } from '../db/queries/articles.js';
 import { getOrCreateDefaultConversation, getMessages } from '../db/queries/conversations.js';
 import { sseRegistry } from './sseRegistry.js';
 import { LoginPage } from './views/login.js';
+import { OnnLoginPage } from '../channel/views/loginPage.js';
 import { FeedPage } from './views/feed.js';
 import { ChatPage } from './views/chat.js';
 import { channelRouter } from '../channel/index.js';
@@ -79,9 +80,9 @@ app.route('/', channelRouter);
 // GET /login
 app.get('/login', (c) => {
   const userId = c.get('userId' as never) as bigint | undefined;
-  if (userId) return c.redirect('/chat');
+  if (userId) return c.redirect('/');
   const returnTo = c.req.query('returnTo') || undefined;
-  return c.html((<LoginPage returnTo={returnTo} />) as unknown as string);
+  return c.html(OnnLoginPage({ returnTo }));
 });
 
 // GET /chat — load or create default conversation
