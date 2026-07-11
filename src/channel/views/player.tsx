@@ -1,4 +1,4 @@
-import { html } from 'hono/html';
+import { html, raw } from 'hono/html';
 
 export interface PlayerSegment {
   type: 'video' | 'ad_break' | 'interstitial';
@@ -27,11 +27,9 @@ export function ChannelPlayer({
   segments: PlayerSegment[];
   channelName: string;
 }) {
-  const escapeHtml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-
   return html`
     <!-- Lineup data for Alpine -->
-    <script id="lineup-data" type="application/json">${JSON.stringify(segments)}</script>
+    <script id="lineup-data" type="application/json">${raw(JSON.stringify(segments))}</script>
 
     <div
       x-data="{
@@ -45,6 +43,7 @@ export function ChannelPlayer({
             this.showUpNext = false;
             this.$nextTick(() => this.loadCurrentSegment());
           });
+          this.$nextTick(() => this.loadCurrentSegment());
         },
         get current() { return this.segments[this.currentIndex] || {}; },
         get next() { return this.segments[this.currentIndex + 1]; },

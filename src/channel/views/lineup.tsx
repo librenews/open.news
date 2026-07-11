@@ -2,7 +2,6 @@ import { html } from 'hono/html';
 import type { PlayerSegment } from './player.js';
 
 export function ProgramGuide({ segments }: { segments: PlayerSegment[] }) {
-  const escapeHtml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
   const formatDuration = (ms: number) => {
     const totalSeconds = Math.round(ms / 1000);
@@ -45,11 +44,11 @@ export function ProgramGuide({ segments }: { segments: PlayerSegment[] }) {
                 <div class="flex-1 min-w-0">
                   <!-- Story label -->
                   <p class="text-sm font-semibold text-slate-200 leading-snug truncate">
-                    ${seg.type === 'interstitial' ? '↗ ' : ''}${escapeHtml(seg.storyLabel || 'Untitled')}
+                    ${seg.type === 'interstitial' ? '↗ ' : ''}${seg.storyLabel || 'Untitled'}
                   </p>
                   <!-- Creator -->
                   ${seg.authorDisplayName || seg.authorHandle ? html`
-                    <p class="text-xs text-slate-400 mt-0.5 truncate">${escapeHtml(seg.authorDisplayName || seg.authorHandle || '')}</p>
+                    <p class="text-xs text-slate-400 mt-0.5 truncate">${seg.authorDisplayName || seg.authorHandle || ''}</p>
                   ` : ''}
                 </div>
                 <div class="flex flex-col items-end gap-1 shrink-0">

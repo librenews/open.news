@@ -18,13 +18,12 @@ export function ChannelPage({
   channelName: string;
   channelSlug: string;
 }) {
-  const escapeHtml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
   if (!lineup || !lineup.segments || lineup.segments.length === 0) {
     return html`
       <div class="fade-in">
         <div class="mb-6">
-          <h1 class="title-font text-2xl md:text-3xl font-bold text-white">${escapeHtml(channelName)}</h1>
+          <h1 class="title-font text-2xl md:text-3xl font-bold text-white">${channelName}</h1>
         </div>
         <div class="flex flex-col items-center justify-center py-24 bg-slate-900/20 border border-slate-800/40 rounded-3xl">
           <svg class="w-16 h-16 text-slate-700 mb-4" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
@@ -44,7 +43,7 @@ export function ChannelPage({
     <div class="fade-in">
       <!-- Channel Header -->
       <div class="mb-6">
-        <h1 class="title-font text-2xl md:text-3xl font-bold text-white">${escapeHtml(channelName)}</h1>
+        <h1 class="title-font text-2xl md:text-3xl font-bold text-white">${channelName}</h1>
         <p class="text-sm text-slate-400 mt-1">
           ${lineup.storyCount} stories · ${videoSegments.length} clips · ${totalMinutes} minutes
         </p>

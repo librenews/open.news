@@ -11,7 +11,6 @@ export function ChannelLayout({
   activeChannel?: string;
   channels?: { slug: string; name: string }[];
 }) {
-  const escapeHtml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
   return html`
     <!DOCTYPE html>
@@ -19,7 +18,7 @@ export function ChannelLayout({
       <head>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <title>${escapeHtml(title)}</title>
+        <title>${title}</title>
         <meta name="description" content="open.news — Algorithmic video news from the open social web, powered by AT Protocol." />
         <link rel="preconnect" href="https://fonts.googleapis.com">
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -82,7 +81,7 @@ export function ChannelLayout({
                     ? 'text-amber-400 border-b-2 border-amber-400'
                     : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'}"
                 >
-                  ${escapeHtml(ch.name)}
+                  ${ch.name}
                 </a>
               `)}
             </nav>
@@ -105,7 +104,7 @@ export function ChannelLayout({
                   ? 'text-amber-400 bg-amber-400/10 border border-amber-400/20'
                   : 'text-slate-400 hover:text-slate-200'}"
               >
-                ${escapeHtml(ch.name)}
+                ${ch.name}
               </a>
             `)}
           </div>
