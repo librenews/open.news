@@ -108,6 +108,7 @@ app.get('/search', async (c) => {
       og: {
         title,
         description: q ? `Search results for "${q}" on the Open News Network.` : 'Search news video transcripts on ONN.',
+        image: `${config.BASE_URL}/static/onn-og-default.jpg`,
         url: `${config.BASE_URL}/search${q ? `?q=${encodeURIComponent(q)}` : ''}`,
       },
     })
@@ -161,12 +162,14 @@ app.get('/channel/:slug', async (c) => {
     isLoggedIn: !!user,
   });
 
-  // Build OG metadata from top video in lineup
-  const topVideo = lineup?.segments.find(s => s.type === 'video');
-  const ogImage = topVideo?.did && topVideo?.thumbnailCid
-    ? `${config.BASE_URL}/video/proxy/${encodeURIComponent(topVideo.did)}/${encodeURIComponent(topVideo.thumbnailCid)}`
-    : '';
-  const videoCount = lineup?.segments.filter(s => s.type === 'video').length || 0;
+  // Build OG metadata from lineup
+  const videoSegments = lineup?.segments.filter(s => s.type === 'video') || [];
+  const withThumb = videoSegments.find(s => s.did && s.thumbnailCid);
+  const topVideo = videoSegments[0];
+  const ogImage = withThumb
+    ? `${config.BASE_URL}/video/proxy/${encodeURIComponent(withThumb.did!)}/${encodeURIComponent(withThumb.thumbnailCid!)}`
+    : `${config.BASE_URL}/static/onn-og-default.jpg`;
+  const videoCount = videoSegments.length;
   const ogDesc = topVideo?.storyLabel
     ? `Now playing: ${topVideo.storyLabel}${videoCount > 1 ? ` · ${videoCount} clips` : ''} — ONN`
     : `${currentChannel.name} — Algorithmic video news from the open social web.`;
