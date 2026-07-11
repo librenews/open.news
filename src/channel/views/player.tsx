@@ -256,14 +256,46 @@ export function ChannelPlayer({
 
           <!-- Lower-third overlay -->
           <div class="absolute bottom-0 left-0 right-0 z-10 pointer-events-none">
-            <div class="bg-gradient-to-t from-black/85 via-black/40 to-transparent px-6 pb-5 pt-16">
-              <p x-show="current.storyLabel" class="text-lg font-bold text-white leading-snug mb-1" x-text="current.storyLabel"></p>
-              <p x-show="current.authorDisplayName || current.authorHandle" class="text-sm text-slate-300">
-                <span x-text="current.authorDisplayName || current.authorHandle"></span>
-              </p>
-              <p class="text-xs text-slate-400 mt-1">
-                <span x-text="videoIndex"></span> of <span x-text="videoCount"></span>
-              </p>
+            <div class="bg-gradient-to-t from-black/90 via-black/50 to-transparent px-5 pb-4 pt-20">
+              <!-- Story label -->
+              <p x-show="current.storyLabel" class="text-base sm:text-lg font-bold text-white leading-snug mb-2 drop-shadow-lg" x-text="current.storyLabel"></p>
+
+              <!-- Author row + engagement -->
+              <div class="flex items-center justify-between gap-3">
+                <div class="flex items-center gap-2.5 min-w-0">
+                  <!-- Avatar -->
+                  <template x-if="current.authorAvatar">
+                    <img :src="current.authorAvatar" class="w-8 h-8 rounded-full ring-2 ring-white/20 object-cover flex-shrink-0" alt="" />
+                  </template>
+                  <template x-if="!current.authorAvatar">
+                    <div class="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-white/60 text-xs font-bold flex-shrink-0" x-text="(current.authorDisplayName || current.authorHandle || '?').charAt(0).toUpperCase()"></div>
+                  </template>
+                  <!-- Name + handle -->
+                  <div class="min-w-0">
+                    <p class="text-sm font-semibold text-white truncate" x-text="current.authorDisplayName || current.authorHandle || ''"></p>
+                    <p x-show="current.authorHandle" class="text-xs text-slate-400 truncate" x-text="'@' + (current.authorHandle || '')"></p>
+                  </div>
+                </div>
+
+                <!-- Engagement + clip counter -->
+                <div class="flex items-center gap-3 flex-shrink-0">
+                  <template x-if="current.likeCount > 0">
+                    <span class="flex items-center gap-1 text-xs text-slate-300">
+                      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z"></path></svg>
+                      <span x-text="current.likeCount >= 1000 ? (current.likeCount / 1000).toFixed(1) + 'k' : current.likeCount"></span>
+                    </span>
+                  </template>
+                  <template x-if="current.repostCount > 0">
+                    <span class="flex items-center gap-1 text-xs text-slate-300">
+                      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 12c0-1.232-.046-2.453-.138-3.662a4.006 4.006 0 00-3.7-3.7 48.678 48.678 0 00-7.324 0 4.006 4.006 0 00-3.7 3.7c-.017.22-.032.441-.046.662M19.5 12l3-3m-3 3l-3-3m-12 3c0 1.232.046 2.453.138 3.662a4.006 4.006 0 003.7 3.7 48.656 48.656 0 007.324 0 4.006 4.006 0 003.7-3.7c.017-.22.032-.441.046-.662M4.5 12l3 3m-3-3l-3 3"></path></svg>
+                      <span x-text="current.repostCount >= 1000 ? (current.repostCount / 1000).toFixed(1) + 'k' : current.repostCount"></span>
+                    </span>
+                  </template>
+                  <span class="text-xs text-slate-500 tabular-nums">
+                    <span x-text="videoIndex"></span>/<span x-text="videoCount"></span>
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
 
