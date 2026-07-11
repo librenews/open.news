@@ -7,8 +7,12 @@ import { ChannelLayout } from './views/layout.js';
 import { ChannelPage } from './views/channelPage.js';
 import { getUserById, getUserByDid } from '../db/queries/users.js';
 import { getOAuthClient } from '../web/routes/auth.js';
+import { rssFeedRouter } from './rssFeed.js';
 
 const app = new Hono();
+
+// Mount RSS feeds
+app.route('/', rssFeedRouter);
 
 // ── Video Stream Proxy (Supports Range Requests & iOS/Safari) ─────────────────
 app.get('/video/proxy/:did/:cid', async (c) => {
