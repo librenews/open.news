@@ -91,6 +91,7 @@ export async function generateLineup(channelSlug: string): Promise<ChannelLineup
       mediaId: video.mediaId,
       storyId: video.storyId,
       storyLabel: video.storyLabel,
+      storyCategory: video.storyCategory,
       uri: video.uri,
       did: video.did,
       cid: video.cid,
@@ -104,6 +105,7 @@ export async function generateLineup(channelSlug: string): Promise<ChannelLineup
       position: segments.length,
       likeCount: video.likeCount,
       repostCount: video.repostCount,
+      createdAt: video.createdAt,
     });
 
     storyIds.add(video.storyId);

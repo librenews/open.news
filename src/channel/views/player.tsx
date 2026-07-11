@@ -5,6 +5,7 @@ export interface PlayerSegment {
   mediaId?: number;
   storyId?: string;
   storyLabel?: string;
+  storyCategory?: string;
   uri?: string;
   did?: string;
   cid?: string | null;
@@ -18,6 +19,7 @@ export interface PlayerSegment {
   position: number;
   likeCount?: number;
   repostCount?: number;
+  createdAt?: string;
 }
 
 export function ChannelPlayer({
