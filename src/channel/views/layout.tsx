@@ -122,6 +122,7 @@ export function ChannelLayout({
                   class="w-40 lg:w-52 pl-8 pr-2 py-1.5 bg-slate-900/80 border border-slate-800 rounded-lg text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-amber-500/40 focus:ring-1 focus:ring-amber-500/20 focus:w-64 transition-all"
                 />
               </form>
+              <a href="/search" class="hidden sm:inline text-[10px] text-slate-500 hover:text-amber-400 transition-colors -ml-1">Advanced</a>
               <!-- Mobile search icon -->
               <a
                 href="/search"
