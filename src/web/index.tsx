@@ -21,7 +21,7 @@ import { sseRegistry } from './sseRegistry.js';
 import { LoginPage } from './views/login.js';
 import { FeedPage } from './views/feed.js';
 import { ChatPage } from './views/chat.js';
-import { HoldingPage } from './views/holdingPage.js';
+import { channelRouter } from '../channel/index.js';
 import { Layout } from './views/layout.js';
 import { PrivacyPage } from './views/privacy.js';
 import { TosPage } from './views/tos.js';
@@ -73,10 +73,8 @@ app.get('/api/stream', sessionRequired, (c) => {
 
 // ─── Page Routes ────────────────────────────────────────────────────────────
 
-// GET / → holding page
-app.get('/', (c) => {
-  return c.html((<HoldingPage />) as unknown as string);
-});
+// ─── Channel (replaces holding page) ─────────────────────────────────────────
+app.route('/', channelRouter);
 
 // GET /login
 app.get('/login', (c) => {
