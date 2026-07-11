@@ -5,9 +5,8 @@
  * and classifies them using the LLM. Processes in batches to avoid
  * overwhelming the LLM API.
  *
- * Usage: npx tsx src/snip/backfill_categories.ts [--batch-size=50] [--delay-ms=200]
+ * Usage: npx tsx --env-file=.env src/snip/backfill_categories.ts [--batch-size=50] [--delay-ms=200]
  */
-import 'dotenv/config';
 import { db } from '../db/client.js';
 import { classifyTranscript } from './categories.js';
 import { logger } from '../lib/logger.js';
