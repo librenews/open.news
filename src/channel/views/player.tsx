@@ -61,14 +61,7 @@ export function ChannelPlayer({
             this.$nextTick(() => this.loadCurrentSegment());
           });
           this.initAuth();
-          // Skip to the first unseen video on load
-          const seen = this.getSeenUris();
-          const firstUnseen = this.segments.findIndex(s => s.type === 'video' && s.uri && !seen.has(s.uri));
-          if (firstUnseen > 0) {
-            this.currentIndex = firstUnseen;
-          } else {
-            this.$nextTick(() => this.loadCurrentSegment());
-          }
+          this.$nextTick(() => this.loadCurrentSegment());
         },
         // ── Seen tracking (cookie) ──
         getSeenUris() {
@@ -104,12 +97,6 @@ export function ChannelPlayer({
           const vid = this.$refs.videoEl;
           if (!vid) return;
           if (this.current.type === 'video') {
-            // Auto-skip seen videos during sequential playback
-            const seen = this.getSeenUris();
-            if (this.current.uri && seen.has(this.current.uri) && this.currentIndex < this.segments.length - 1) {
-              this.currentIndex++;
-              return;
-            }
             vid.src = this.videoSrc();
             vid.poster = this.posterSrc();
             vid.load();
