@@ -170,7 +170,7 @@ authRouter.get('/oauth/callback', async (c) => {
     // Clear the cookie
     setC(c, 'oauth_return_to', '', { path: '/', maxAge: 0 });
 
-    return c.redirect(returnTo || '/chat?briefing=1');
+    return c.redirect(returnTo || '/');
   } catch (err) {
     logger.error({ err }, 'OAuth callback failed');
     return c.html('<p>Login failed. <a href="/login">Try again</a></p>', 500);
