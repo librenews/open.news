@@ -34,7 +34,7 @@ async function getOAuthClient(): Promise<NodeOAuthClient> {
       grant_types: ['authorization_code', 'refresh_token'],
       response_types: ['code'],
       token_endpoint_auth_method: 'none',
-      scope: 'atproto transition:generic transition:email',
+      scope: 'atproto repo:app.bsky.feed.like repo:app.bsky.feed.repost blob:*/* account:email',
       dpop_bound_access_tokens: true,
     },
     requestLock,
@@ -91,7 +91,7 @@ authRouter.get('/oauth/client-metadata.json', (c) => {
     grant_types: ['authorization_code', 'refresh_token'],
     response_types: ['code'],
     token_endpoint_auth_method: 'none',
-    scope: 'atproto transition:generic transition:email',
+    scope: 'atproto repo:app.bsky.feed.like repo:app.bsky.feed.repost blob:*/* account:email',
     dpop_bound_access_tokens: true,
   });
 });
@@ -106,7 +106,7 @@ authRouter.get('/oauth/login', async (c) => {
 
   try {
     const client = await getOAuthClient();
-    const url = await client.authorize(handle, { scope: 'atproto' });
+    const url = await client.authorize(handle, { scope: 'atproto repo:app.bsky.feed.like repo:app.bsky.feed.repost blob:*/* account:email' });
 
     // Persist returnTo in a short-lived cookie so callback can redirect back
     if (returnTo) {
