@@ -11,9 +11,32 @@ import { LeaderboardPage, type CreatorRow } from './views/leaderboard.js';
 import { CommentsPage } from './views/comments.js';
 import { AtpAgent } from '@atproto/api';
 import { snipAuthRouter, getSessionUser } from './auth.js';
+import { CATEGORIES } from './categories.js';
 
 const app = new Hono();
 const SNIP_PORT = parseInt(process.env.SNIP_PORT ?? '5100', 10);
+
+// ── In-Memory Cache ─────────────────────────────────────────────────────────
+const cache = new Map<string, { data: any; expiresAt: number }>();
+
+function getCached<T>(key: string): T | null {
+  const entry = cache.get(key);
+  if (!entry || Date.now() > entry.expiresAt) {
+    cache.delete(key);
+    return null;
+  }
+  return entry.data as T;
+}
+
+function setCache(key: string, data: any, ttlMs: number): void {
+  cache.set(key, { data, expiresAt: Date.now() + ttlMs });
+}
+
+const CACHE_TTL = {
+  trending:    15 * 60 * 1000,  // 15 minutes
+  feed:         2 * 60 * 1000,  // 2 minutes
+  leaderboard:  5 * 60 * 1000,  // 5 minutes
+};
 
 app.route('/', snipAuthRouter);
 
@@ -54,32 +77,57 @@ async function enrichMediaItems(rows: any[]): Promise<VideoItem[]> {
   });
 }
 
-// Helper: Fetch trending video terms
+// Helper: Fetch trending video terms (cached 15 min)
 async function getTrendingTerms(limit = 8): Promise<string[]> {
+  const cacheKey = `trending:${limit}`;
+  const cached = getCached<string[]>(cacheKey);
+  if (cached) return cached;
+
   try {
     const { rows } = await db.query<{ word: string }>(`
-      SELECT word, count(*) as count
+      SELECT word, count(*) as cnt
       FROM (
         SELECT regexp_replace(regexp_split_to_table(lower(text), '\\s+'), '[^a-z]', '', 'g') as word
         FROM media_transcripts
         WHERE created_at > NOW() - INTERVAL '48 hours'
+          AND language = 'en'
       ) words
-      WHERE length(word) > 4
+      WHERE length(word) > 5
         AND word NOT IN (
-          'about', 'above', 'after', 'again', 'against', 'along', 'among', 'around', 
-          'because', 'before', 'being', 'below', 'between', 'could', 'didnt', 'doesnt', 
-          'doing', 'during', 'either', 'first', 'going', 'great', 'havent', 'having', 
-          'house', 'inside', 'might', 'never', 'other', 'people', 'really', 'should', 
-          'since', 'their', 'there', 'these', 'thing', 'think', 'those', 'through', 
-          'under', 'until', 'where', 'which', 'while', 'would', 'years', 'youre', 
-          'about', 'every', 'would', 'something', 'about', 'right', 'doing', 'where', 
-          'about', 'wants', 'being', 'better', 'where', 'another'
+          -- Articles, pronouns, prepositions, conjunctions
+          'about', 'above', 'across', 'after', 'again', 'against', 'along', 'already',
+          'among', 'another', 'around', 'became', 'because', 'become', 'before', 'behind',
+          'being', 'below', 'besides', 'between', 'beyond', 'brought', 'called',
+          -- Common verbs and verb forms
+          'could', 'didnt', 'doesnt', 'doing', 'during', 'either', 'enough',
+          'every', 'everything', 'everyone', 'getting', 'giving', 'going', 'gotten',
+          'having', 'havent', 'however', 'inside', 'itself', 'keeping',
+          -- Filler words and speech patterns
+          'actually', 'already', 'always', 'basically', 'clearly', 'definitely',
+          'especially', 'exactly', 'honestly', 'literally', 'maybe', 'mostly',
+          'obviously', 'perhaps', 'pretty', 'probably', 'really', 'simply',
+          'sometimes', 'somewhat', 'specifically', 'totally', 'usually',
+          -- Common nouns and adjectives too generic to be useful
+          'better', 'coming', 'different', 'first', 'great', 'house', 'know',
+          'little', 'looking', 'making', 'might', 'never', 'nothing', 'other',
+          'people', 'person', 'place', 'right', 'saying', 'should', 'since',
+          'small', 'something', 'still', 'stuff', 'talking', 'telling',
+          'thats', 'their', 'them', 'theres', 'these', 'theyre', 'thing',
+          'things', 'think', 'those', 'thought', 'through', 'today', 'trying',
+          'under', 'until', 'using', 'wants', 'watch', 'where', 'whether',
+          'which', 'while', 'whole', 'without', 'world', 'would', 'years',
+          'youre', 'youve',
+          -- Common non-English words that appear in mixed transcripts
+          'porque', 'puede', 'tiene', 'donde', 'como', 'estar', 'hacer',
+          'aussi', 'cette', 'comme', 'dans', 'mais', 'pour', 'avec'
         )
       GROUP BY word
-      ORDER BY count DESC
+      ORDER BY cnt DESC
       LIMIT $1
     `, [limit]);
-    return rows.map(r => r.word);
+    const result = rows.map(r => r.word);
+    setCache(cacheKey, result, CACHE_TTL.trending);
+    return result;
   } catch (err) {
     logger.error({ err }, 'Failed to fetch trending video terms');
     return [];
@@ -131,7 +179,7 @@ app.get('/health', async (c) => {
 app.get('/', async (c) => {
   const q = c.req.query('q') || '';
   const type = c.req.query('type') || 'top'; // top or latest
-  const categoryName = c.req.query('category_name') || '';
+  const category = c.req.query('category') || '';
 
   const trending = await getTrendingTerms(8);
 
@@ -139,65 +187,98 @@ app.get('/', async (c) => {
 
   try {
     if (q) {
-      // Search mode using OpenSearch (limited to English language for high relevance)
+      // Search mode using OpenSearch
       const hits = await searchMediaContent(q, 30);
       const postUris = hits.map((h: any) => h._source.uri);
 
       if (postUris.length > 0) {
         const { rows } = await db.query(`
           SELECT mi.*, mt.text as transcript, mt.language,
-                 COALESCE(likes.count, 0) as like_count,
-                 COALESCE(reposts.count, 0) as repost_count
+                 COALESCE(ic.like_count, 0) as like_count,
+                 COALESCE(ic.repost_count, 0) as repost_count
           FROM media_items mi
           LEFT JOIN media_transcripts mt ON mt.media_id = mi.id
-          LEFT JOIN (SELECT media_uri, count(*) as count FROM media_interactions WHERE interaction_type = 'like' GROUP BY media_uri) likes ON likes.media_uri = mi.uri
-          LEFT JOIN (SELECT media_uri, count(*) as count FROM media_interactions WHERE interaction_type = 'repost' GROUP BY media_uri) reposts ON reposts.media_uri = mi.uri
+          LEFT JOIN mv_media_interaction_counts ic ON ic.media_uri = mi.uri
           WHERE mi.uri = ANY($1) AND mi.status = 'done' AND mi.error IS NULL AND mt.language = 'en'
         `, [postUris]);
         items = await enrichMediaItems(rows);
       }
-    } else {
-      // Browsing mode (English only)
-      let queryStr = '';
-      if (type === 'latest') {
-        queryStr = `
-          SELECT mi.*, mt.text as transcript, mt.language,
-                 COALESCE(likes.count, 0) as like_count,
-                 COALESCE(reposts.count, 0) as repost_count
-          FROM media_items mi
-          LEFT JOIN media_transcripts mt ON mt.media_id = mi.id
-          LEFT JOIN (SELECT media_uri, count(*) as count FROM media_interactions WHERE interaction_type = 'like' GROUP BY media_uri) likes ON likes.media_uri = mi.uri
-          LEFT JOIN (SELECT media_uri, count(*) as count FROM media_interactions WHERE interaction_type = 'repost' GROUP BY media_uri) reposts ON reposts.media_uri = mi.uri
-          WHERE mi.status = 'done' AND mi.error IS NULL AND mt.language = 'en'
-          ORDER BY mi.created_at DESC
-          LIMIT 25
-        `;
+    } else if (category) {
+      // Category mode — filter by LLM-assigned transcript category
+      const cacheKey = `feed:category:${category}`;
+      const cachedItems = getCached<VideoItem[]>(cacheKey);
+      if (cachedItems) {
+        items = cachedItems;
       } else {
-        // Hacker News algorithm (Likes + Reposts*2 + 1) / (Age + 2)^1.8
-        queryStr = `
+        const { rows } = await db.query(`
           SELECT mi.*, mt.text as transcript, mt.language,
-                 COALESCE(likes.count, 0) as like_count,
-                 COALESCE(reposts.count, 0) as repost_count,
-                 (COALESCE(likes.count, 0) + COALESCE(reposts.count, 0) * 2.0 + 1.0) / 
+                 COALESCE(ic.like_count, 0) as like_count,
+                 COALESCE(ic.repost_count, 0) as repost_count,
+                 (COALESCE(ic.like_count, 0) + COALESCE(ic.repost_count, 0) * 2.0 + 1.0) / 
                    POWER((EXTRACT(EPOCH FROM (NOW() - mi.created_at))/3600.0) + 2.0, 1.8) as score
           FROM media_items mi
           LEFT JOIN media_transcripts mt ON mt.media_id = mi.id
-          LEFT JOIN (SELECT media_uri, count(*) as count FROM media_interactions WHERE interaction_type = 'like' GROUP BY media_uri) likes ON likes.media_uri = mi.uri
-          LEFT JOIN (SELECT media_uri, count(*) as count FROM media_interactions WHERE interaction_type = 'repost' GROUP BY media_uri) reposts ON reposts.media_uri = mi.uri
-          WHERE mi.status = 'done' AND mi.error IS NULL AND mt.language = 'en'
+          LEFT JOIN mv_media_interaction_counts ic ON ic.media_uri = mi.uri
+          WHERE mi.status = 'done' AND mi.error IS NULL
+            AND mt.language = 'en'
+            AND (mt.category = $1 OR mt.secondary_category = $1)
           ORDER BY score DESC, mi.created_at DESC
           LIMIT 25
-        `;
+        `, [category]);
+        items = await enrichMediaItems(rows);
+        setCache(cacheKey, items, CACHE_TTL.feed);
       }
-      const { rows } = await db.query(queryStr);
-      items = await enrichMediaItems(rows);
+    } else {
+      // Browsing mode (Top / Latest)
+      const cacheKey = `feed:${type}`;
+      const cachedItems = getCached<VideoItem[]>(cacheKey);
+      if (cachedItems) {
+        items = cachedItems;
+      } else {
+        let queryStr = '';
+        if (type === 'latest') {
+          queryStr = `
+            SELECT mi.*, mt.text as transcript, mt.language,
+                   COALESCE(ic.like_count, 0) as like_count,
+                   COALESCE(ic.repost_count, 0) as repost_count
+            FROM media_items mi
+            LEFT JOIN media_transcripts mt ON mt.media_id = mi.id
+            LEFT JOIN mv_media_interaction_counts ic ON ic.media_uri = mi.uri
+            WHERE mi.status = 'done' AND mi.error IS NULL AND mt.language = 'en'
+            ORDER BY mi.created_at DESC
+            LIMIT 25
+          `;
+        } else {
+          // Hacker News algorithm (Likes + Reposts*2 + 1) / (Age + 2)^1.8
+          queryStr = `
+            SELECT mi.*, mt.text as transcript, mt.language,
+                   COALESCE(ic.like_count, 0) as like_count,
+                   COALESCE(ic.repost_count, 0) as repost_count,
+                   (COALESCE(ic.like_count, 0) + COALESCE(ic.repost_count, 0) * 2.0 + 1.0) / 
+                     POWER((EXTRACT(EPOCH FROM (NOW() - mi.created_at))/3600.0) + 2.0, 1.8) as score
+            FROM media_items mi
+            LEFT JOIN media_transcripts mt ON mt.media_id = mi.id
+            LEFT JOIN mv_media_interaction_counts ic ON ic.media_uri = mi.uri
+            WHERE mi.status = 'done' AND mi.error IS NULL AND mt.language = 'en'
+            ORDER BY score DESC, mi.created_at DESC
+            LIMIT 25
+          `;
+        }
+        const { rows } = await db.query(queryStr);
+        items = await enrichMediaItems(rows);
+        setCache(cacheKey, items, CACHE_TTL.feed);
+      }
     }
   } catch (err) {
     logger.error({ err }, 'Failed to fetch homepage items');
   }
 
+  // Resolve category display name for the active header
+  const categoryInfo = CATEGORIES.find(c => c.slug === category);
+  const categoryName = categoryInfo?.name || category;
+
   const session = await getSessionUser(c);
-  const pageHtml = FeedPage({ items, type, q, category: categoryName, trending });
+  const pageHtml = FeedPage({ items, type, q, category: category, trending });
   return c.html(SnipLayout({ title: 'Snip — High Signal ATProto Videos', children: pageHtml, q, type, session }));
 });
 
@@ -205,14 +286,18 @@ app.get('/', async (c) => {
 app.get('/leaderboard', async (c) => {
   let creators: CreatorRow[] = [];
   try {
+    const cacheKey = 'leaderboard';
+    const cachedCreators = getCached<CreatorRow[]>(cacheKey);
+    if (cachedCreators) {
+      creators = cachedCreators;
+    } else {
     const { rows } = await db.query(`
       SELECT mi.did,
              count(*) as video_count,
-             COALESCE(sum(likes.count), 0) as total_likes,
-             COALESCE(sum(reposts.count), 0) as total_reposts
+             COALESCE(sum(ic.like_count), 0) as total_likes,
+             COALESCE(sum(ic.repost_count), 0) as total_reposts
       FROM media_items mi
-      LEFT JOIN (SELECT media_uri, count(*) as count FROM media_interactions WHERE interaction_type = 'like' GROUP BY media_uri) likes ON likes.media_uri = mi.uri
-      LEFT JOIN (SELECT media_uri, count(*) as count FROM media_interactions WHERE interaction_type = 'repost' GROUP BY media_uri) reposts ON reposts.media_uri = mi.uri
+      LEFT JOIN mv_media_interaction_counts ic ON ic.media_uri = mi.uri
       WHERE mi.status = 'done' AND mi.error IS NULL
       GROUP BY mi.did
       ORDER BY total_likes DESC, video_count DESC
@@ -234,6 +319,8 @@ app.get('/leaderboard', async (c) => {
         total_reposts: Number(r.total_reposts),
       };
     });
+    setCache(cacheKey, creators, CACHE_TTL.leaderboard);
+    } // end of else (cache miss)
   } catch (err) {
     logger.error({ err }, 'Failed to load leaderboard');
   }
@@ -266,14 +353,14 @@ app.get('/profile/:did', async (c) => {
     // Get author clips
     const { rows } = await db.query(`
       SELECT mi.*, mt.text as transcript, mt.language,
-             COALESCE(likes.count, 0) as like_count,
-             COALESCE(reposts.count, 0) as repost_count
+             COALESCE(ic.like_count, 0) as like_count,
+             COALESCE(ic.repost_count, 0) as repost_count
       FROM media_items mi
       LEFT JOIN media_transcripts mt ON mt.media_id = mi.id
-      LEFT JOIN (SELECT media_uri, count(*) as count FROM media_interactions WHERE interaction_type = 'like' GROUP BY media_uri) likes ON likes.media_uri = mi.uri
-      LEFT JOIN (SELECT media_uri, count(*) as count FROM media_interactions WHERE interaction_type = 'repost' GROUP BY media_uri) reposts ON reposts.media_uri = mi.uri
+      LEFT JOIN mv_media_interaction_counts ic ON ic.media_uri = mi.uri
       WHERE mi.did = $1 AND mi.status = 'done' AND mi.error IS NULL
       ORDER BY mi.created_at DESC
+      LIMIT 100
     `, [did]);
 
     items = await enrichMediaItems(rows);
@@ -303,13 +390,12 @@ app.get('/post/:uri', async (c) => {
     // 1. Get video details
     const { rows } = await db.query(`
       SELECT mi.*, mt.text as transcript, mt.language, me.embedding,
-             COALESCE(likes.count, 0) as like_count,
-             COALESCE(reposts.count, 0) as repost_count
+             COALESCE(ic.like_count, 0) as like_count,
+             COALESCE(ic.repost_count, 0) as repost_count
       FROM media_items mi
       LEFT JOIN media_transcripts mt ON mt.media_id = mi.id
       LEFT JOIN media_embeddings me ON me.media_id = mi.id
-      LEFT JOIN (SELECT media_uri, count(*) as count FROM media_interactions WHERE interaction_type = 'like' GROUP BY media_uri) likes ON likes.media_uri = mi.uri
-      LEFT JOIN (SELECT media_uri, count(*) as count FROM media_interactions WHERE interaction_type = 'repost' GROUP BY media_uri) reposts ON reposts.media_uri = mi.uri
+      LEFT JOIN mv_media_interaction_counts ic ON ic.media_uri = mi.uri
       WHERE mi.uri = $1 AND mi.status = 'done' AND mi.error IS NULL
       LIMIT 1
     `, [postUri]);
@@ -393,12 +479,11 @@ app.get('/latest.rss', async (c) => {
 app.get('/top.rss', async (c) => {
   const { rows } = await db.query(`
     SELECT mi.*, mt.text as transcript, mt.language,
-           (COALESCE(likes.count, 0) + COALESCE(reposts.count, 0) * 2.0 + 1.0) / 
+           (COALESCE(ic.like_count, 0) + COALESCE(ic.repost_count, 0) * 2.0 + 1.0) / 
              POWER((EXTRACT(EPOCH FROM (NOW() - mi.created_at))/3600.0) + 2.0, 1.8) as score
     FROM media_items mi
     LEFT JOIN media_transcripts mt ON mt.media_id = mi.id
-    LEFT JOIN (SELECT media_uri, count(*) as count FROM media_interactions WHERE interaction_type = 'like' GROUP BY media_uri) likes ON likes.media_uri = mi.uri
-    LEFT JOIN (SELECT media_uri, count(*) as count FROM media_interactions WHERE interaction_type = 'repost' GROUP BY media_uri) reposts ON reposts.media_uri = mi.uri
+    LEFT JOIN mv_media_interaction_counts ic ON ic.media_uri = mi.uri
     WHERE mi.status = 'done' AND mi.error IS NULL
     ORDER BY score DESC, mi.created_at DESC
     LIMIT 30
@@ -406,7 +491,21 @@ app.get('/top.rss', async (c) => {
   return serveRssFeed(c, rows, 'Snip.social — Top Videos', 'Popular video clips from Bluesky ranked by community upvotes', 'https://snip.social/?type=top');
 });
 
+// ── Materialized View Refresh ────────────────────────────────────────────────
+async function refreshInteractionCounts() {
+  try {
+    await db.query('REFRESH MATERIALIZED VIEW CONCURRENTLY mv_media_interaction_counts');
+    logger.debug('Refreshed mv_media_interaction_counts');
+  } catch (err) {
+    logger.error({ err }, 'Failed to refresh materialized view');
+  }
+}
+
 // Launch server
 serve({ fetch: app.fetch, port: SNIP_PORT }, (info) => {
   logger.info({ port: info.port }, 'Snip web server started');
+
+  // Refresh interaction counts every 5 minutes
+  refreshInteractionCounts();
+  setInterval(refreshInteractionCounts, 5 * 60 * 1000);
 });

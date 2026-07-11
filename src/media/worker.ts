@@ -15,6 +15,7 @@ import { config } from '../lib/config.js';
 import { downloadAndExtractAudio, buildBlobUrl, cleanupTempFile } from './download.js';
 import { processAudio, checkHealth } from './mediaClient.js';
 import { ensureMediaIndex, getOsClient, MEDIA_INDEX } from '../track/opensearch.js';
+import { classifyTranscript } from '../snip/categories.js';
 
 const STREAM_KEY = 'media:items';
 const GROUP_NAME = 'media-workers';
@@ -201,6 +202,22 @@ async function processMediaItem(mediaId: number, fields: Record<string, string>)
           result.transcript.language_probability,
         ]
       );
+
+      // Classify transcript into a topic category (non-blocking)
+      try {
+        if (result.transcript.language === 'en' && result.transcript.text && result.transcript.text !== 'silent') {
+          const classification = await classifyTranscript(result.transcript.text);
+          await db.query(
+            `UPDATE media_transcripts
+             SET category = $1, category_confidence = $2, secondary_category = $3
+             WHERE media_id = $4`,
+            [classification.category, classification.confidence, classification.secondary_category, mediaId]
+          );
+          logger.debug({ mediaId, category: classification.category, confidence: classification.confidence }, 'Classified transcript');
+        }
+      } catch (classifyErr) {
+        logger.warn({ err: classifyErr, mediaId }, 'Transcript classification failed (non-fatal)');
+      }
     }
 
     // Store embedding

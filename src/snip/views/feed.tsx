@@ -1,4 +1,5 @@
 import { html, raw } from 'hono/html';
+import { CATEGORIES } from '../categories.js';
 
 export interface VideoItem {
   id: number;
@@ -66,12 +67,22 @@ export function renderVideoCard(item: VideoItem, showTranscript = false) {
           <!-- HTML5 Video Player -->
           ${videoSrc ? html`
             <div class="mb-4 rounded-xl overflow-hidden bg-black aspect-video max-w-lg border border-slate-800/80 shadow-2xl relative">
+              ${posterUrl ? html`
+                <img 
+                  src="${escapeHtml(posterUrl)}" 
+                  alt="" 
+                  loading="lazy"
+                  class="absolute inset-0 w-full h-full object-contain z-10 pointer-events-none transition-opacity duration-200"
+                  data-poster
+                />
+              ` : ''}
               <video 
                 src="${escapeHtml(videoSrc)}" 
                 controls 
-                preload="metadata" 
-                ${posterUrl ? html`poster="${escapeHtml(posterUrl)}"` : ''} 
+                playsinline
+                preload="${posterUrl ? 'none' : 'metadata'}" 
                 class="w-full h-full object-contain"
+                onplay="const p=this.parentElement.querySelector('[data-poster]');if(p)p.style.opacity='0'"
               ></video>
             </div>
           ` : ''}
@@ -128,14 +139,7 @@ export function FeedPage({
 }) {
   const escapeHtml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
-  const categories = [
-    { name: 'Politics', emoji: '🏛️', query: 'election trump harris biden senate vote government' },
-    { name: 'Tech & AI', emoji: '💻', query: 'ai technology software robot computer developer coding coding chatgpt nvidia' },
-    { name: 'Finance & Business', emoji: '📈', query: 'inflation stocks business economy finance dollars crypto bitcoin money tax' },
-    { name: 'Science & Nature', emoji: '🌿', query: 'science nature space nasa planet trail hiking animal bird climate weather' },
-    { name: 'Entertainment', emoji: '🎮', query: 'game gaming nintendo pokemon anime music song movie show actor' },
-    { name: 'Humor & Memes', emoji: '✨', query: 'funny meme joke comedy laugh fail dog cat puppy' },
-  ];
+  const categories = CATEGORIES;
 
   return html`
     <div class="grid grid-cols-1 lg:grid-cols-4 gap-8">
@@ -178,7 +182,7 @@ export function FeedPage({
         ${category ? html`
           <div class="flex items-center justify-between bg-slate-900/30 border border-slate-800/40 rounded-2xl p-4 mb-4 select-none">
             <div class="flex items-center gap-2">
-              <span class="text-2xl">${categories.find(c => c.name === category)?.emoji}</span>
+              <span class="text-2xl">${categories.find(c => c.slug === category || c.name === category)?.emoji}</span>
               <span class="font-bold text-slate-200">${escapeHtml(category)} Feed</span>
             </div>
             <a href="/" class="text-xs text-slate-500 hover:text-indigo-400 transition-colors no-underline">Clear filter</a>
@@ -203,7 +207,7 @@ export function FeedPage({
           <h3 class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4">Smart Categories</h3>
           <div class="flex flex-col gap-1">
             ${categories.map(cat => html`
-              <a href="/?q=${encodeURIComponent(cat.query)}&category_name=${encodeURIComponent(cat.name)}" class="flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm font-semibold text-slate-300 hover:text-white hover:bg-slate-900/60 border border-transparent hover:border-slate-800/40 transition-all no-underline ${category === cat.name ? 'bg-slate-900 text-indigo-400 border-slate-800' : ''}">
+              <a href="/?category=${encodeURIComponent(cat.slug)}" class="flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm font-semibold text-slate-300 hover:text-white hover:bg-slate-900/60 border border-transparent hover:border-slate-800/40 transition-all no-underline ${category === cat.slug || category === cat.name ? 'bg-slate-900 text-indigo-400 border-slate-800' : ''}">
                 <span class="text-lg">${cat.emoji}</span>
                 <span>${cat.name}</span>
               </a>

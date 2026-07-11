@@ -95,7 +95,11 @@ export function CommentsPage({
               return html`
                 <div class="bg-slate-950/40 border border-slate-850 rounded-xl p-3 hover:border-indigo-500/30 transition-all">
                   <div class="flex gap-3">
-                    <video src="${escapeHtml(rel.source_url)}" preload="none" muted class="w-20 h-20 object-cover rounded-lg bg-black shrink-0"></video>
+                    ${rel.thumbnail_cid && rel.did
+                      ? html`<img src="${rel.thumbnail_cid.startsWith('http') ? escapeHtml(rel.thumbnail_cid) : escapeHtml(`https://bsky.social/xrpc/com.atproto.sync.getBlob?did=${encodeURIComponent(rel.did)}&cid=${encodeURIComponent(rel.thumbnail_cid)}`)}"
+                              alt="" loading="lazy" class="w-20 h-20 object-cover rounded-lg bg-black shrink-0" />`
+                      : html`<div class="w-20 h-20 rounded-lg bg-slate-900 shrink-0 flex items-center justify-center text-slate-600 text-xl">▶</div>`
+                    }
                     <div class="min-w-0 flex-1">
                       <a href="${relPostUrl}" class="block text-xs font-bold text-slate-200 hover:text-indigo-400 transition-colors no-underline line-clamp-2 leading-relaxed mb-1">
                         ${escapeHtml(rel.post_text || rel.alt_text || 'Video clip')}
