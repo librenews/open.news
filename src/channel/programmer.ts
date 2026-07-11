@@ -112,6 +112,12 @@ export async function generateLineup(channelSlug: string): Promise<ChannelLineup
   const totalDurationMs = segments.reduce((sum, s) => sum + s.durationMs, 0);
   const expiresAt = new Date(Date.now() + 30 * 60 * 1000);
 
+  // Record video history (fire-and-forget, non-blocking)
+  recordNewsQualifications(rankedVideos).catch(err =>
+    logger.warn({ err }, 'Failed to record news qualifications (non-fatal)'));
+  updatePlaylistPositions(channel.slug, segments).catch(err =>
+    logger.warn({ err }, 'Failed to update playlist positions (non-fatal)'));
+
   return {
     channelSlug: channel.slug,
     channelName: channel.name,
@@ -148,6 +154,161 @@ function interleaveByStory(videos: RankedVideo[]): RankedVideo[] {
   }
 
   return result;
+}
+
+// ── Video History Tracking ────────────────────────────────────────────────────
+
+const NEWS_CONFIDENCE_THRESHOLD = 0.5;
+
+/**
+ * Record news qualifications for videos that matched stories.
+ * Only records videos with match confidence above threshold.
+ * Uses ON CONFLICT to avoid duplicates — first qualification wins.
+ */
+async function recordNewsQualifications(rankedVideos: RankedVideo[]): Promise<void> {
+  const qualified = rankedVideos.filter(
+    v => v.matchConfidence >= NEWS_CONFIDENCE_THRESHOLD && v.storyId && v.storyLabel
+  );
+  if (qualified.length === 0) return;
+
+  for (const video of qualified) {
+    await db.query(
+      `INSERT INTO video_news_history
+         (media_id, media_uri, story_id, story_label, story_category,
+          story_importance, match_confidence, composite_score, qualified_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+       ON CONFLICT (media_id, story_id) DO NOTHING`,
+      [
+        video.mediaId, video.uri, video.storyId, video.storyLabel,
+        video.storyCategory, video.storyImportance,
+        video.matchConfidence, video.score,
+      ]
+    );
+  }
+
+  logger.info({ count: qualified.length }, 'Recorded news qualifications');
+}
+
+/**
+ * Update playlist position history after a lineup is generated.
+ *
+ * For each video in the new lineup:
+ *   - New video: INSERT with peak_position
+ *   - Existing, improved position: UPDATE peak_position and peak_at
+ *   - Existing, same or worse position: UPDATE current_position and last_appeared_at
+ *   - Returning after bump: clear bumped_at, increment return_count
+ *
+ * For videos previously on the playlist but not in the new one:
+ *   - Set bumped_at = NOW(), current_position = NULL
+ */
+async function updatePlaylistPositions(
+  channelSlug: string,
+  segments: ChannelSegment[]
+): Promise<void> {
+  // Build video-only position map (1-indexed)
+  const videoSegments = segments.filter(s => s.type === 'video' && s.mediaId);
+  const positionMap = new Map<number, { position: number; uri: string }>();
+  videoSegments.forEach((seg, idx) => {
+    if (seg.mediaId) {
+      positionMap.set(seg.mediaId, { position: idx + 1, uri: seg.uri || '' });
+    }
+  });
+
+  if (positionMap.size === 0) return;
+
+  // Fetch current state for this channel
+  const { rows: existing } = await db.query<{
+    media_id: number;
+    peak_position: number;
+    bumped_at: Date | null;
+  }>(
+    'SELECT media_id, peak_position, bumped_at FROM video_playlist_history WHERE channel_slug = $1',
+    [channelSlug]
+  );
+  const existingMap = new Map(existing.map(r => [r.media_id, r]));
+
+  const now = new Date().toISOString();
+
+  // Upsert videos currently on the playlist
+  for (const [mediaId, { position, uri }] of positionMap) {
+    const prev = existingMap.get(mediaId);
+
+    if (!prev) {
+      // New video — first appearance
+      await db.query(
+        `INSERT INTO video_playlist_history
+           (media_id, media_uri, channel_slug, peak_position, peak_at,
+            current_position, first_appeared_at, last_appeared_at,
+            bumped_at, appearance_count, return_count)
+         VALUES ($1, $2, $3, $4, $5, $4, $5, $5, NULL, 1, 0)
+         ON CONFLICT (media_id, channel_slug) DO UPDATE SET
+            current_position = $4,
+            last_appeared_at = $5,
+            appearance_count = video_playlist_history.appearance_count + 1,
+            bumped_at = NULL`,
+        [mediaId, uri, channelSlug, position, now]
+      );
+    } else if (prev.bumped_at) {
+      // Returning after being bumped
+      const newPeak = position < prev.peak_position ? position : prev.peak_position;
+      const peakAt = position < prev.peak_position ? now : undefined;
+      await db.query(
+        `UPDATE video_playlist_history SET
+            current_position = $1,
+            last_appeared_at = $2,
+            bumped_at = NULL,
+            return_count = return_count + 1,
+            appearance_count = appearance_count + 1,
+            peak_position = LEAST(peak_position, $1),
+            peak_at = CASE WHEN $1 < peak_position THEN $2::timestamptz ELSE peak_at END
+         WHERE media_id = $3 AND channel_slug = $4`,
+        [position, now, mediaId, channelSlug]
+      );
+      if (peakAt) {
+        logger.info({ mediaId, channelSlug, position }, 'Video returned to playlist with new peak');
+      }
+    } else if (position < prev.peak_position) {
+      // Still on playlist, improved position (new peak)
+      await db.query(
+        `UPDATE video_playlist_history SET
+            current_position = $1,
+            peak_position = $1,
+            peak_at = $2,
+            last_appeared_at = $2,
+            appearance_count = appearance_count + 1
+         WHERE media_id = $3 AND channel_slug = $4`,
+        [position, now, mediaId, channelSlug]
+      );
+    } else {
+      // Still on playlist, same or worse position
+      await db.query(
+        `UPDATE video_playlist_history SET
+            current_position = $1,
+            last_appeared_at = $2,
+            appearance_count = appearance_count + 1
+         WHERE media_id = $3 AND channel_slug = $4`,
+        [position, now, mediaId, channelSlug]
+      );
+    }
+  }
+
+  // Mark videos no longer on the playlist as bumped
+  const currentMediaIds = [...positionMap.keys()];
+  if (existing.length > 0) {
+    const stillActive = existing.filter(r => !r.bumped_at && !positionMap.has(r.media_id));
+    for (const row of stillActive) {
+      await db.query(
+        `UPDATE video_playlist_history SET
+            bumped_at = $1,
+            current_position = NULL
+         WHERE media_id = $2 AND channel_slug = $3`,
+        [now, row.media_id, channelSlug]
+      );
+    }
+    if (stillActive.length > 0) {
+      logger.info({ count: stillActive.length, channelSlug }, 'Videos bumped from playlist');
+    }
+  }
 }
 
 /** Persist a lineup to the database and cache in Redis. */
