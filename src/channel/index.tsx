@@ -34,7 +34,9 @@ app.get('/video/proxy/:did/:cid', async (c) => {
 
     c.status(res.status as any);
 
-    c.header('Content-Type', 'video/mp4');
+    // Pass through the actual content type from upstream (image/jpeg for thumbnails, video/mp4 for videos)
+    const contentType = res.headers.get('content-type') || 'video/mp4';
+    c.header('Content-Type', contentType);
     c.header('Accept-Ranges', 'bytes');
     c.header('Cache-Control', 'public, max-age=86400');
 
