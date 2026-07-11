@@ -26,10 +26,12 @@ export function ChannelPlayer({
   segments,
   channelName,
   isLoggedIn = false,
+  sideContent = null,
 }: {
   segments: PlayerSegment[];
   channelName: string;
   isLoggedIn?: boolean;
+  sideContent?: any;
 }) {
   return html`
     <!-- Lineup data for Alpine -->
@@ -220,8 +222,10 @@ export function ChannelPlayer({
           this.repostLoading = false;
         },
       }"
-      class="w-full"
+      class="grid grid-cols-1 lg:grid-cols-3 gap-6 w-full"
     >
+      <!-- Player (2/3 width) -->
+      <div class="lg:col-span-2">
       <!-- Video Player Area -->
       <div class="relative w-full max-w-4xl mx-auto">
 
@@ -497,6 +501,14 @@ export function ChannelPlayer({
           </button>
         </div>
       </div>
+      </div>
+
+      ${sideContent ? html`
+        <!-- Side content (program guide) -->
+        <div class="lg:col-span-1">
+          ${sideContent}
+        </div>
+      ` : ''}
     </div>
   `;
 }

@@ -69,18 +69,13 @@ export function ChannelPage({
         </p>
       </div>
 
-      <!-- Player + Guide Grid -->
-      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <!-- Player (2/3 width on desktop) -->
-        <div class="lg:col-span-2">
-          ${ChannelPlayer({ segments: lineup.segments, channelName, isLoggedIn })}
-        </div>
-
-        <!-- Program Guide (1/3 width on desktop) -->
-        <div class="lg:col-span-1">
-          ${ProgramGuide({ segments: lineup.segments })}
-        </div>
-      </div>
+      <!-- Player + Program Guide (shares Alpine scope) -->
+      ${ChannelPlayer({
+        segments: lineup.segments,
+        channelName,
+        isLoggedIn,
+        sideContent: ProgramGuide({ segments: lineup.segments }),
+      })}
     </div>
   `;
 }
