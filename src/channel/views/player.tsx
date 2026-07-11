@@ -50,14 +50,7 @@ export function ChannelPlayer({
         duration: 0,
         volume: 1,
         init() {
-          const allSegments = JSON.parse(document.getElementById('lineup-data').textContent);
-          // Filter out already-seen videos
-          const seen = this.getSeenUris();
-          this.segments = allSegments.filter(s => s.type !== 'video' || !s.uri || !seen.has(s.uri));
-          // If all videos were seen, show the full lineup instead of empty
-          if (this.segments.filter(s => s.type === 'video').length === 0) {
-            this.segments = allSegments;
-          }
+          this.segments = JSON.parse(document.getElementById('lineup-data').textContent);
           this.$watch('currentIndex', () => {
             this.showUpNext = false;
             this.progress = 0;
@@ -68,7 +61,14 @@ export function ChannelPlayer({
             this.$nextTick(() => this.loadCurrentSegment());
           });
           this.initAuth();
-          this.$nextTick(() => this.loadCurrentSegment());
+          // Skip to the first unseen video on load
+          const seen = this.getSeenUris();
+          const firstUnseen = this.segments.findIndex(s => s.type === 'video' && s.uri && !seen.has(s.uri));
+          if (firstUnseen > 0) {
+            this.currentIndex = firstUnseen;
+          } else {
+            this.$nextTick(() => this.loadCurrentSegment());
+          }
         },
         // ── Seen tracking (cookie) ──
         getSeenUris() {
@@ -82,7 +82,6 @@ export function ChannelPlayer({
           if (!uri) return;
           const seen = this.getSeenUris();
           seen.add(uri);
-          // Keep only last 200 entries to avoid cookie size limits
           const arr = [...seen].slice(-200);
           const expires = new Date(Date.now() + 24 * 60 * 60 * 1000).toUTCString();
           document.cookie = 'onn_seen=' + encodeURIComponent(JSON.stringify(arr)) + ';path=/;expires=' + expires + ';SameSite=Lax';
@@ -105,11 +104,16 @@ export function ChannelPlayer({
           const vid = this.$refs.videoEl;
           if (!vid) return;
           if (this.current.type === 'video') {
+            // Auto-skip seen videos during sequential playback
+            const seen = this.getSeenUris();
+            if (this.current.uri && seen.has(this.current.uri) && this.currentIndex < this.segments.length - 1) {
+              this.currentIndex++;
+              return;
+            }
             vid.src = this.videoSrc();
             vid.poster = this.posterSrc();
             vid.load();
             vid.play().then(() => { this.isPlaying = true; }).catch(() => { this.isPlaying = false; });
-            // Mark as seen after 3 seconds of playback
             const seenUri = this.current.uri;
             clearTimeout(this._seenTimer);
             this._seenTimer = setTimeout(() => this.markSeen(seenUri), 3000);
