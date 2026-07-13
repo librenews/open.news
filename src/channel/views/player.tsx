@@ -470,6 +470,37 @@ export function ChannelPlayer({
           </div>
 
         </div>
+
+        <!-- Post Context (shown when current video has post text) -->
+        <div x-show="current.postText" x-transition class="mt-3">
+          <div class="bg-slate-900/40 border border-slate-800/40 rounded-xl px-4 py-3">
+            <div class="flex items-start gap-3">
+              <template x-if="current.authorAvatar">
+                <img :src="current.authorAvatar" class="w-7 h-7 rounded-full ring-1 ring-slate-700/50 flex-shrink-0 mt-0.5" alt="" />
+              </template>
+              <template x-if="!current.authorAvatar">
+                <div class="w-7 h-7 rounded-full bg-slate-800 flex items-center justify-center text-slate-500 text-xs font-bold flex-shrink-0 mt-0.5" x-text="(current.authorDisplayName || current.authorHandle || '?').charAt(0).toUpperCase()"></div>
+              </template>
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-1.5 mb-1">
+                  <span class="text-xs font-semibold text-slate-300" x-text="current.authorDisplayName || current.authorHandle || ''"></span>
+                  <span class="text-[10px] text-slate-500" x-text="'@' + (current.authorHandle || '')"></span>
+                </div>
+                <p class="text-sm text-slate-300 leading-relaxed whitespace-pre-line" x-text="current.postText"></p>
+                <a
+                  x-show="current.uri"
+                  :href="'https://bsky.app/profile/' + (current.did || '') + '/post/' + (current.uri ? current.uri.split('/').pop() : '')"
+                  target="_blank"
+                  rel="noopener"
+                  class="inline-flex items-center gap-1 text-[10px] text-slate-500 hover:text-amber-400 mt-2 transition-colors pointer-events-auto"
+                >
+                  View original post ↗
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+
       </div>
 
       <!-- Login Prompt Modal (shown when non-logged-in user clicks like/repost) -->
