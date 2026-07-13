@@ -41,7 +41,7 @@ export interface RankingFactors {
   creatorReputation: number;
 }
 
-const HALF_LIFE_HOURS = 6;
+const HALF_LIFE_HOURS = 3;
 const WEIGHTS = {
   storyImportance: 3.0,
   socialEngagement: 1.5,
@@ -161,7 +161,7 @@ async function getCategoryFallbackVideos(
      JOIN media_transcripts mt ON mt.media_id = mi.id
      LEFT JOIN mv_media_interaction_counts ic ON ic.media_uri = mi.uri
      WHERE ${where}
-       AND mi.created_at > NOW() - INTERVAL '72 hours'
+       AND mi.created_at > NOW() - INTERVAL '24 hours'
      ORDER BY
        (COALESCE(ic.like_count, 0) + COALESCE(ic.repost_count, 0) * 2.0 + 1.0) /
        POWER((EXTRACT(EPOCH FROM (NOW() - mi.created_at))/3600.0) + 2.0, 1.8) DESC

@@ -56,7 +56,7 @@ export async function refreshStoryIndex(): Promise<void> {
          WHERE mt.language = 'en'
            AND (mt.category = $1 OR mt.secondary_category = $1)
            AND mi.status = 'done' AND mi.error IS NULL
-           AND mi.created_at > NOW() - INTERVAL '72 hours'
+           AND mi.created_at > NOW() - INTERVAL '24 hours'
            AND mt.text IS NOT NULL AND mt.text != 'silent'
            AND length(mt.text) > 50
          ORDER BY mi.created_at DESC

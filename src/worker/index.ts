@@ -14,6 +14,8 @@ import { refreshTopicClusters } from '../jobs/refreshTopicClusters.js';
 import { seedGeoFromDomainsJob } from '../jobs/seedGeoFromDomains.js';
 import { backfillNearbyPostsJob } from '../jobs/backfillNearbyPosts.js';
 import { bridgeVerifiedDocJob } from '../jobs/bridgeVerifiedDoc.js';
+import { refreshStoryIndex } from '../jobs/refreshStoryIndex.js';
+import { refreshChannelLineups } from '../jobs/refreshChannelLineup.js';
 
 async function start() {
   await ensureArticleIndex().catch(err => logger.error({ err }, 'Failed to ensure OpenSearch article index'));
@@ -34,7 +36,7 @@ async function start() {
 
   // pg-boss v10 requires explicit queue creation before send/work.
   // Must be sequential — parallel ALTER TABLE calls deadlock on the FK constraint.
-  const queues = ['fetchArticle', 'syncFollows', 'botReply', 'botPost', 'followSignup', 'deliverWebhook', 'indexSiteStandard', 'backfillSiteStandard', 'backfillRecommends', 'refreshTopicClusters', 'seedGeoFromDomains', 'backfillNearbyPosts', 'bridgeVerifiedDoc'];
+  const queues = ['fetchArticle', 'syncFollows', 'botReply', 'botPost', 'followSignup', 'deliverWebhook', 'indexSiteStandard', 'backfillSiteStandard', 'backfillRecommends', 'refreshTopicClusters', 'seedGeoFromDomains', 'backfillNearbyPosts', 'bridgeVerifiedDoc', 'refreshStoryIndex', 'refreshChannelLineups'];
   for (const q of queues) await boss.createQueue(q);
   logger.info({ queues }, 'Queues created');
 
@@ -123,6 +125,20 @@ async function start() {
 
   await boss.schedule('backfillNearbyPosts', '*/5 * * * *', {});
   logger.info('Nearby post backfill scheduled (every 5 min)');
+
+  // Schedule story index refresh every 30 minutes
+  await boss.schedule('refreshStoryIndex', '*/30 * * * *', {}, { tz: 'UTC' });
+  await boss.work('refreshStoryIndex', async () => {
+    await refreshStoryIndex();
+  });
+  logger.info('Story index refresh scheduled (every 30 min)');
+
+  // Schedule channel lineup refresh every 15 minutes
+  await boss.schedule('refreshChannelLineups', '*/15 * * * *', {}, { tz: 'UTC' });
+  await boss.work('refreshChannelLineups', async () => {
+    await refreshChannelLineups();
+  });
+  logger.info('Channel lineup refresh scheduled (every 15 min)');
 
   await boss.work('bridgeVerifiedDoc', { batchSize: 5 }, async (jobs) => {
     for (const job of jobs) {
