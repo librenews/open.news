@@ -1,6 +1,6 @@
 import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
-import { html, raw } from 'hono/html';
+import { html } from 'hono/html';
 import { db } from '../db/client.js';
 import { logger } from '../lib/logger.js';
 import { getCachedProfile, getCachedProfiles } from '../lib/pdsCache.js';
@@ -174,10 +174,10 @@ app.get('/video/proxy/:did/:cid', async (c) => {
 });
 
 // ── oEmbed Discovery Tag Builder ─────────────────────────────────────────────
-function oembedDiscoveryTag(pageUrl: string, title: string): string {
+function oembedDiscoveryTag(pageUrl: string, title: string) {
   const encodedUrl = encodeURIComponent(pageUrl);
   const escapedTitle = title.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  return `<link rel="alternate" type="application/json+oembed" href="${SNIP_BASE}/oembed?url=${encodedUrl}&format=json" title="${escapedTitle}" />`;
+  return html`<link rel="alternate" type="application/json+oembed" href="${SNIP_BASE}/oembed?url=${encodedUrl}&format=json" title="${escapedTitle}" />`;
 }
 
 // ── oEmbed Provider Endpoint ─────────────────────────────────────────────────
@@ -530,7 +530,7 @@ app.get('/', async (c) => {
   else pageParams.set('type', type);
   const pageUrl = `${SNIP_BASE}/?${pageParams.toString()}`;
   const oembedTitle = q ? `Snip — Videos matching "${q}"` : category ? `Snip — ${category} Videos` : 'Snip — High Signal ATProto Videos';
-  const headExtra = raw(oembedDiscoveryTag(pageUrl, oembedTitle));
+  const headExtra = oembedDiscoveryTag(pageUrl, oembedTitle);
 
   const session = await getSessionUser(c);
   const pageHtml = FeedPage({ items, type, q, category: category, trending });
@@ -689,7 +689,7 @@ app.get('/post/:uri', async (c) => {
   // Build oEmbed discovery tag for this post
   const postPageUrl = `${SNIP_BASE}/post/${encodeURIComponent(postUri)}`;
   const postOembedTitle = item.post_text || item.alt_text || `Video by @${item.author_handle}`;
-  const headExtra = raw(oembedDiscoveryTag(postPageUrl, postOembedTitle));
+  const headExtra = oembedDiscoveryTag(postPageUrl, postOembedTitle);
 
   const session = await getSessionUser(c);
   const pageHtml = CommentsPage({ item, thread, related });
