@@ -339,6 +339,7 @@ app.get('/embed', async (c) => {
       // Search embed
       title = `Snip — "${q}"`;
       const hits = await searchMediaContent(q, EMBED_LIMIT);
+      logger.info({ q, hitCount: hits.length }, 'Embed search: OpenSearch results');
       const postUris = hits.map((h: any) => h._source.uri);
       if (postUris.length > 0) {
         const { rows } = await db.query(`
@@ -350,6 +351,7 @@ app.get('/embed', async (c) => {
           LEFT JOIN mv_media_interaction_counts ic ON ic.media_uri = mi.uri
           WHERE mi.uri = ANY($1) AND mi.status = 'done' AND mi.error IS NULL AND mt.language = 'en'
         `, [postUris]);
+        logger.info({ q, dbRows: rows.length }, 'Embed search: DB results');
         items = await enrichMediaItems(rows);
       }
     } else if (category) {
