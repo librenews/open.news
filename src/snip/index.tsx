@@ -1,5 +1,6 @@
 import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
+import { html } from 'hono/html';
 import { db } from '../db/client.js';
 import { logger } from '../lib/logger.js';
 import { getCachedProfile, getCachedProfiles } from '../lib/pdsCache.js';
@@ -9,12 +10,14 @@ import { FeedPage, type VideoItem } from './views/feed.js';
 import { AuthorPage, type AuthorProfile } from './views/author.js';
 import { LeaderboardPage, type CreatorRow } from './views/leaderboard.js';
 import { CommentsPage } from './views/comments.js';
+import { EmbedPage } from './views/embed.js';
 import { AtpAgent } from '@atproto/api';
 import { snipAuthRouter, getSessionUser } from './auth.js';
 import { CATEGORIES } from './categories.js';
 
 const app = new Hono();
 const SNIP_PORT = parseInt(process.env.SNIP_PORT ?? '5100', 10);
+const SNIP_BASE = process.env.SNIP_BASE_URL ?? 'https://snip.social';
 
 // ── In-Memory Cache ─────────────────────────────────────────────────────────
 const cache = new Map<string, { data: any; expiresAt: number }>();
@@ -170,6 +173,249 @@ app.get('/video/proxy/:did/:cid', async (c) => {
   }
 });
 
+// ── oEmbed Discovery Tag Builder ─────────────────────────────────────────────
+function oembedDiscoveryTag(pageUrl: string, title: string): string {
+  const encodedUrl = encodeURIComponent(pageUrl);
+  const escapedTitle = title.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return `<link rel="alternate" type="application/json+oembed" href="${SNIP_BASE}/oembed?url=${encodedUrl}&format=json" title="${escapedTitle}" />`;
+}
+
+// ── oEmbed Provider Endpoint ─────────────────────────────────────────────────
+app.get('/oembed', async (c) => {
+  const url = c.req.query('url');
+  const format = c.req.query('format') || 'json';
+  const maxwidth = parseInt(c.req.query('maxwidth') || '480', 10);
+  const maxheight = parseInt(c.req.query('maxheight') || '360', 10);
+
+  if (format !== 'json') {
+    return c.text('Only JSON format is supported', 501);
+  }
+  if (!url) {
+    return c.text('Missing required "url" parameter', 400);
+  }
+
+  try {
+    const parsed = new URL(url);
+    const pathname = parsed.pathname;
+    const params = parsed.searchParams;
+
+    let title = 'Snip Videos';
+    let embedUrl = `${SNIP_BASE}/embed`;
+    let thumbnailUrl: string | null = null;
+
+    if (pathname.startsWith('/post/')) {
+      // Single post embed
+      const postUri = decodeURIComponent(pathname.replace('/post/', ''));
+      embedUrl = `${SNIP_BASE}/embed?uri=${encodeURIComponent(postUri)}`;
+
+      // Look up the post for metadata
+      const { rows } = await db.query(`
+        SELECT mi.*, mt.text as transcript
+        FROM media_items mi
+        LEFT JOIN media_transcripts mt ON mt.media_id = mi.id
+        WHERE mi.uri = $1 AND mi.status = 'done' AND mi.error IS NULL
+        LIMIT 1
+      `, [postUri]);
+      if (rows.length > 0) {
+        const item = rows[0];
+        const enriched = await enrichMediaItems([item]);
+        title = enriched[0].post_text || enriched[0].alt_text || 'Video on Snip';
+        if (item.thumbnail_cid && item.did) {
+          thumbnailUrl = item.thumbnail_cid.startsWith('http')
+            ? item.thumbnail_cid
+            : `https://bsky.social/xrpc/com.atproto.sync.getBlob?did=${encodeURIComponent(item.did)}&cid=${encodeURIComponent(item.thumbnail_cid)}`;
+        }
+      } else {
+        return c.json({ error: 'Post not found' }, 404);
+      }
+    } else {
+      // Feed / search / category embed
+      const q = params.get('q') || '';
+      const type = params.get('type') || 'top';
+      const category = params.get('category') || '';
+
+      const embedParams = new URLSearchParams();
+      if (q) {
+        embedParams.set('q', q);
+        title = `Snip — Videos matching "${q}"`;
+      } else if (category) {
+        embedParams.set('category', category);
+        title = `Snip — ${category} Videos`;
+      } else {
+        embedParams.set('type', type);
+        title = type === 'latest' ? 'Snip — Latest Videos' : 'Snip — Top Videos';
+      }
+      embedUrl = `${SNIP_BASE}/embed?${embedParams.toString()}`;
+
+      // Grab first result's thumbnail for the oEmbed thumbnail
+      try {
+        let firstRow: any = null;
+        if (q) {
+          const hits = await searchMediaContent(q, 1);
+          if (hits.length > 0) {
+            const { rows } = await db.query(`
+              SELECT mi.* FROM media_items mi WHERE mi.uri = $1 AND mi.status = 'done' LIMIT 1
+            `, [hits[0]._source.uri]);
+            firstRow = rows[0];
+          }
+        } else {
+          const { rows } = await db.query(`
+            SELECT mi.* FROM media_items mi
+            LEFT JOIN media_transcripts mt ON mt.media_id = mi.id
+            WHERE mi.status = 'done' AND mi.error IS NULL AND mt.language = 'en'
+            ORDER BY mi.created_at DESC LIMIT 1
+          `);
+          firstRow = rows[0];
+        }
+        if (firstRow?.thumbnail_cid && firstRow?.did) {
+          thumbnailUrl = firstRow.thumbnail_cid.startsWith('http')
+            ? firstRow.thumbnail_cid
+            : `https://bsky.social/xrpc/com.atproto.sync.getBlob?did=${encodeURIComponent(firstRow.did)}&cid=${encodeURIComponent(firstRow.thumbnail_cid)}`;
+        }
+      } catch (thumbErr) {
+        logger.debug({ err: thumbErr }, 'Failed to fetch oEmbed thumbnail (non-fatal)');
+      }
+    }
+
+    // Clamp dimensions
+    const width = Math.min(maxwidth, 480);
+    const height = Math.min(maxheight, 360);
+
+    const response: Record<string, any> = {
+      version: '1.0',
+      type: 'video',
+      provider_name: 'Snip',
+      provider_url: SNIP_BASE,
+      title,
+      width,
+      height,
+      html: `<iframe src="${embedUrl}" width="${width}" height="${height}" frameborder="0" allowfullscreen allow="autoplay; encrypted-media"></iframe>`,
+    };
+
+    if (thumbnailUrl) {
+      response.thumbnail_url = thumbnailUrl;
+      response.thumbnail_width = 480;
+      response.thumbnail_height = 270;
+    }
+
+    c.header('Content-Type', 'application/json');
+    c.header('Cache-Control', 'public, max-age=300');
+    return c.json(response);
+  } catch (err) {
+    logger.error({ err, url }, 'oEmbed endpoint error');
+    return c.json({ error: 'Internal server error' }, 500);
+  }
+});
+
+// ── Embed Player (rendered inside iframe) ────────────────────────────────────
+app.get('/embed', async (c) => {
+  const q = c.req.query('q') || '';
+  const type = c.req.query('type') || 'top';
+  const category = c.req.query('category') || '';
+  const uri = c.req.query('uri') || '';
+  const EMBED_LIMIT = 10;
+
+  let items: VideoItem[] = [];
+  let title = 'Snip Videos';
+
+  try {
+    if (uri) {
+      // Single post embed
+      const { rows } = await db.query(`
+        SELECT mi.*, mt.text as transcript, mt.language,
+               COALESCE(ic.like_count, 0) as like_count,
+               COALESCE(ic.repost_count, 0) as repost_count
+        FROM media_items mi
+        LEFT JOIN media_transcripts mt ON mt.media_id = mi.id
+        LEFT JOIN mv_media_interaction_counts ic ON ic.media_uri = mi.uri
+        WHERE mi.uri = $1 AND mi.status = 'done' AND mi.error IS NULL
+        LIMIT 1
+      `, [uri]);
+      items = await enrichMediaItems(rows);
+      if (items.length > 0) {
+        title = items[0].post_text || items[0].alt_text || 'Video on Snip';
+      }
+    } else if (q) {
+      // Search embed
+      title = `Snip — "${q}"`;
+      const hits = await searchMediaContent(q, EMBED_LIMIT);
+      const postUris = hits.map((h: any) => h._source.uri);
+      if (postUris.length > 0) {
+        const { rows } = await db.query(`
+          SELECT mi.*, mt.text as transcript, mt.language,
+                 COALESCE(ic.like_count, 0) as like_count,
+                 COALESCE(ic.repost_count, 0) as repost_count
+          FROM media_items mi
+          LEFT JOIN media_transcripts mt ON mt.media_id = mi.id
+          LEFT JOIN mv_media_interaction_counts ic ON ic.media_uri = mi.uri
+          WHERE mi.uri = ANY($1) AND mi.status = 'done' AND mi.error IS NULL AND mt.language = 'en'
+        `, [postUris]);
+        items = await enrichMediaItems(rows);
+      }
+    } else if (category) {
+      // Category embed
+      title = `Snip — ${category}`;
+      const { rows } = await db.query(`
+        SELECT mi.*, mt.text as transcript, mt.language,
+               COALESCE(ic.like_count, 0) as like_count,
+               COALESCE(ic.repost_count, 0) as repost_count,
+               (COALESCE(ic.like_count, 0) + COALESCE(ic.repost_count, 0) * 2.0 + 1.0) / 
+                 POWER((EXTRACT(EPOCH FROM (NOW() - mi.created_at))/3600.0) + 2.0, 1.8) as score
+        FROM media_items mi
+        LEFT JOIN media_transcripts mt ON mt.media_id = mi.id
+        LEFT JOIN mv_media_interaction_counts ic ON ic.media_uri = mi.uri
+        WHERE mi.status = 'done' AND mi.error IS NULL
+          AND mt.language = 'en'
+          AND (mt.category = $1 OR mt.secondary_category = $1)
+        ORDER BY score DESC, mi.created_at DESC
+        LIMIT $2
+      `, [category, EMBED_LIMIT]);
+      items = await enrichMediaItems(rows);
+    } else {
+      // Top / Latest feed embed
+      title = type === 'latest' ? 'Snip — Latest Videos' : 'Snip — Top Videos';
+      let queryStr = '';
+      if (type === 'latest') {
+        queryStr = `
+          SELECT mi.*, mt.text as transcript, mt.language,
+                 COALESCE(ic.like_count, 0) as like_count,
+                 COALESCE(ic.repost_count, 0) as repost_count
+          FROM media_items mi
+          LEFT JOIN media_transcripts mt ON mt.media_id = mi.id
+          LEFT JOIN mv_media_interaction_counts ic ON ic.media_uri = mi.uri
+          WHERE mi.status = 'done' AND mi.error IS NULL AND mt.language = 'en'
+          ORDER BY mi.created_at DESC
+          LIMIT ${EMBED_LIMIT}
+        `;
+      } else {
+        queryStr = `
+          SELECT mi.*, mt.text as transcript, mt.language,
+                 COALESCE(ic.like_count, 0) as like_count,
+                 COALESCE(ic.repost_count, 0) as repost_count,
+                 (COALESCE(ic.like_count, 0) + COALESCE(ic.repost_count, 0) * 2.0 + 1.0) / 
+                   POWER((EXTRACT(EPOCH FROM (NOW() - mi.created_at))/3600.0) + 2.0, 1.8) as score
+          FROM media_items mi
+          LEFT JOIN media_transcripts mt ON mt.media_id = mi.id
+          LEFT JOIN mv_media_interaction_counts ic ON ic.media_uri = mi.uri
+          WHERE mi.status = 'done' AND mi.error IS NULL AND mt.language = 'en'
+          ORDER BY score DESC, mi.created_at DESC
+          LIMIT ${EMBED_LIMIT}
+        `;
+      }
+      const { rows } = await db.query(queryStr);
+      items = await enrichMediaItems(rows);
+    }
+  } catch (err) {
+    logger.error({ err }, 'Embed page error');
+  }
+
+  // Allow this page to be embedded in iframes
+  c.header('X-Frame-Options', 'ALLOWALL');
+  c.header('Content-Security-Policy', "frame-ancestors *");
+
+  return c.html(EmbedPage({ items, title }));
+});
+
 // ── Health Check ─────────────────────────────────────────────────────────────
 app.get('/health', async (c) => {
   return c.json({ status: 'ok', service: 'snip' });
@@ -277,9 +523,18 @@ app.get('/', async (c) => {
   const categoryInfo = CATEGORIES.find(c => c.slug === category);
   const categoryName = categoryInfo?.name || category;
 
+  // Build oEmbed discovery tag for this page
+  const pageParams = new URLSearchParams();
+  if (q) pageParams.set('q', q);
+  else if (category) pageParams.set('category', category);
+  else pageParams.set('type', type);
+  const pageUrl = `${SNIP_BASE}/?${pageParams.toString()}`;
+  const oembedTitle = q ? `Snip — Videos matching "${q}"` : category ? `Snip — ${category} Videos` : 'Snip — High Signal ATProto Videos';
+  const headExtra = html`${oembedDiscoveryTag(pageUrl, oembedTitle)}`;
+
   const session = await getSessionUser(c);
   const pageHtml = FeedPage({ items, type, q, category: category, trending });
-  return c.html(SnipLayout({ title: 'Snip — High Signal ATProto Videos', children: pageHtml, q, type, session }));
+  return c.html(SnipLayout({ title: 'Snip — High Signal ATProto Videos', children: pageHtml, q, type, session, headExtra }));
 });
 
 // ── Leaderboard (Top Creators) ────────────────────────────────────────────────
@@ -431,9 +686,14 @@ app.get('/post/:uri', async (c) => {
     return c.text('Post not found in Snip database', 404);
   }
 
+  // Build oEmbed discovery tag for this post
+  const postPageUrl = `${SNIP_BASE}/post/${encodeURIComponent(postUri)}`;
+  const postOembedTitle = item.post_text || item.alt_text || `Video by @${item.author_handle}`;
+  const headExtra = html`${oembedDiscoveryTag(postPageUrl, postOembedTitle)}`;
+
   const session = await getSessionUser(c);
   const pageHtml = CommentsPage({ item, thread, related });
-  return c.html(SnipLayout({ title: `Discussion on @${item.author_handle}'s post — Snip`, children: pageHtml, session }));
+  return c.html(SnipLayout({ title: `Discussion on @${item.author_handle}'s post — Snip`, children: pageHtml, session, headExtra }));
 });
 
 // ── RSS Feeds ────────────────────────────────────────────────────────────────
