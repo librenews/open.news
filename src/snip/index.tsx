@@ -48,6 +48,18 @@ function escapeXml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
 }
 
+// Helper: Decode HTML entities stored in DB (firehose encodes before saving)
+function decodeEntities(s: string | null | undefined): string | null {
+  if (!s) return s as null;
+  return s
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'");
+}
+
 // Helper: Build enriched media records
 async function enrichMediaItems(rows: any[]): Promise<VideoItem[]> {
   if (rows.length === 0) return [];
@@ -64,10 +76,10 @@ async function enrichMediaItems(rows: any[]): Promise<VideoItem[]> {
       cid: r.cid || null,
       thumbnail_cid: r.thumbnail_cid || null,
       source_url: r.source_url,
-      alt_text: r.alt_text,
+      alt_text: decodeEntities(r.alt_text),
       aspect_ratio: r.aspect_ratio,
-      post_text: r.post_text,
-      transcript: r.transcript,
+      post_text: decodeEntities(r.post_text),
+      transcript: decodeEntities(r.transcript),
       language: r.language,
       duration_ms: r.duration_ms,
       created_at: r.created_at ? new Date(r.created_at).toISOString() : new Date().toISOString(),
@@ -79,6 +91,7 @@ async function enrichMediaItems(rows: any[]): Promise<VideoItem[]> {
     };
   });
 }
+
 
 // Helper: Fetch trending video terms (cached 15 min)
 async function getTrendingTerms(limit = 8): Promise<string[]> {
