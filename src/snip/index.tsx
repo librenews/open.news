@@ -210,10 +210,10 @@ app.get('/oembed', async (c) => {
 
       // Look up the post for metadata
       const { rows } = await db.query(`
-        SELECT mi.*, mt.text as transcript
+        SELECT mi.*, COALESCE(mt.text, mi.post_text) as transcript
         FROM media_items mi
         LEFT JOIN media_transcripts mt ON mt.media_id = mi.id
-        WHERE mi.uri = $1 AND mi.status = 'done' AND mi.error IS NULL
+        WHERE mi.uri = $1 AND mi.status NOT IN ('failed', 'skipped')
         LIMIT 1
       `, [postUri]);
       if (rows.length > 0) {
@@ -254,7 +254,7 @@ app.get('/oembed', async (c) => {
           const hits = await searchMediaContent(q, 1);
           if (hits.length > 0) {
             const { rows } = await db.query(`
-              SELECT mi.* FROM media_items mi WHERE mi.uri = $1 AND mi.status = 'done' LIMIT 1
+              SELECT mi.* FROM media_items mi WHERE mi.uri = $1 AND mi.status NOT IN ('failed', 'skipped') LIMIT 1
             `, [hits[0]._source.uri]);
             firstRow = rows[0];
           }
@@ -262,7 +262,7 @@ app.get('/oembed', async (c) => {
           const { rows } = await db.query(`
             SELECT mi.* FROM media_items mi
             LEFT JOIN media_transcripts mt ON mt.media_id = mi.id
-            WHERE mi.status = 'done' AND mi.error IS NULL AND mt.language = 'en'
+            WHERE mi.status NOT IN ('failed', 'skipped') AND (mt.language = 'en' OR mt.id IS NULL)
             ORDER BY mi.created_at DESC LIMIT 1
           `);
           firstRow = rows[0];
@@ -322,13 +322,13 @@ app.get('/embed', async (c) => {
     if (uri) {
       // Single post embed
       const { rows } = await db.query(`
-        SELECT mi.*, mt.text as transcript, mt.language,
+        SELECT mi.*, COALESCE(mt.text, mi.post_text) as transcript, mt.language,
                COALESCE(ic.like_count, 0) as like_count,
                COALESCE(ic.repost_count, 0) as repost_count
         FROM media_items mi
         LEFT JOIN media_transcripts mt ON mt.media_id = mi.id
         LEFT JOIN mv_media_interaction_counts ic ON ic.media_uri = mi.uri
-        WHERE mi.uri = $1 AND mi.status = 'done' AND mi.error IS NULL
+        WHERE mi.uri = $1 AND mi.status NOT IN ('failed', 'skipped')
         LIMIT 1
       `, [uri]);
       items = await enrichMediaItems(rows);
@@ -343,13 +343,13 @@ app.get('/embed', async (c) => {
       const postUris = hits.map((h: any) => h._source.uri);
       if (postUris.length > 0) {
         const { rows } = await db.query(`
-          SELECT mi.*, mt.text as transcript, mt.language,
+          SELECT mi.*, COALESCE(mt.text, mi.post_text) as transcript, mt.language,
                  COALESCE(ic.like_count, 0) as like_count,
                  COALESCE(ic.repost_count, 0) as repost_count
           FROM media_items mi
           LEFT JOIN media_transcripts mt ON mt.media_id = mi.id
           LEFT JOIN mv_media_interaction_counts ic ON ic.media_uri = mi.uri
-          WHERE mi.uri = ANY($1) AND mi.status = 'done' AND mi.error IS NULL AND mt.language = 'en'
+          WHERE mi.uri = ANY($1) AND mi.status NOT IN ('failed', 'skipped') AND (mt.language = 'en' OR mt.id IS NULL)
         `, [postUris]);
         logger.info({ q, dbRows: rows.length }, 'Embed search: DB results');
         items = await enrichMediaItems(rows);
@@ -358,7 +358,7 @@ app.get('/embed', async (c) => {
       // Category embed
       title = `Snip — ${category}`;
       const { rows } = await db.query(`
-        SELECT mi.*, mt.text as transcript, mt.language,
+        SELECT mi.*, COALESCE(mt.text, mi.post_text) as transcript, mt.language,
                COALESCE(ic.like_count, 0) as like_count,
                COALESCE(ic.repost_count, 0) as repost_count,
                (COALESCE(ic.like_count, 0) + COALESCE(ic.repost_count, 0) * 2.0 + 1.0) / 
@@ -366,7 +366,7 @@ app.get('/embed', async (c) => {
         FROM media_items mi
         LEFT JOIN media_transcripts mt ON mt.media_id = mi.id
         LEFT JOIN mv_media_interaction_counts ic ON ic.media_uri = mi.uri
-        WHERE mi.status = 'done' AND mi.error IS NULL
+        WHERE mi.status NOT IN ('failed', 'skipped')
           AND mt.language = 'en'
           AND (mt.category = $1 OR mt.secondary_category = $1)
         ORDER BY score DESC, mi.created_at DESC
@@ -379,19 +379,19 @@ app.get('/embed', async (c) => {
       let queryStr = '';
       if (type === 'latest') {
         queryStr = `
-          SELECT mi.*, mt.text as transcript, mt.language,
+          SELECT mi.*, COALESCE(mt.text, mi.post_text) as transcript, mt.language,
                  COALESCE(ic.like_count, 0) as like_count,
                  COALESCE(ic.repost_count, 0) as repost_count
           FROM media_items mi
           LEFT JOIN media_transcripts mt ON mt.media_id = mi.id
           LEFT JOIN mv_media_interaction_counts ic ON ic.media_uri = mi.uri
-          WHERE mi.status = 'done' AND mi.error IS NULL AND mt.language = 'en'
+          WHERE mi.status NOT IN ('failed', 'skipped') AND (mt.language = 'en' OR mt.id IS NULL)
           ORDER BY mi.created_at DESC
           LIMIT ${EMBED_LIMIT}
         `;
       } else {
         queryStr = `
-          SELECT mi.*, mt.text as transcript, mt.language,
+          SELECT mi.*, COALESCE(mt.text, mi.post_text) as transcript, mt.language,
                  COALESCE(ic.like_count, 0) as like_count,
                  COALESCE(ic.repost_count, 0) as repost_count,
                  (COALESCE(ic.like_count, 0) + COALESCE(ic.repost_count, 0) * 2.0 + 1.0) / 
@@ -399,7 +399,7 @@ app.get('/embed', async (c) => {
           FROM media_items mi
           LEFT JOIN media_transcripts mt ON mt.media_id = mi.id
           LEFT JOIN mv_media_interaction_counts ic ON ic.media_uri = mi.uri
-          WHERE mi.status = 'done' AND mi.error IS NULL AND mt.language = 'en'
+          WHERE mi.status NOT IN ('failed', 'skipped') AND (mt.language = 'en' OR mt.id IS NULL)
           ORDER BY score DESC, mi.created_at DESC
           LIMIT ${EMBED_LIMIT}
         `;
@@ -441,13 +441,13 @@ app.get('/', async (c) => {
 
       if (postUris.length > 0) {
         const { rows } = await db.query(`
-          SELECT mi.*, mt.text as transcript, mt.language,
+          SELECT mi.*, COALESCE(mt.text, mi.post_text) as transcript, mt.language,
                  COALESCE(ic.like_count, 0) as like_count,
                  COALESCE(ic.repost_count, 0) as repost_count
           FROM media_items mi
           LEFT JOIN media_transcripts mt ON mt.media_id = mi.id
           LEFT JOIN mv_media_interaction_counts ic ON ic.media_uri = mi.uri
-          WHERE mi.uri = ANY($1) AND mi.status = 'done' AND mi.error IS NULL AND mt.language = 'en'
+          WHERE mi.uri = ANY($1) AND mi.status NOT IN ('failed', 'skipped') AND (mt.language = 'en' OR mt.id IS NULL)
         `, [postUris]);
         items = await enrichMediaItems(rows);
       }
@@ -459,7 +459,7 @@ app.get('/', async (c) => {
         items = cachedItems;
       } else {
         const { rows } = await db.query(`
-          SELECT mi.*, mt.text as transcript, mt.language,
+          SELECT mi.*, COALESCE(mt.text, mi.post_text) as transcript, mt.language,
                  COALESCE(ic.like_count, 0) as like_count,
                  COALESCE(ic.repost_count, 0) as repost_count,
                  (COALESCE(ic.like_count, 0) + COALESCE(ic.repost_count, 0) * 2.0 + 1.0) / 
@@ -467,7 +467,7 @@ app.get('/', async (c) => {
           FROM media_items mi
           LEFT JOIN media_transcripts mt ON mt.media_id = mi.id
           LEFT JOIN mv_media_interaction_counts ic ON ic.media_uri = mi.uri
-          WHERE mi.status = 'done' AND mi.error IS NULL
+          WHERE mi.status NOT IN ('failed', 'skipped')
             AND mt.language = 'en'
             AND (mt.category = $1 OR mt.secondary_category = $1)
           ORDER BY score DESC, mi.created_at DESC
@@ -486,20 +486,20 @@ app.get('/', async (c) => {
         let queryStr = '';
         if (type === 'latest') {
           queryStr = `
-            SELECT mi.*, mt.text as transcript, mt.language,
+            SELECT mi.*, COALESCE(mt.text, mi.post_text) as transcript, mt.language,
                    COALESCE(ic.like_count, 0) as like_count,
                    COALESCE(ic.repost_count, 0) as repost_count
             FROM media_items mi
             LEFT JOIN media_transcripts mt ON mt.media_id = mi.id
             LEFT JOIN mv_media_interaction_counts ic ON ic.media_uri = mi.uri
-            WHERE mi.status = 'done' AND mi.error IS NULL AND mt.language = 'en'
+            WHERE mi.status NOT IN ('failed', 'skipped') AND (mt.language = 'en' OR mt.id IS NULL)
             ORDER BY mi.created_at DESC
             LIMIT 25
           `;
         } else {
           // Hacker News algorithm (Likes + Reposts*2 + 1) / (Age + 2)^1.8
           queryStr = `
-            SELECT mi.*, mt.text as transcript, mt.language,
+            SELECT mi.*, COALESCE(mt.text, mi.post_text) as transcript, mt.language,
                    COALESCE(ic.like_count, 0) as like_count,
                    COALESCE(ic.repost_count, 0) as repost_count,
                    (COALESCE(ic.like_count, 0) + COALESCE(ic.repost_count, 0) * 2.0 + 1.0) / 
@@ -507,7 +507,7 @@ app.get('/', async (c) => {
             FROM media_items mi
             LEFT JOIN media_transcripts mt ON mt.media_id = mi.id
             LEFT JOIN mv_media_interaction_counts ic ON ic.media_uri = mi.uri
-            WHERE mi.status = 'done' AND mi.error IS NULL AND mt.language = 'en'
+            WHERE mi.status NOT IN ('failed', 'skipped') AND (mt.language = 'en' OR mt.id IS NULL)
             ORDER BY score DESC, mi.created_at DESC
             LIMIT 25
           `;
@@ -555,7 +555,7 @@ app.get('/leaderboard', async (c) => {
              COALESCE(sum(ic.repost_count), 0) as total_reposts
       FROM media_items mi
       LEFT JOIN mv_media_interaction_counts ic ON ic.media_uri = mi.uri
-      WHERE mi.status = 'done' AND mi.error IS NULL
+      WHERE mi.status NOT IN ('failed', 'skipped')
       GROUP BY mi.did
       ORDER BY total_likes DESC, video_count DESC
       LIMIT 25
@@ -609,13 +609,13 @@ app.get('/profile/:did', async (c) => {
 
     // Get author clips
     const { rows } = await db.query(`
-      SELECT mi.*, mt.text as transcript, mt.language,
+      SELECT mi.*, COALESCE(mt.text, mi.post_text) as transcript, mt.language,
              COALESCE(ic.like_count, 0) as like_count,
              COALESCE(ic.repost_count, 0) as repost_count
       FROM media_items mi
       LEFT JOIN media_transcripts mt ON mt.media_id = mi.id
       LEFT JOIN mv_media_interaction_counts ic ON ic.media_uri = mi.uri
-      WHERE mi.did = $1 AND mi.status = 'done' AND mi.error IS NULL
+      WHERE mi.did = $1 AND mi.status NOT IN ('failed', 'skipped')
       ORDER BY mi.created_at DESC
       LIMIT 100
     `, [did]);
@@ -646,14 +646,14 @@ app.get('/post/:uri', async (c) => {
   try {
     // 1. Get video details
     const { rows } = await db.query(`
-      SELECT mi.*, mt.text as transcript, mt.language, me.embedding,
+      SELECT mi.*, COALESCE(mt.text, mi.post_text) as transcript, mt.language, me.embedding,
              COALESCE(ic.like_count, 0) as like_count,
              COALESCE(ic.repost_count, 0) as repost_count
       FROM media_items mi
       LEFT JOIN media_transcripts mt ON mt.media_id = mi.id
       LEFT JOIN media_embeddings me ON me.media_id = mi.id
       LEFT JOIN mv_media_interaction_counts ic ON ic.media_uri = mi.uri
-      WHERE mi.uri = $1 AND mi.status = 'done' AND mi.error IS NULL
+      WHERE mi.uri = $1 AND mi.status NOT IN ('failed', 'skipped')
       LIMIT 1
     `, [postUri]);
 
@@ -666,10 +666,10 @@ app.get('/post/:uri', async (c) => {
       if (hits.length > 0) {
         const relatedUris = hits.map((h: any) => h._source.uri);
         const { rows: relRows } = await db.query(`
-          SELECT mi.*, mt.text as transcript, mt.language
+          SELECT mi.*, COALESCE(mt.text, mi.post_text) as transcript, mt.language
           FROM media_items mi
           LEFT JOIN media_transcripts mt ON mt.media_id = mi.id
-          WHERE mi.uri = ANY($1) AND mi.status = 'done' AND mi.error IS NULL
+          WHERE mi.uri = ANY($1) AND mi.status NOT IN ('failed', 'skipped')
         `, [relatedUris]);
         related = await enrichMediaItems(relRows);
       }
@@ -728,10 +728,10 @@ const serveRssFeed = async (c: any, rows: any[], title: string, desc: string, li
 
 app.get('/latest.rss', async (c) => {
   const { rows } = await db.query(`
-    SELECT mi.*, mt.text as transcript, mt.language
+    SELECT mi.*, COALESCE(mt.text, mi.post_text) as transcript, mt.language
     FROM media_items mi
     LEFT JOIN media_transcripts mt ON mt.media_id = mi.id
-    WHERE mi.status = 'done' AND mi.error IS NULL
+    WHERE mi.status NOT IN ('failed', 'skipped')
     ORDER BY mi.created_at DESC
     LIMIT 30
   `);
@@ -740,13 +740,13 @@ app.get('/latest.rss', async (c) => {
 
 app.get('/top.rss', async (c) => {
   const { rows } = await db.query(`
-    SELECT mi.*, mt.text as transcript, mt.language,
+    SELECT mi.*, COALESCE(mt.text, mi.post_text) as transcript, mt.language,
            (COALESCE(ic.like_count, 0) + COALESCE(ic.repost_count, 0) * 2.0 + 1.0) / 
              POWER((EXTRACT(EPOCH FROM (NOW() - mi.created_at))/3600.0) + 2.0, 1.8) as score
     FROM media_items mi
     LEFT JOIN media_transcripts mt ON mt.media_id = mi.id
     LEFT JOIN mv_media_interaction_counts ic ON ic.media_uri = mi.uri
-    WHERE mi.status = 'done' AND mi.error IS NULL
+    WHERE mi.status NOT IN ('failed', 'skipped')
     ORDER BY score DESC, mi.created_at DESC
     LIMIT 30
   `);

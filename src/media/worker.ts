@@ -14,7 +14,8 @@ import { logger } from '../lib/logger.js';
 import { config } from '../lib/config.js';
 import { downloadAndExtractAudio, buildBlobUrl, cleanupTempFile } from './download.js';
 import { processAudio, checkHealth } from './mediaClient.js';
-import { ensureMediaIndex, getOsClient, MEDIA_INDEX } from '../track/opensearch.js';
+import { ensureMediaIndex, getOsClient, MEDIA_INDEX, deleteMediaDocument } from '../track/opensearch.js';
+import { percolateTranscript } from '../channel/opensearch.js';
 import { classifyTranscript } from '../snip/categories.js';
 
 const STREAM_KEY = 'media:items';
@@ -130,6 +131,7 @@ async function processMediaItem(mediaId: number, fields: Record<string, string>)
           ['skipped', 'nsfw', mediaId]
         );
         stats.skipped++;
+        deleteMediaDocument(uri).catch(() => {});
         return;
       }
     }
@@ -177,6 +179,7 @@ async function processMediaItem(mediaId: number, fields: Record<string, string>)
           ['skipped', 'nsfw', mediaId]
         );
         stats.skipped++;
+        deleteMediaDocument(uri).catch(() => {});
         if (audioPath) {
           cleanupTempFile(audioPath).catch(() => {});
         }
@@ -217,6 +220,26 @@ async function processMediaItem(mediaId: number, fields: Record<string, string>)
         }
       } catch (classifyErr) {
         logger.warn({ err: classifyErr, mediaId }, 'Transcript classification failed (non-fatal)');
+      }
+
+      // Phase 2: Percolate transcript against story queries (higher confidence than post_text)
+      if (result.transcript.language === 'en' && result.transcript.text && result.transcript.text !== 'silent') {
+        try {
+          const matches = await percolateTranscript(result.transcript.text);
+          for (const match of matches) {
+            await db.query(
+              `INSERT INTO video_story_matches (media_id, story_id, confidence, match_method, matched_at)
+               VALUES ($1, $2, $3, 'transcript', NOW())
+               ON CONFLICT (media_id, story_id) DO UPDATE SET
+                 confidence = GREATEST(video_story_matches.confidence, EXCLUDED.confidence),
+                 match_method = EXCLUDED.match_method,
+                 matched_at = NOW()`,
+              [mediaId, match.storyId, match.score]
+            );
+          }
+        } catch (percolateErr) {
+          logger.warn({ err: percolateErr, mediaId }, 'Phase 2 percolation failed (non-fatal)');
+        }
       }
     }
 
@@ -296,6 +319,7 @@ async function processMediaItem(mediaId: number, fields: Record<string, string>)
         ['skipped', errMsg, mediaId]
       ).catch(() => {});
       stats.skipped++;
+      deleteMediaDocument(uri).catch(() => {});
     } else {
       logger.error({ err, uri, mediaId }, 'Failed to process media item');
       await db.query(
@@ -303,6 +327,7 @@ async function processMediaItem(mediaId: number, fields: Record<string, string>)
         ['failed', errMsg, mediaId]
       ).catch(() => {});
       stats.failed++;
+      deleteMediaDocument(uri).catch(() => {});
     }
   } finally {
     // Always clean up temp audio file
@@ -345,6 +370,42 @@ async function runLoop(): Promise<void> {
           stats.skipped++;
           ackIds.push(msgId);
           continue;
+        }
+
+        // Phase 1: Index immediately with post_text for instant searchability
+        try {
+          const os = getOsClient();
+          await os.index({
+            index: MEDIA_INDEX,
+            id: fields.uri,
+            body: {
+              uri: fields.uri,
+              did: fields.did,
+              media_type: fields.mediaType,
+              post_text: fields.postText || null,
+              alt_text: fields.altText || null,
+              created_at: new Date().toISOString(),
+            },
+          });
+        } catch (err) {
+          logger.debug({ err, uri: fields.uri }, 'Phase 1 OpenSearch index failed (non-fatal)');
+        }
+
+        // Phase 1: Percolate post_text against story queries for early channel matching
+        if (fields.postText && fields.postText.length > 20) {
+          try {
+            const matches = await percolateTranscript(fields.postText);
+            for (const match of matches) {
+              await db.query(
+                `INSERT INTO video_story_matches (media_id, story_id, confidence, match_method, matched_at)
+                 VALUES ($1, $2, $3, 'post_text', NOW())
+                 ON CONFLICT (media_id, story_id) DO NOTHING`,
+                [mediaId, match.storyId, match.score * 0.6]
+              );
+            }
+          } catch (err) {
+            logger.debug({ err, uri: fields.uri }, 'Phase 1 percolation failed (non-fatal)');
+          }
         }
 
         // Process the media item

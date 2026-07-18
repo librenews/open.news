@@ -136,32 +136,38 @@ async function getStoryMatchedVideos(
   return rankAndSort(rows, true);
 }
 
-/** Category fallback: rank videos by snip category + engagement. */
+/** Category fallback: rank videos by snip category + engagement.
+ *  Uses LEFT JOIN so untranscribed videos can participate (scored lower
+ *  via missing transcript confidence). Transcribed+categorized videos
+ *  are preferred, but new videos fill in for freshness. */
 async function getCategoryFallbackVideos(
   categoryFilter: string[] | null,
   limit: number
 ): Promise<RankedVideo[]> {
-  let where = "mi.status = 'done' AND mi.error IS NULL AND mt.language = 'en' AND mt.text IS NOT NULL AND mt.text != 'silent'";
+  let where = "mi.status NOT IN ('failed', 'skipped')";
   const params: any[] = [limit];
 
   if (categoryFilter && categoryFilter.length > 0) {
-    where += ' AND (mt.category = ANY($2) OR mt.secondary_category = ANY($2))';
+    // Include videos with matching category OR videos not yet transcribed
+    where += ' AND ((mt.category = ANY($2) OR mt.secondary_category = ANY($2)) OR mt.id IS NULL)';
     params.push(categoryFilter);
   } else {
-    where += " AND mt.category IN ('politics', 'tech', 'finance', 'news', 'science')";
+    where += " AND (mt.category IN ('politics', 'tech', 'finance', 'news', 'science') OR mt.id IS NULL)";
   }
 
   const { rows } = await db.query<any>(
     `SELECT mi.id as media_id, mi.uri, mi.did, mi.rkey, mi.cid, mi.thumbnail_cid,
             mi.duration_ms, mi.post_text, mi.created_at,
-            mt.text as transcript, mt.confidence, mt.category,
+            COALESCE(mt.text, mi.post_text) as transcript, mt.confidence, mt.category,
             COALESCE(ic.like_count, 0) as like_count,
             COALESCE(ic.repost_count, 0) as repost_count
      FROM media_items mi
-     JOIN media_transcripts mt ON mt.media_id = mi.id
+     LEFT JOIN media_transcripts mt ON mt.media_id = mi.id
      LEFT JOIN mv_media_interaction_counts ic ON ic.media_uri = mi.uri
      WHERE ${where}
        AND mi.created_at > NOW() - INTERVAL '24 hours'
+       AND (mt.language = 'en' OR mt.id IS NULL)
+       AND (mt.text IS NULL OR (mt.text IS NOT NULL AND mt.text != 'silent'))
      ORDER BY
        (COALESCE(ic.like_count, 0) + COALESCE(ic.repost_count, 0) * 2.0 + 1.0) /
        POWER((EXTRACT(EPOCH FROM (NOW() - mi.created_at))/3600.0) + 2.0, 1.8) DESC
