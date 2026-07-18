@@ -102,10 +102,10 @@ export function CommentsPage({
                     }
                     <div class="min-w-0 flex-1">
                       <a href="${relPostUrl}" class="block text-xs font-bold text-slate-200 hover:text-indigo-400 transition-colors no-underline line-clamp-2 leading-relaxed mb-1">
-                        ${escapeHtml(rel.post_text || rel.alt_text || 'Video clip')}
+                        ${rel.post_text || rel.alt_text || 'Video clip'}
                       </a>
                       <a href="${relAuthorUrl}" class="text-[10px] text-slate-500 hover:text-indigo-400 transition-colors no-underline">
-                        @${escapeHtml(rel.author_handle)}
+                        @${rel.author_handle}
                       </a>
                     </div>
                   </div>

@@ -54,15 +54,15 @@ export function renderVideoCard(item: VideoItem, showTranscript = false) {
           <div class="flex items-center justify-between mb-2">
             <div>
               <a href="${authorUrl}" class="text-sm font-bold text-slate-200 hover:text-indigo-400 transition-colors no-underline">
-                ${escapeHtml(item.author_display_name || item.author_handle)}
+                ${item.author_display_name || item.author_handle}
               </a>
-              <span class="text-xs text-slate-500 ml-1">@${escapeHtml(item.author_handle)}</span>
+              <span class="text-xs text-slate-500 ml-1">@${item.author_handle}</span>
             </div>
             <span class="text-[11px] text-slate-500">${dateStr}</span>
           </div>
 
           <!-- Post Content -->
-          ${item.post_text ? html`<p class="text-sm text-slate-300 leading-relaxed mb-3">${escapeHtml(item.post_text)}</p>` : ''}
+          ${item.post_text ? html`<p class="text-sm text-slate-300 leading-relaxed mb-3">${item.post_text}</p>` : ''}
 
           <!-- HTML5 Video Player -->
           ${videoSrc ? html`
@@ -94,7 +94,7 @@ export function renderVideoCard(item: VideoItem, showTranscript = false) {
                 <span>🎤 Whisper Transcript (${item.language ?? 'en'})</span>
                 ${item.duration_ms ? html`<span>⏱ ${Math.round(item.duration_ms / 1000)}s</span>` : ''}
               </div>
-              <p class="text-xs text-slate-300 italic leading-relaxed">"${escapeHtml(item.transcript || '')}"</p>
+              <p class="text-xs text-slate-300 italic leading-relaxed">"${item.transcript || ''}"</p>
             </div>
           ` : ''}
 
