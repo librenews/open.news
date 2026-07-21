@@ -582,7 +582,12 @@ app.get('/', async (c) => {
 // --- Tag page ---
 
 app.get('/tag/:tag', async (c) => {
-  const tag = decodeURIComponent(c.req.param('tag'));
+  let tag: string;
+  try {
+    tag = decodeURIComponent(c.req.param('tag'));
+  } catch {
+    return c.text('Invalid tag', 400);
+  }
   const sessionDid = await getSession(c);
   const profile = sessionDid ? await fetchUserProfile(sessionDid) : null;
 
