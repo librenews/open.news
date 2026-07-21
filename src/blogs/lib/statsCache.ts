@@ -1,4 +1,4 @@
-import { db } from '../../db/client.js';
+import { db, pool } from '../../db/client.js';
 import { getRedis } from '../../lib/redis.js';
 import { logger } from '../../lib/logger.js';
 
@@ -152,6 +152,9 @@ export async function getBlogStats(): Promise<BlogStats> {
 }
 
 async function _fetchStats(): Promise<BlogStats> {
+  // Use a single client to avoid exhausting the pool (14 queries would need 14 connections with Promise.all)
+  const client = await pool.connect();
+  try {
   const [
     kpiRows,
     waaTrendRows,
@@ -169,7 +172,7 @@ async function _fetchStats(): Promise<BlogStats> {
     newAuthorRows,
   ] = await Promise.all([
     // Hero KPIs — uses published_at (with fallback) for activity windows
-    db.query(`
+    client.query(`
       SELECT
         (SELECT COUNT(DISTINCT author_did) FROM site_standard_articles
          WHERE ${PUB_DATE} >= NOW() - INTERVAL '7 days') AS waa,
@@ -229,7 +232,7 @@ async function _fetchStats(): Promise<BlogStats> {
     `),
 
     // WAA 30-day rolling trend — uses published_at
-    db.query(`
+    client.query(`
       SELECT
         DATE(gs.day) AS day,
         COUNT(DISTINCT a.author_did) AS waa,
@@ -245,7 +248,7 @@ async function _fetchStats(): Promise<BlogStats> {
     `),
 
     // Daily activity 30 days — uses published_at
-    db.query(`
+    client.query(`
       SELECT
         DATE(${PUB_DATE}) AS day,
         COUNT(*) AS posts,
@@ -264,7 +267,7 @@ async function _fetchStats(): Promise<BlogStats> {
     `),
 
     // 14-day retention with native/bridgyfed/verified split
-    db.query(`
+    client.query(`
       WITH days AS (
         SELECT generate_series(NOW() - INTERVAL '14 days', NOW() - INTERVAL '1 day', INTERVAL '1 day')::date AS d
       ),
@@ -312,7 +315,7 @@ async function _fetchStats(): Promise<BlogStats> {
     `),
 
     // Hourly heatmap last 7 days — uses published_at
-    db.query(`
+    client.query(`
       SELECT
         EXTRACT(DOW FROM ${PUB_DATE})::int AS dow,
         EXTRACT(HOUR FROM ${PUB_DATE})::int AS hour,
@@ -327,7 +330,7 @@ async function _fetchStats(): Promise<BlogStats> {
     `),
 
     // Top 20 sites this week (all) — uses published_at
-    db.query(`
+    client.query(`
       SELECT REGEXP_REPLACE(site, '^https?://(www\\.)?', '') AS site, COUNT(*) AS posts
       FROM site_standard_articles
       WHERE ${PUB_DATE} >= NOW() - INTERVAL '7 days' AND site IS NOT NULL AND site != ''
@@ -335,7 +338,7 @@ async function _fetchStats(): Promise<BlogStats> {
       ORDER BY posts DESC LIMIT 20
     `),
     // Top 20 sites (native only) — uses published_at
-    db.query(`
+    client.query(`
       SELECT REGEXP_REPLACE(site, '^https?://(www\\.)?', '') AS site, COUNT(*) AS posts
       FROM site_standard_articles
       WHERE ${PUB_DATE} >= NOW() - INTERVAL '7 days' AND site IS NOT NULL AND site != ''
@@ -344,7 +347,7 @@ async function _fetchStats(): Promise<BlogStats> {
       ORDER BY posts DESC LIMIT 20
     `),
     // Top 20 sites (bridgyfed only) — uses published_at
-    db.query(`
+    client.query(`
       SELECT REGEXP_REPLACE(site, '^https?://(www\\.)?', '') AS site, COUNT(*) AS posts
       FROM site_standard_articles
       WHERE ${PUB_DATE} >= NOW() - INTERVAL '7 days' AND site IS NOT NULL AND site != ''
@@ -354,13 +357,13 @@ async function _fetchStats(): Promise<BlogStats> {
     `),
 
     // Language distribution (all) — uses published_at
-    db.query(`
+    client.query(`
       SELECT COALESCE(language, 'unknown') AS language, COUNT(*) AS count
       FROM site_standard_articles WHERE ${PUB_DATE} >= NOW() - INTERVAL '30 days'
       GROUP BY language ORDER BY count DESC LIMIT 12
     `),
     // Language distribution (native only) — uses published_at
-    db.query(`
+    client.query(`
       SELECT COALESCE(language, 'unknown') AS language, COUNT(*) AS count
       FROM site_standard_articles
       WHERE ${PUB_DATE} >= NOW() - INTERVAL '30 days'
@@ -368,7 +371,7 @@ async function _fetchStats(): Promise<BlogStats> {
       GROUP BY language ORDER BY count DESC LIMIT 12
     `),
     // Language distribution (bridgyfed only) — uses published_at
-    db.query(`
+    client.query(`
       SELECT COALESCE(language, 'unknown') AS language, COUNT(*) AS count
       FROM site_standard_articles
       WHERE ${PUB_DATE} >= NOW() - INTERVAL '30 days'
@@ -377,7 +380,7 @@ async function _fetchStats(): Promise<BlogStats> {
     `),
 
     // Top 20 sites (verified only) — uses published_at
-    db.query(`
+    client.query(`
       SELECT REGEXP_REPLACE(site, '^https?://(www\\.)?', '') AS site, COUNT(*) AS posts
       FROM site_standard_articles
       WHERE ${PUB_DATE} >= NOW() - INTERVAL '7 days' AND site IS NOT NULL AND site != ''
@@ -387,7 +390,7 @@ async function _fetchStats(): Promise<BlogStats> {
     `),
 
     // Language distribution (verified only) — uses published_at
-    db.query(`
+    client.query(`
       SELECT COALESCE(language, 'unknown') AS language, COUNT(*) AS count
       FROM site_standard_articles
       WHERE ${PUB_DATE} >= NOW() - INTERVAL '30 days'
@@ -396,7 +399,7 @@ async function _fetchStats(): Promise<BlogStats> {
     `),
 
     // New authors per day 30 days (first-time publishers)
-    db.query(`
+    client.query(`
       SELECT
         DATE(sub.first_seen) AS day,
         COUNT(*) AS new_authors,
@@ -459,4 +462,7 @@ async function _fetchStats(): Promise<BlogStats> {
   };
 
   return data;
+  } finally {
+    client.release();
+  }
 }

@@ -84,11 +84,8 @@ app.get('/.well-known/site.standard.publication', async (c) => {
   return c.text('', 404);
 });
 
-// ── Pre-warm stats cache immediately, refresh every 5 minutes ────────────────
-startStatsWarm();
-setInterval(() => startStatsWarm(), 5 * 60 * 1000);
-// Pre-warm sidebar cache after module is fully loaded
-setTimeout(() => { try { fetchSidebarData().catch(() => {}); } catch {} }, 100);
+// NOTE: stats warm + sidebar pre-warm are started inside start() after migrations complete.
+// Do NOT call them at module-load time — they would race with runMigrations() for pool connections.
 
 // ── Feed helpers ─────────────────────────────────────────────────────────────
 async function buildFeedItems(rows: any[], sessionDid: string | null): Promise<FeedItem[]> {
@@ -1058,6 +1055,11 @@ async function start() {
   const server = serve({ fetch: app.fetch, port: BLOGS_PORT }, () => {
     logger.info({ port: BLOGS_PORT }, 'blogs.social server started');
   });
+
+  // Pre-warm caches after migrations are done and pool is free
+  startStatsWarm();
+  setInterval(() => startStatsWarm(), 5 * 60 * 1000);
+  setTimeout(() => { try { fetchSidebarData().catch(() => {}); } catch {} }, 100);
 
   // Attach WebSocket live feed
   attachLiveFeed(server);
